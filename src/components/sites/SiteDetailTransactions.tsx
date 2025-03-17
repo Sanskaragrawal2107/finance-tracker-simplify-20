@@ -48,6 +48,13 @@ interface FundsReceived {
   reference?: string;
 }
 
+// Add new recipient type enum
+enum RecipientType {
+  WORKER = 'worker',
+  SUBCONTRACTOR = 'subcontractor',
+  SUPERVISOR = 'supervisor'
+}
+
 const getStatusColor = (status: PaymentStatus) => {
   switch (status) {
     case PaymentStatus.PAID:
@@ -419,33 +426,164 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     setIsCreateExpenseDialogOpen(false);
   };
   
-  // Advance handlers
-  const handleAddAdvance = () => {
-    setIsCreateAdvanceDialogOpen(true);
+  // Advance form state
+  const [advanceDate, setAdvanceDate] = useState<Date | null>(null);
+  const [recipientType, setRecipientType] = useState<RecipientType>(RecipientType.WORKER);
+  const [recipientName, setRecipientName] = useState('');
+  const [advancePurpose, setAdvancePurpose] = useState('');
+  const [advanceAmount, setAdvanceAmount] = useState<number>(0);
+  
+  // Lists for dropdowns
+  const [supervisors, setSupervisors] = useState<Array<{id: string, name: string}>>([]);
+  const [subcontractors, setSubcontractors] = useState<Array<{id: string, name: string}>>([]);
+  const [purposes, setPurposes] = useState([
+    'Salary Advance',
+    'Material Purchase',
+    'Equipment Rental',
+    'Travel Expense',
+    'Miscellaneous'
+  ]);
+  
+  // Fetch supervisors and subcontractors
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        // Fetch supervisors
+        const { data: supervisorsData, error: supervisorsError } = await supabase
+          .from('users')
+          .select('id, name, email')
+          .eq('role', UserRole.SUPERVISOR);
+          
+        if (supervisorsError) throw supervisorsError;
+        
+        if (supervisorsData) {
+          setSupervisors(supervisorsData.map(s => ({ 
+            id: s.id, 
+            name: s.name || s.email 
+          })));
+        }
+        
+        // Fetch contractors (not subcontractors)
+        const { data: contractorsData, error: contractorsError } = await supabase
+          .from('contractors')
+          .select('id, name');
+          
+        if (contractorsError) throw contractorsError;
+        
+        if (contractorsData) {
+          setSubcontractors(contractorsData);
+        }
+      } catch (error) {
+        console.error('Error fetching dropdown data:', error);
+        toast({
+          title: "Failed to load data",
+          description: "Could not load supervisors and contractors.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    fetchDropdownData();
+  }, []);
+  
+  // Reset advance form
+  const resetAdvanceForm = () => {
+    setAdvanceDate(null);
+    setRecipientType(RecipientType.WORKER);
+    setRecipientName('');
+    setAdvancePurpose('');
+    setAdvanceAmount(0);
   };
   
-  const handleEditAdvance = (advance: Advance) => {
-    setSelectedAdvance(advance);
-    setIsEditAdvanceDialogOpen(true);
-  };
-  
-  const handleViewAdvance = (advance: Advance) => {
-    setSelectedAdvance(advance);
-    // You can add view dialog logic here if needed
-  };
-  
-  const confirmDeleteAdvance = (advance: Advance) => {
-    setSelectedAdvance(advance);
-    setIsDeleteAdvanceConfirmOpen(true);
-  };
-  
-  const handleCreateAdvance = async (advance: Partial<Advance>) => {
-    // Implementation for creating advance in Supabase
-    toast({
-      title: "Advance Created",
-      description: "The advance has been created successfully.",
-    });
-    setIsCreateAdvanceDialogOpen(false);
+  // Handle advance form submit
+  const handleCreateAdvance = async () => {
+    if (!advanceDate) {
+      toast({
+        title: "Missing Date",
+        description: "Please select a date for the advance",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!recipientName) {
+      toast({
+        title: "Missing Recipient",
+        description: "Please enter a recipient name",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!advancePurpose) {
+      toast({
+        title: "Missing Purpose",
+        description: "Please select a purpose",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!advanceAmount || advanceAmount <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount greater than 0",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      // Prepare the data for insertion
+      const advanceData = {
+        date: advanceDate.toISOString(),
+        recipient_type: recipientType,
+        recipient_name: recipientName,
+        purpose: advancePurpose,
+        amount: advanceAmount,
+        status: ApprovalStatus.PENDING, // Default status
+        created_by: user?.id,
+        site_id: site.id,
+        // If recipient is a supervisor, track their ID
+        recipient_id: recipientType === RecipientType.SUPERVISOR ? 
+          supervisors.find(s => s.name === recipientName)?.id : null
+      };
+      
+      console.log('Submitting advance data:', advanceData);
+      
+      const { data, error } = await supabase
+        .from('advances')
+        .insert(advanceData)
+        .select();
+        
+      if (error) {
+        console.error('Error creating advance:', error);
+        toast({
+          title: "Advance Creation Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      toast({
+        title: "Advance Created",
+        description: `Advance for ${recipientName} has been created successfully.`,
+      });
+      
+      setIsCreateAdvanceDialogOpen(false);
+      resetAdvanceForm();
+      
+      // Refresh the advances list (in a real implementation, you'd update your state)
+      // This would typically call a function to refresh the advances list
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create advance. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
   
   // Funds handlers
@@ -475,6 +613,26 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       description: "The funds have been added successfully.",
     });
     setIsCreateFundsDialogOpen(false);
+  };
+
+  // Advance handlers
+  const handleAddAdvance = () => {
+    setIsCreateAdvanceDialogOpen(true);
+  };
+
+  const handleEditAdvance = (advance: Advance) => {
+    setSelectedAdvance(advance);
+    setIsEditAdvanceDialogOpen(true);
+  };
+
+  const handleViewAdvance = (advance: Advance) => {
+    setSelectedAdvance(advance);
+    // You can add view dialog logic here if needed
+  };
+
+  const confirmDeleteAdvance = (advance: Advance) => {
+    setSelectedAdvance(advance);
+    setIsDeleteAdvanceConfirmOpen(true);
   };
 
   return (
@@ -720,7 +878,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             </div>
             
             {canEdit && (
-              <Button size="sm" className="gap-1.5" onClick={handleAddAdvance}>
+              <Button size="sm" className="gap-1.5" onClick={() => setIsCreateAdvanceDialogOpen(true)}>
                 <Plus className="h-4 w-4" />
                 New Advance
               </Button>
@@ -1005,37 +1163,134 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 
       {/* Advance Dialogs */}
       <Dialog open={isCreateAdvanceDialogOpen} onOpenChange={setIsCreateAdvanceDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogTitle>Add New Advance</DialogTitle>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogTitle>New Advance</DialogTitle>
+          <DialogDescription>
+            Enter the details for the new advance payment.
+          </DialogDescription>
+          
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2">
-                <label htmlFor="advanceDate" className="text-sm font-medium">Date</label>
-                <input 
-                  type="date" 
-                  id="advanceDate" 
-                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
+            <div className="flex flex-col gap-2">
+              <label htmlFor="advanceDate" className="text-sm font-medium">Date</label>
+              <input 
+                type="date" 
+                id="advanceDate" 
+                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                onChange={(e) => setAdvanceDate(e.target.value ? new Date(e.target.value) : null)}
+              />
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Recipient Type</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input 
+                    type="radio" 
+                    name="recipientType" 
+                    checked={recipientType === RecipientType.WORKER}
+                    onChange={() => setRecipientType(RecipientType.WORKER)}
+                    className="h-4 w-4 text-primary"
+                  />
+                  <span className="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    Worker
+                  </span>
+                </label>
+                
+                <label className="flex items-center gap-2">
+                  <input 
+                    type="radio" 
+                    name="recipientType" 
+                    checked={recipientType === RecipientType.SUBCONTRACTOR}
+                    onChange={() => setRecipientType(RecipientType.SUBCONTRACTOR)}
+                    className="h-4 w-4 text-primary"
+                  />
+                  <span className="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                    </svg>
+                    Subcontractor
+                  </span>
+                </label>
+                
+                <label className="flex items-center gap-2">
+                  <input 
+                    type="radio" 
+                    name="recipientType" 
+                    checked={recipientType === RecipientType.SUPERVISOR}
+                    onChange={() => setRecipientType(RecipientType.SUPERVISOR)}
+                    className="h-4 w-4 text-primary"
+                  />
+                  <span className="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Supervisor
+                  </span>
+                </label>
               </div>
-              <div className="flex flex-col gap-2">
-                <label htmlFor="recipientName" className="text-sm font-medium">Recipient Name</label>
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <label htmlFor="recipientName" className="text-sm font-medium">Recipient Name</label>
+              {recipientType === RecipientType.WORKER ? (
                 <input 
                   type="text" 
                   id="recipientName" 
                   className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="Enter recipient name"
+                  placeholder="Enter worker name"
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
                 />
-              </div>
+              ) : recipientType === RecipientType.SUBCONTRACTOR ? (
+                <select 
+                  id="recipientName" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
+                >
+                  <option value="">Select subcontractor</option>
+                  {subcontractors.map((sc) => (
+                    <option key={sc.id} value={sc.name}>{sc.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <select 
+                  id="recipientName" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
+                >
+                  <option value="">Select supervisor</option>
+                  {supervisors.map((sv) => (
+                    <option key={sv.id} value={sv.name}>{sv.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
+            
             <div className="flex flex-col gap-2">
               <label htmlFor="purpose" className="text-sm font-medium">Purpose</label>
-              <textarea 
+              <select 
                 id="purpose" 
-                rows={3}
                 className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
-                placeholder="Enter purpose of advance..."
-              ></textarea>
+                value={advancePurpose}
+                onChange={(e) => setAdvancePurpose(e.target.value)}
+              >
+                <option value="">Select purpose</option>
+                {purposes.map((purpose) => (
+                  <option key={purpose} value={purpose}>{purpose}</option>
+                ))}
+              </select>
             </div>
+            
             <div className="flex flex-col gap-2">
               <label htmlFor="advanceAmount" className="text-sm font-medium">Amount (₹)</label>
               <input 
@@ -1045,12 +1300,25 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                 placeholder="0.00"
                 min="0"
                 step="0.01"
+                value={advanceAmount || ''}
+                onChange={(e) => setAdvanceAmount(parseFloat(e.target.value) || 0)}
               />
             </div>
           </div>
+          
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateAdvanceDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => handleCreateAdvance({})}>Add Advance</Button>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsCreateAdvanceDialogOpen(false);
+                resetAdvanceForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreateAdvance}>
+              Add Advance
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -12,14 +12,11 @@ import { Plus, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SupervisorCard from '../components/dashboard/SupervisorCard';
 
-interface User {
-  id: string;
-  name?: string;
-  email: string;
-  role?: string;
+interface AdminDashboardProps {
+  user?: any;
 }
 
-const AdminDashboard = ({ user }: { user: User }) => {
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('sites');
   const [sites, setSites] = useState<any[]>([]);
@@ -163,7 +160,6 @@ const AdminDashboard = ({ user }: { user: User }) => {
                 <Card className="bg-white border shadow-sm mb-6">
                   <CardContent className="p-6">
                     <SiteForm 
-                      user={user}
                       isOpen={showSiteForm}
                       onClose={() => setShowSiteForm(false)}
                       onSubmit={(site) => {

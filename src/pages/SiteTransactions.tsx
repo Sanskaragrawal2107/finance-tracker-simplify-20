@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import SiteDetailTransactions from '@/components/sites/SiteDetailTransactions';
@@ -43,7 +44,7 @@ const SiteTransactions: React.FC<SiteTransactionsProps> = ({ user }) => {
         const { data: supervisorData, error: supervisorError } = await supabase
           .from('users')
           .select('*')
-          .eq('id', siteData.supervisorId)
+          .eq('id', siteData.supervisor_id)
           .single();
 
         if (supervisorError) {

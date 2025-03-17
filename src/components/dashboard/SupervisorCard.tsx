@@ -16,7 +16,8 @@ const SupervisorCard: React.FC<SupervisorCardProps> = ({ supervisor }) => {
   const navigate = useNavigate();
   
   const handleViewSites = () => {
-    navigate('/supervisor-sites', { state: { supervisor } });
+    // Navigate to expenses page with supervisor filter applied
+    navigate('/expenses', { state: { supervisorId: supervisor.id } });
   };
   
   return (

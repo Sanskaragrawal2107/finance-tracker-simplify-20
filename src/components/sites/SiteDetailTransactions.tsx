@@ -82,7 +82,12 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   const [activeTab, setActiveTab] = useState('invoices');
   const [searchTerm, setSearchTerm] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // Separate loading states for each tab
+  const [isInvoicesLoading, setIsInvoicesLoading] = useState(true);
+  const [isExpensesLoading, setIsExpensesLoading] = useState(false);
+  const [isAdvancesLoading, setIsAdvancesLoading] = useState(false);
+  const [isFundsLoading, setIsFundsLoading] = useState(false);
   
   // Invoice dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -120,7 +125,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   // Function to load invoices with real-time updates
   useEffect(() => {
     const loadInvoices = async () => {
-      setIsLoading(true);
+      if (activeTab !== 'invoices') return;
+      
+      setIsInvoicesLoading(true);
       try {
         const siteInvoices = await fetchSiteInvoices(site.id);
         setInvoices(siteInvoices);
@@ -132,7 +139,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           variant: "destructive"
         });
       } finally {
-        setIsLoading(false);
+        setIsInvoicesLoading(false);
       }
     };
     
@@ -156,7 +163,28 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       // Unsubscribe when component unmounts
       supabase.removeChannel(channel);
     };
-  }, [site.id]);
+  }, [site.id, activeTab]);
+
+  // Handle tab loading states
+  useEffect(() => {
+    const handleTabChange = () => {
+      if (activeTab === 'expenses') {
+        setIsExpensesLoading(true);
+        // Simulate loading - in real app, you'd load data here
+        setTimeout(() => setIsExpensesLoading(false), 500);
+      } else if (activeTab === 'advances') {
+        setIsAdvancesLoading(true);
+        // Simulate loading - in real app, you'd load data here
+        setTimeout(() => setIsAdvancesLoading(false), 500);
+      } else if (activeTab === 'funds') {
+        setIsFundsLoading(true);
+        // Simulate loading - in real app, you'd load data here
+        setTimeout(() => setIsFundsLoading(false), 500);
+      }
+    };
+    
+    handleTabChange();
+  }, [activeTab]);
 
   const filteredInvoices = invoices.filter(invoice => 
     invoice.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -491,7 +519,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           </div>
           
           <div className="bg-white rounded-md border shadow-sm">
-            {isLoading ? (
+            {isInvoicesLoading ? (
               <div className="flex items-center justify-center p-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <span className="ml-2">Loading invoices...</span>
@@ -613,8 +641,13 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             )}
           </div>
           
-          {expenses.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
+          {isExpensesLoading ? (
+            <div className="flex items-center justify-center p-12 bg-white rounded-md border shadow-sm">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2">Loading expenses...</span>
+            </div>
+          ) : expenses.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground bg-white rounded-md border shadow-sm">
               No expenses found for this site
             </div>
           ) : (
@@ -694,8 +727,13 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             )}
           </div>
           
-          {advances.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
+          {isAdvancesLoading ? (
+            <div className="flex items-center justify-center p-12 bg-white rounded-md border shadow-sm">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2">Loading advances...</span>
+            </div>
+          ) : advances.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground bg-white rounded-md border shadow-sm">
               No advances found for this site
             </div>
           ) : (
@@ -775,8 +813,13 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             )}
           </div>
           
-          {fundsReceived.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
+          {isFundsLoading ? (
+            <div className="flex items-center justify-center p-12 bg-white rounded-md border shadow-sm">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2">Loading funds...</span>
+            </div>
+          ) : fundsReceived.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground bg-white rounded-md border shadow-sm">
               No funds received for this site
             </div>
           ) : (

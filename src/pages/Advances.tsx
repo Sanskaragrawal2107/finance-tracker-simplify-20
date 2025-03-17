@@ -13,7 +13,7 @@ const advances: Advance[] = [
     recipientId: '101',
     recipientName: 'Raj Construction',
     recipientType: RecipientType.SUBCONTRACTOR,
-    purpose: AdvancePurpose.MATERIAL,
+    purpose: AdvancePurpose.ADVANCE,
     amount: 150000,
     status: ApprovalStatus.APPROVED,
     createdBy: 'Admin',
@@ -25,7 +25,7 @@ const advances: Advance[] = [
     recipientId: '102',
     recipientName: 'Suresh Electrical',
     recipientType: RecipientType.SUBCONTRACTOR,
-    purpose: AdvancePurpose.MATERIAL,
+    purpose: AdvancePurpose.ADVANCE,
     amount: 75000,
     status: ApprovalStatus.APPROVED,
     createdBy: 'Supervisor',
@@ -37,7 +37,7 @@ const advances: Advance[] = [
     recipientId: '201',
     recipientName: 'Labor Group A',
     recipientType: RecipientType.WORKER,
-    purpose: AdvancePurpose.WAGES,
+    purpose: AdvancePurpose.TOOLS,
     amount: 45000,
     status: ApprovalStatus.APPROVED,
     createdBy: 'Admin',
@@ -49,7 +49,7 @@ const advances: Advance[] = [
     recipientId: '103',
     recipientName: 'Premium Transport',
     recipientType: RecipientType.SUBCONTRACTOR,
-    purpose: AdvancePurpose.TRANSPORT,
+    purpose: AdvancePurpose.OTHER,
     amount: 35000,
     status: ApprovalStatus.PENDING,
     createdBy: 'Supervisor',
@@ -61,7 +61,7 @@ const advances: Advance[] = [
     recipientId: '202',
     recipientName: 'Labor Group B',
     recipientType: RecipientType.WORKER,
-    purpose: AdvancePurpose.WAGES,
+    purpose: AdvancePurpose.TOOLS,
     amount: 30000,
     status: ApprovalStatus.PENDING,
     createdBy: 'Supervisor',
@@ -71,14 +71,14 @@ const advances: Advance[] = [
 
 const getPurposeColor = (purpose: AdvancePurpose) => {
   switch (purpose) {
-    case AdvancePurpose.MATERIAL:
+    case AdvancePurpose.ADVANCE:
       return 'bg-blue-100 text-blue-800';
-    case AdvancePurpose.WAGES:
+    case AdvancePurpose.TOOLS:
       return 'bg-green-100 text-green-800';
-    case AdvancePurpose.TRANSPORT:
+    case AdvancePurpose.OTHER:
       return 'bg-orange-100 text-orange-800';
-    case AdvancePurpose.MISC:
-      return 'bg-gray-100 text-gray-800';
+    case AdvancePurpose.SAFETY_SHOES:
+      return 'bg-purple-100 text-purple-800';
     default:
       return 'bg-gray-100 text-gray-800';
   }

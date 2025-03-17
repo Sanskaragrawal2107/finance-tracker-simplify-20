@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -9,6 +8,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Expenses from "./pages/Expenses";
 import AdminDashboard from "./pages/AdminDashboard";
+import SupervisorSites from "./pages/SupervisorSites";
 import NotFound from "./pages/NotFound";
 import Navbar from "./components/layout/Navbar";
 import { UserRole } from "./lib/types";
@@ -151,6 +151,16 @@ const AppContent = () => {
           <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
             <AppLayout>
               <AdminDashboard />
+            </AppLayout>
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/supervisor-sites" 
+        element={
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <AppLayout>
+              <SupervisorSites />
             </AppLayout>
           </ProtectedRoute>
         } 

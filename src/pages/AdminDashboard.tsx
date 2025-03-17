@@ -86,10 +86,12 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const handleViewSites = (supervisorId: string) => {
-    console.log("Navigating to /expenses with supervisorId:", supervisorId);
-    navigate('/expenses', { 
+    console.log("Viewing sites for supervisor:", supervisorId);
+    const selectedSupervisor = supervisorsList.find(sup => sup.id === supervisorId);
+    navigate('/admin/supervisor-sites', { 
       state: { 
         supervisorId: supervisorId,
+        supervisorName: selectedSupervisor?.name || 'Unknown Supervisor',
         showSites: true 
       } 
     });

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User } from 'lucide-react';
@@ -30,6 +29,7 @@ interface SiteDetailProps {
   onAddInvoice?: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
   onCompleteSite?: (siteId: string, completionDate: Date) => void;
   supervisor?: any;
+  isAdminView?: boolean;
 }
 
 // Define DEBIT_ADVANCE_PURPOSES here for consistency
@@ -54,7 +54,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   onAddFunds,
   onAddInvoice,
   onCompleteSite,
-  supervisor
+  supervisor,
+  isAdminView
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
@@ -266,6 +267,10 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           <SiteDetailTransactions 
             site={site}
             supervisor={supervisor}
+            isAdminView={isAdminView}
+            expenses={expenses}
+            advances={advances}
+            fundsReceived={fundsReceived}
           />
         </TabsContent>
       </Tabs>

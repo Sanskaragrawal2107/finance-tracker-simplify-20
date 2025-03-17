@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +25,7 @@ type InvoiceFormProps = {
   siteId?: string;
 };
 
-const gstRates = [5, 12, 18, 28];
+const gstRates = [0, 5, 12, 18, 28];
 
 const InvoiceForm: React.FC<InvoiceFormProps> = ({
   isOpen = true,
@@ -635,17 +634,19 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            {onClose && (
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+            )}
             <Button type="submit" disabled={isUploading}>
               {isUploading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Uploading...
                 </>
-              ) : (
-                'Save Invoice'
-              )}
+              ) : initialData ? "Update Invoice" : "Create Invoice"}
             </Button>
           </div>
         </form>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -7,15 +6,20 @@ import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { supabase, fetchSiteInvoices } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Site, Invoice, PaymentStatus, MaterialItem, BankDetails } from '@/lib/types';
+import { Site, Invoice, PaymentStatus, MaterialItem, BankDetails, UserRole } from '@/lib/types';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { useAuth } from '@/hooks/use-auth';
 
 interface SiteDetailTransactionsProps {
   site: Site;
   supervisor?: any;
+  isAdminView?: boolean;
+  expenses?: Expense[];
+  advances?: Advance[];
+  fundsReceived?: FundsReceived[];
 }
 
 const getStatusColor = (status: PaymentStatus) => {
@@ -29,7 +33,15 @@ const getStatusColor = (status: PaymentStatus) => {
   }
 };
 
-const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, supervisor }) => {
+const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ 
+  site, 
+  supervisor, 
+  isAdminView,
+  expenses = [],
+  advances = [],
+  fundsReceived = []
+}) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('invoices');
   const [searchTerm, setSearchTerm] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -40,6 +52,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, s
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
+  
+  // Check if the current user is an admin
+  const isAdmin = user?.role === UserRole.ADMIN || isAdminView === true;
 
   // Function to load invoices with real-time updates
   useEffect(() => {
@@ -282,6 +297,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, s
     });
   };
 
+  // Add formatCurrency utility
+  const formatCurrency = (amount: number) => {
+    return `₹${amount.toLocaleString()}`;
+  };
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="invoices" value={activeTab} onValueChange={setActiveTab}>
@@ -314,10 +334,12 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, s
                 <Download className="h-4 w-4" />
                 Export
               </Button>
-              <Button size="sm" className="gap-1.5" onClick={() => setIsCreateDialogOpen(true)}>
-                <Plus className="h-4 w-4" />
-                New Invoice
-              </Button>
+              {isAdmin && (
+                <Button size="sm" className="gap-1.5" onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  New Invoice
+                </Button>
+              )}
             </div>
           </div>
           
@@ -364,29 +386,38 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, s
                                 {invoice.paymentStatus}
                               </span>
                             </td>
-                            <td className="py-4 pr-4 text-right">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewInvoice(invoice)}>
-                                <Eye className="h-4 w-4 text-muted-foreground" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditInvoice(invoice)}>
-                                <Edit className="h-4 w-4 text-muted-foreground" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadInvoice(invoice)}>
-                                <Download className="h-4 w-4 text-muted-foreground" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteInvoice(invoice)}>
-                                <Trash2 className="h-4 w-4 text-muted-foreground" />
-                              </Button>
-                              {invoice.paymentStatus === PaymentStatus.PENDING && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8" 
-                                  onClick={() => handleViewInvoice(invoice)}
-                                >
-                                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                            <td className="py-4 text-right">
+                              <div className="flex justify-end">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewInvoice(invoice)}>
+                                  <Eye className="h-4 w-4 text-muted-foreground" />
                                 </Button>
-                              )}
+                                
+                                {isAdmin && (
+                                  <>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditInvoice(invoice)}>
+                                      <Edit className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteInvoice(invoice)}>
+                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  </>
+                                )}
+                                
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadInvoice(invoice)}>
+                                  <Download className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                                
+                                {invoice.paymentStatus === PaymentStatus.PENDING && isAdmin && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8" 
+                                    onClick={() => handleViewInvoice(invoice)}
+                                  >
+                                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -414,22 +445,231 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, s
           </div>
         </TabsContent>
         
-        <TabsContent value="expenses">
-          <div className="p-8 text-center text-muted-foreground">
-            Expenses functionality coming soon
+        <TabsContent value="expenses" className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="relative max-w-md">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <input 
+                type="text" 
+                placeholder="Search expenses..." 
+                className="py-2 pl-10 pr-4 border rounded-md w-full md:w-80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+            </div>
+            
+            {isAdmin && (
+              <Button size="sm" className="gap-1.5">
+                <Plus className="h-4 w-4" />
+                New Expense
+              </Button>
+            )}
           </div>
+          
+          {expenses.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              No expenses found for this site
+            </div>
+          ) : (
+            <div className="bg-white rounded-md border shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-3 pl-4 font-medium text-muted-foreground">Date</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Description</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Category</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Amount</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Status</th>
+                      <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenses.map((expense) => (
+                      <tr key={expense.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="py-4 pl-4 text-sm">{format(expense.date, 'MMM dd, yyyy')}</td>
+                        <td className="py-4 text-sm">{expense.description}</td>
+                        <td className="py-4 text-sm">{expense.category}</td>
+                        <td className="py-4 text-sm font-medium">{formatCurrency(expense.amount)}</td>
+                        <td className="py-4 text-sm">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium 
+                            ${expense.status === ApprovalStatus.APPROVED ? 'bg-green-100 text-green-800' : 
+                              expense.status === ApprovalStatus.REJECTED ? 'bg-red-100 text-red-800' : 
+                              'bg-yellow-100 text-yellow-800'}`}
+                          >
+                            {expense.status}
+                          </span>
+                        </td>
+                        <td className="py-4 text-right">
+                          <div className="flex justify-end">
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            {isAdmin && (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Edit className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </TabsContent>
         
-        <TabsContent value="advances">
-          <div className="p-8 text-center text-muted-foreground">
-            Advances functionality coming soon
+        <TabsContent value="advances" className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="relative max-w-md">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <input 
+                type="text" 
+                placeholder="Search advances..." 
+                className="py-2 pl-10 pr-4 border rounded-md w-full md:w-80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+            </div>
+            
+            {isAdmin && (
+              <Button size="sm" className="gap-1.5">
+                <Plus className="h-4 w-4" />
+                New Advance
+              </Button>
+            )}
           </div>
+          
+          {advances.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              No advances found for this site
+            </div>
+          ) : (
+            <div className="bg-white rounded-md border shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-3 pl-4 font-medium text-muted-foreground">Date</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Recipient</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Purpose</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Amount</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Status</th>
+                      <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {advances.map((advance) => (
+                      <tr key={advance.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="py-4 pl-4 text-sm">{format(advance.date, 'MMM dd, yyyy')}</td>
+                        <td className="py-4 text-sm">{advance.recipientName}</td>
+                        <td className="py-4 text-sm">{advance.purpose}</td>
+                        <td className="py-4 text-sm font-medium">{formatCurrency(advance.amount)}</td>
+                        <td className="py-4 text-sm">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium 
+                            ${advance.status === ApprovalStatus.APPROVED ? 'bg-green-100 text-green-800' : 
+                              advance.status === ApprovalStatus.REJECTED ? 'bg-red-100 text-red-800' : 
+                              'bg-yellow-100 text-yellow-800'}`}
+                          >
+                            {advance.status}
+                          </span>
+                        </td>
+                        <td className="py-4 text-right">
+                          <div className="flex justify-end">
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            {isAdmin && (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Edit className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </TabsContent>
         
-        <TabsContent value="funds">
-          <div className="p-8 text-center text-muted-foreground">
-            Funds received functionality coming soon
+        <TabsContent value="funds" className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="relative max-w-md">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <input 
+                type="text" 
+                placeholder="Search funds..." 
+                className="py-2 pl-10 pr-4 border rounded-md w-full md:w-80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+            </div>
+            
+            {isAdmin && (
+              <Button size="sm" className="gap-1.5">
+                <Plus className="h-4 w-4" />
+                Add Funds
+              </Button>
+            )}
           </div>
+          
+          {fundsReceived.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              No funds received for this site
+            </div>
+          ) : (
+            <div className="bg-white rounded-md border shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-3 pl-4 font-medium text-muted-foreground">Date</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Amount</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Method</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Reference</th>
+                      <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fundsReceived.map((fund) => (
+                      <tr key={fund.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="py-4 pl-4 text-sm">{format(fund.date, 'MMM dd, yyyy')}</td>
+                        <td className="py-4 text-sm font-medium">{formatCurrency(fund.amount)}</td>
+                        <td className="py-4 text-sm">{fund.method || 'N/A'}</td>
+                        <td className="py-4 text-sm">{fund.reference || 'N/A'}</td>
+                        <td className="py-4 text-right">
+                          <div className="flex justify-end">
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            {isAdmin && (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Edit className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
       

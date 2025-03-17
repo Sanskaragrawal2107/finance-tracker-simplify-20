@@ -487,6 +487,7 @@ const SupervisorSites: React.FC = () => {
           onAddInvoice={handleAddInvoice}
           onCompleteSite={handleCompleteSite}
           supervisor={{ id: supervisorId, name: supervisorName }}
+          isAdminView={true}
         />
       ) : sites.length > 0 ? (
         <div className="flex-1">

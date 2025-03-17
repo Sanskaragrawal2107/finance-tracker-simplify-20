@@ -79,8 +79,10 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
   
-  // Check if the current user is an admin
-  const isAdmin = user?.role === UserRole.ADMIN || isAdminView === true;
+  // Check if the current user is an admin - ensure this is strict
+  const isAdmin = user?.role === UserRole.ADMIN;
+  // Only allow admin actions if the user is actually an admin AND isAdminView is true
+  const canPerformAdminActions = isAdmin && isAdminView === true;
 
   // Function to load invoices with real-time updates
   useEffect(() => {
@@ -359,7 +361,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                 <Download className="h-4 w-4" />
                 Export
               </Button>
-              {isAdmin && (
+              {canPerformAdminActions && (
                 <Button size="sm" className="gap-1.5" onClick={() => setIsCreateDialogOpen(true)}>
                   <Plus className="h-4 w-4" />
                   New Invoice
@@ -417,7 +419,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                                   <Eye className="h-4 w-4 text-muted-foreground" />
                                 </Button>
                                 
-                                {isAdmin && (
+                                {canPerformAdminActions && (
                                   <>
                                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditInvoice(invoice)}>
                                       <Edit className="h-4 w-4 text-muted-foreground" />
@@ -432,7 +434,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                                   <Download className="h-4 w-4 text-muted-foreground" />
                                 </Button>
                                 
-                                {invoice.paymentStatus === PaymentStatus.PENDING && isAdmin && (
+                                {invoice.paymentStatus === PaymentStatus.PENDING && canPerformAdminActions && (
                                   <Button 
                                     variant="ghost" 
                                     size="icon" 
@@ -481,7 +483,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
               />
             </div>
             
-            {isAdmin && (
+            {canPerformAdminActions && (
               <Button size="sm" className="gap-1.5">
                 <Plus className="h-4 w-4" />
                 New Expense
@@ -528,7 +530,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <Eye className="h-4 w-4 text-muted-foreground" />
                             </Button>
-                            {isAdmin && (
+                            {canPerformAdminActions && (
                               <>
                                 <Button variant="ghost" size="icon" className="h-8 w-8">
                                   <Edit className="h-4 w-4 text-muted-foreground" />
@@ -560,7 +562,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
               />
             </div>
             
-            {isAdmin && (
+            {canPerformAdminActions && (
               <Button size="sm" className="gap-1.5">
                 <Plus className="h-4 w-4" />
                 New Advance
@@ -607,7 +609,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <Eye className="h-4 w-4 text-muted-foreground" />
                             </Button>
-                            {isAdmin && (
+                            {canPerformAdminActions && (
                               <>
                                 <Button variant="ghost" size="icon" className="h-8 w-8">
                                   <Edit className="h-4 w-4 text-muted-foreground" />
@@ -639,7 +641,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
               />
             </div>
             
-            {isAdmin && (
+            {canPerformAdminActions && (
               <Button size="sm" className="gap-1.5">
                 <Plus className="h-4 w-4" />
                 Add Funds
@@ -676,7 +678,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <Eye className="h-4 w-4 text-muted-foreground" />
                             </Button>
-                            {isAdmin && (
+                            {canPerformAdminActions && (
                               <>
                                 <Button variant="ghost" size="icon" className="h-8 w-8">
                                   <Edit className="h-4 w-4 text-muted-foreground" />

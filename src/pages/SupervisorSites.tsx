@@ -36,6 +36,9 @@ const SupervisorSites: React.FC = () => {
   const supervisorId = location.state?.supervisorId;
   const supervisorName = location.state?.supervisorName || 'Unknown Supervisor';
   
+  // Check if user is admin or viewing their own supervisor sites
+  const isAdminView = user?.role === UserRole.ADMIN;
+  
   // Redirect if no supervisorId is provided
   useEffect(() => {
     if (!supervisorId) {
@@ -487,7 +490,7 @@ const SupervisorSites: React.FC = () => {
           onAddInvoice={handleAddInvoice}
           onCompleteSite={handleCompleteSite}
           supervisor={{ id: supervisorId, name: supervisorName }}
-          isAdminView={true}
+          isAdminView={isAdminView}
         />
       ) : sites.length > 0 ? (
         <div className="flex-1">

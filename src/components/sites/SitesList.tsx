@@ -1,20 +1,98 @@
-
-import React from 'react';
+import React, { useEffect } from 'react';
 import { format } from 'date-fns';
 import { Building, CalendarCheck, Calendar, ArrowRight } from 'lucide-react';
 import { Site } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SitesListProps {
   sites: Site[];
   onSelectSite?: (siteId: string) => void;
   onSiteClick?: (site: Site) => void;
+  supervisorId?: string;
+  fetchSites?: boolean;
 }
 
-const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite, onSiteClick }) => {
-  const activeSites = sites.filter(site => !site.isCompleted);
-  const completedSites = sites.filter(site => site.isCompleted);
+const SitesList: React.FC<SitesListProps> = ({ 
+  sites: initialSites, 
+  onSelectSite, 
+  onSiteClick,
+  supervisorId,
+  fetchSites = false
+}) => {
+  const [sites, setSites] = React.useState<Site[]>(initialSites);
+  
+  useEffect(() => {
+    // If sites are provided directly, use them
+    if (initialSites.length > 0 || !fetchSites) {
+      setSites(initialSites);
+      return;
+    }
+    
+    // Otherwise, if supervisorId is provided, fetch sites from Supabase
+    const fetchSitesFromSupabase = async () => {
+      try {
+        if (supervisorId) {
+          console.log("Fetching sites for supervisor:", supervisorId);
+          
+          const { data, error } = await supabase
+            .from('sites')
+            .select('*')
+            .eq('supervisor_id', supervisorId);
+          
+          if (error) {
+            console.error("Error fetching sites:", error);
+            return;
+          }
+          
+          if (data) {
+            console.log("Sites fetched from Supabase:", data);
+            // Map the data to the Site type
+            const mappedSites = data.map(site => ({
+              id: site.id,
+              name: site.name,
+              jobName: site.job_name,
+              posNo: site.pos_no,
+              location: site.location,
+              startDate: new Date(site.start_date),
+              completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
+              supervisorId: site.supervisor_id,
+              isCompleted: site.is_completed || false,
+              funds: site.funds || 0,
+              totalFunds: site.total_funds || 0,
+              createdAt: new Date(site.created_at)
+            }));
+            
+            setSites(mappedSites);
+          }
+        }
+      } catch (error) {
+        console.error("Error in fetchSitesFromSupabase:", error);
+      }
+    };
+    
+    fetchSitesFromSupabase();
+    
+    // Subscribe to real-time updates for sites table
+    const channel = supabase
+      .channel('public:sites')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'sites',
+        filter: supervisorId ? `supervisor_id=eq.${supervisorId}` : undefined
+      }, (payload) => {
+        console.log('Real-time update received:', payload);
+        fetchSitesFromSupabase(); // Refresh the sites list
+      })
+      .subscribe();
+      
+    // Cleanup subscription when component unmounts
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supervisorId, fetchSites, initialSites]);
 
   const handleSiteSelect = (site: Site) => {
     if (onSelectSite) {
@@ -25,9 +103,13 @@ const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite, onSiteClick 
   };
 
   // For debugging
-  console.log("SitesList received sites:", sites);
-  console.log("Active sites:", activeSites);
-  console.log("Completed sites:", completedSites);
+  console.log("SitesList component - sites prop:", initialSites);
+  console.log("SitesList component - sites state:", sites);
+  console.log("SitesList supervisorId:", supervisorId);
+  console.log("SitesList fetchSites:", fetchSites);
+
+  const activeSites = sites.filter(site => !site.isCompleted);
+  const completedSites = sites.filter(site => site.isCompleted);
 
   return (
     <div className="space-y-6">

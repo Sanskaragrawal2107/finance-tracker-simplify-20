@@ -32,6 +32,7 @@ export const getSupervisors = async () => {
     }
     
     if (data && data.length > 0) {
+      console.log('Supervisors fetched from database:', data);
       return data.map(supervisor => ({
         id: supervisor.id,
         name: supervisor.name || supervisor.email

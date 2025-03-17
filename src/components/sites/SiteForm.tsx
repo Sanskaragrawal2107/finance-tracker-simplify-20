@@ -82,7 +82,6 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
   useEffect(() => {
     const fetchSupervisors = async () => {
       try {
-        // Use type assertion to bypass TypeScript errors
         const { data, error } = await (supabase
           .from('users') as any)
           .select('id, name')
@@ -125,7 +124,6 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
     try {
       setIsLoading(true);
       
-      // Transform values to uppercase
       const uppercaseValues = {
         ...values,
         name: values.name.toUpperCase(),
@@ -134,10 +132,35 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
         location: values.location.toUpperCase(),
       };
       
-      // Pass the values to the parent component's onSubmit
+      const { data, error } = await supabase
+        .from('sites')
+        .insert([{
+          name: uppercaseValues.name,
+          job_name: uppercaseValues.jobName,
+          pos_no: uppercaseValues.posNo,
+          location: uppercaseValues.location,
+          start_date: uppercaseValues.startDate.toISOString(),
+          completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
+          supervisor_id: uppercaseValues.supervisorId,
+          created_by: user?.id || null,
+          is_completed: false,
+          funds: 0,
+          total_funds: 0
+        }])
+        .select();
+      
+      if (error) {
+        console.error('Error creating site:', error);
+        toast.error('Failed to create site: ' + error.message);
+        return;
+      }
+      
+      console.log('Site created successfully:', data);
+      
       onSubmit(uppercaseValues);
       form.reset();
       onClose();
+      toast.success('Site created successfully');
     } catch (error: any) {
       console.error('Error in form submission:', error);
       toast.error(error.message || 'Failed to submit form');

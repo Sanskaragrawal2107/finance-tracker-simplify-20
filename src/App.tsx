@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import Index from './pages/Index';
@@ -8,7 +7,7 @@ import Expenses from './pages/Expenses';
 import AdminDashboard from './pages/AdminDashboard';
 import { Toaster } from './components/ui/toaster';
 import { supabase } from './integrations/supabase/client';
-import { ThemeProvider } from './components/ui/theme-provider';
+import { ThemeProvider } from '@/components/ui/theme-provider';
 import './App.css';
 import Advances from './pages/Advances';
 import Invoices from './pages/Invoices';
@@ -19,7 +18,6 @@ import EditExpenseForm from './components/expenses/EditExpenseForm';
 import EditFundsForm from './components/funds/EditFundsForm';
 import EditAdvanceForm from './components/advances/EditAdvanceForm';
 
-// Define interfaces for components that expect user props
 interface UserProps {
   user: any;
 }

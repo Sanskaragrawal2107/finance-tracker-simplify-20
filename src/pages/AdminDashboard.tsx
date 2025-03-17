@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -12,30 +11,12 @@ import { Button } from '../components/ui/button';
 import { Plus, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SupervisorCard from '../components/dashboard/SupervisorCard';
-import { format } from 'date-fns';
 
 interface User {
   id: string;
   name?: string;
   email: string;
   role?: string;
-}
-
-// Add interface for Sidebar props
-interface SidebarProps {
-  user: User;
-  activePage?: string;
-}
-
-// Add interface for Navbar props
-interface NavbarProps {
-  user: User;
-}
-
-// Add interface for SiteForm props
-interface SiteFormProps {
-  user: User;
-  onSuccess: () => void;
 }
 
 const AdminDashboard = ({ user }: { user: User }) => {
@@ -186,7 +167,14 @@ const AdminDashboard = ({ user }: { user: User }) => {
                   {renderSkeletonCards(3)}
                 </div>
               ) : (
-                <SitesList sites={sites} onSiteClick={handleSiteClick} />
+                <SitesList 
+                  sites={sites} 
+                  onSiteClick={handleSiteClick}
+                  onSelectSite={(siteId) => {
+                    const site = sites.find(s => s.id === siteId);
+                    if (site) handleSiteClick(site);
+                  }} 
+                />
               )}
             </TabsContent>
 

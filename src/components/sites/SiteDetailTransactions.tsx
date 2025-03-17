@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import InvoiceDetails from '@/components/invoices/InvoiceDetails';
 
 interface SiteDetailTransactionsProps {
   site: Site;
+  supervisor?: any; // Made this prop optional
 }
 
 const getStatusColor = (status: PaymentStatus) => {
@@ -26,7 +26,7 @@ const getStatusColor = (status: PaymentStatus) => {
   }
 };
 
-const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site }) => {
+const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, supervisor }) => {
   const [activeTab, setActiveTab] = useState('invoices');
   const [searchTerm, setSearchTerm] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -35,11 +35,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const { toast } = useToast();
-
-  // Fix for the boolean iterator error - ensure we're not trying to iterate over a boolean
-  // If there was code here trying to iterate over isLoading, it should be replaced with a conditional check
-  // For example, instead of: for (const _ of isLoading) { ... }
-  // Use: if (isLoading) { ... } else { ... }
 
   useEffect(() => {
     const loadInvoices = async () => {
@@ -103,12 +98,10 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
       }
       
       if (data && data.length > 0) {
-        // Properly handle material_items with type checking and conversion
         let materialItems: MaterialItem[] = [];
         try {
           if (typeof data[0].material_items === 'object' && data[0].material_items !== null) {
             if (Array.isArray(data[0].material_items)) {
-              // Explicitly cast with type guard to ensure we have necessary properties
               materialItems = (data[0].material_items as any[]).map(item => ({
                 id: item.id || undefined,
                 material: item.material || '',
@@ -136,7 +129,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
           materialItems = [];
         }
         
-        // Properly handle bank_details with type checking and conversion
         let bankDetails: BankDetails = {
           accountNumber: '',
           bankName: '',
@@ -210,7 +202,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
 
   const handleMakePayment = async (invoice: Invoice) => {
     try {
-      // Update payment status in Supabase
       const { error } = await supabase
         .from('site_invoices')
         .update({ 
@@ -228,7 +219,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
         return;
       }
       
-      // Update the invoice in state
       const updatedInvoices = invoices.map(inv => {
         if (inv.id === invoice.id) {
           return {
@@ -257,7 +247,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
   };
 
   const handleDownloadInvoice = (invoice: Invoice) => {
-    // Implementation for downloading invoice
     toast({
       title: "Download Started",
       description: `Download for invoice ${invoice.partyId} has started.`,

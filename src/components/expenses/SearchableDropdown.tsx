@@ -4,7 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Option {
-  id: number;
+  id: number | string;
   name: string;
   [key: string]: any;
 }
@@ -14,7 +14,7 @@ export interface SearchableDropdownProps {
   label?: string;
   id?: string;
   selectedVal?: string;
-  handleChange: (value: string | null) => void;
+  handleChange?: (value: string | null) => void;
   placeholder?: string;
   emptyMessage?: string;
   className?: string;
@@ -57,7 +57,9 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
 
   const selectOption = (option: Option) => {
     setQuery("");
-    handleChange(option[label]);
+    if (handleChange) {
+      handleChange(option[label]);
+    }
     if (onChange) {
       onChange(option.id.toString());
     }
@@ -91,7 +93,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
           onChange={(e) => {
             setQuery(e.target.value);
             if (!isOpen) setIsOpen(true);
-            if (e.target.value === "") handleChange(null);
+            if (e.target.value === "" && handleChange) handleChange(null);
           }}
           onClick={() => {
             setIsOpen(true);
@@ -145,5 +147,4 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   );
 };
 
-export { SearchableDropdown };
 export default SearchableDropdown;

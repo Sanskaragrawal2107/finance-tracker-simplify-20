@@ -228,8 +228,8 @@ const EditExpenseForm = () => {
                   <Label htmlFor="site_id">Site (Required)</Label>
                   <SearchableDropdown
                     options={sites.map(site => ({
-                      value: site.id,
-                      label: site.name
+                      id: site.id,
+                      name: site.name
                     }))}
                     value={expense.site_id}
                     onChange={handleSiteChange}

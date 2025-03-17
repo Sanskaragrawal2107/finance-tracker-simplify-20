@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 
 interface SitesListProps {
   sites: any[];
-  onSelectSite: (siteId: string) => void;
+  onSelectSite?: (siteId: string) => void;
   onSiteClick?: (site: any) => void;  // Added for compatibility
 }
 
@@ -21,7 +21,7 @@ const SitesList: React.FC<SitesListProps> = ({
   const handleSiteClick = (site: any) => {
     if (onSiteClick) {
       onSiteClick(site);
-    } else {
+    } else if (onSelectSite) {
       onSelectSite(site.id);
     }
   };

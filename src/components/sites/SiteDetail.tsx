@@ -55,7 +55,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   onAddInvoice,
   onCompleteSite,
   supervisor,
-  isAdminView = false
+  isAdminView
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);

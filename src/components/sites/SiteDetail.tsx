@@ -235,15 +235,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         <TabsContent value="transactions">
           <SiteDetailTransactions 
             site={site}
-            expenses={expenses}
-            advances={advances}
-            fundsReceived={fundsReceived}
-            invoices={invoices}
-            supervisorInvoices={supervisorInvoices}
-            onAddExpense={onAddExpense}
-            onAddAdvance={onAddAdvance}
-            onAddFunds={onAddFunds}
-            onAddInvoice={onAddInvoice}
           />
         </TabsContent>
       </Tabs>

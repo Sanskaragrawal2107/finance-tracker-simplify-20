@@ -534,6 +534,14 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     }
     
     try {
+      // Determine recipient_id based on type
+      let recipient_id = null;
+      if (recipientType === RecipientType.SUPERVISOR) {
+        recipient_id = supervisors.find(s => s.name === recipientName)?.id || null;
+      } else if (recipientType === RecipientType.SUBCONTRACTOR) {
+        recipient_id = subcontractors.find(s => s.name === recipientName)?.id || null;
+      }
+      
       // Prepare the data for insertion
       const advanceData = {
         date: advanceDate.toISOString(),
@@ -544,9 +552,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         status: ApprovalStatus.PENDING, // Default status
         created_by: user?.id,
         site_id: site.id,
-        // If recipient is a supervisor, track their ID
-        recipient_id: recipientType === RecipientType.SUPERVISOR ? 
-          supervisors.find(s => s.name === recipientName)?.id : null
+        recipient_id: recipient_id // Set ID for both supervisors and subcontractors
       };
       
       console.log('Submitting advance data:', advanceData);

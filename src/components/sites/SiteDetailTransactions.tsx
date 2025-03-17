@@ -68,6 +68,17 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   fundsReceived = []
 }) => {
   const { user } = useAuth();
+  
+  // Debug logs for transaction data
+  console.log('SiteDetailTransactions props:', { 
+    siteId: site.id,
+    expensesCount: expenses.length,
+    advancesCount: advances.length,
+    fundsReceivedCount: fundsReceived.length,
+    userRole: user?.role,
+    isAdminView
+  });
+  
   const [activeTab, setActiveTab] = useState('invoices');
   const [searchTerm, setSearchTerm] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);

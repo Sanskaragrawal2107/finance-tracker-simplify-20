@@ -102,6 +102,8 @@ const SupervisorSites: React.FC = () => {
         setSelectedSite(site);
       }
 
+      console.log("Fetching data for site:", siteId);
+
       // Fetch expenses for the selected site
       const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
@@ -109,6 +111,7 @@ const SupervisorSites: React.FC = () => {
         .eq('site_id', siteId);
       
       if (expensesError) throw expensesError;
+      console.log("Expenses data:", expensesData ? expensesData.length : 0, "items");
       
       if (expensesData) {
         const transformedExpenses: Expense[] = expensesData.map(expense => ({
@@ -136,6 +139,7 @@ const SupervisorSites: React.FC = () => {
         .eq('site_id', siteId);
       
       if (advancesError) throw advancesError;
+      console.log("Advances data:", advancesData ? advancesData.length : 0, "items");
       
       if (advancesData) {
         const transformedAdvances: Advance[] = advancesData.map(advance => ({
@@ -165,6 +169,7 @@ const SupervisorSites: React.FC = () => {
         .eq('site_id', siteId);
       
       if (fundsError) throw fundsError;
+      console.log("Funds received data:", fundsData ? fundsData.length : 0, "items");
       
       if (fundsData) {
         const transformedFunds: FundsReceived[] = fundsData.map(fund => ({

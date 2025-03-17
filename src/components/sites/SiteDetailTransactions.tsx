@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { supabase, fetchSiteInvoices } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Site, Invoice, PaymentStatus, MaterialItem, BankDetails, UserRole } from '@/lib/types';
+import { Site, Invoice, PaymentStatus, MaterialItem, BankDetails, UserRole, ApprovalStatus } from '@/lib/types';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
 import { toast } from 'sonner';
@@ -20,6 +20,32 @@ interface SiteDetailTransactionsProps {
   expenses?: Expense[];
   advances?: Advance[];
   fundsReceived?: FundsReceived[];
+}
+
+interface Expense {
+  id: string;
+  date: Date;
+  description: string;
+  category: string;
+  amount: number;
+  status: ApprovalStatus;
+}
+
+interface Advance {
+  id: string;
+  date: Date;
+  recipientName: string;
+  purpose: string;
+  amount: number;
+  status: ApprovalStatus;
+}
+
+interface FundsReceived {
+  id: string;
+  date: Date;
+  amount: number;
+  method?: string;
+  reference?: string;
 }
 
 const getStatusColor = (status: PaymentStatus) => {
@@ -85,8 +111,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         schema: 'public',
         table: 'site_invoices',
         filter: `site_id=eq.${site.id}`
-      }, (payload) => {
-        console.log('Real-time update received:', payload);
+      }, () => {
         // Reload invoices when there's any change
         loadInvoices();
       })
@@ -96,7 +121,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       // Unsubscribe when component unmounts
       supabase.removeChannel(channel);
     };
-  }, [site.id, toast]);
+  }, [site.id]);
 
   const filteredInvoices = invoices.filter(invoice => 
     invoice.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||

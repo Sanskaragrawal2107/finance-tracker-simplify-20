@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../integrations/supabase/client';
@@ -12,7 +13,7 @@ import { format } from 'date-fns';
 import { Calendar } from '../ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { cn } from '../../lib/utils';
-import SearchableDropdown from '../expenses/SearchableDropdown';
+import { SearchableDropdown } from '../expenses/SearchableDropdown';
 
 const EditFundsForm = () => {
   const { id } = useParams<{ id: string }>();
@@ -227,8 +228,8 @@ const EditFundsForm = () => {
                   <Label htmlFor="site_id">Site (Required)</Label>
                   <SearchableDropdown
                     options={sites.map(site => ({
-                      id: site.id,
-                      name: site.name
+                      value: site.id,
+                      label: site.name
                     }))}
                     value={fundsReceived.site_id}
                     onChange={handleSiteChange}

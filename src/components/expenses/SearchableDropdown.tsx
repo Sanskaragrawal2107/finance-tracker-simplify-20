@@ -3,36 +3,32 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export interface Option {
-  id: number | string;
+interface Option {
+  id: number;
   name: string;
   [key: string]: any;
 }
 
-export interface SearchableDropdownProps {
+interface SearchableDropdownProps {
   options: Option[];
   label?: string;
   id?: string;
-  selectedVal?: string;
-  handleChange?: (value: string | null) => void;
+  selectedVal: string;
+  handleChange: (value: string | null) => void;
   placeholder?: string;
   emptyMessage?: string;
   className?: string;
-  value?: string;
-  onChange?: (value: string) => void;
 }
 
 const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   options,
   label = "name",
   id = "id",
-  selectedVal = "",
+  selectedVal,
   handleChange,
   placeholder = "Select option...",
   emptyMessage = "No results found.",
   className,
-  value,
-  onChange,
 }) => {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -57,19 +53,13 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
 
   const selectOption = (option: Option) => {
     setQuery("");
-    if (handleChange) {
-      handleChange(option[label]);
-    }
-    if (onChange) {
-      onChange(option.id.toString());
-    }
+    handleChange(option[label]);
     setIsOpen(false);
   };
 
   const getDisplayValue = () => {
     if (query) return query;
     if (selectedVal && !isFocused) return selectedVal;
-    if (value && !isFocused) return value;
     return "";
   };
 
@@ -93,7 +83,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
           onChange={(e) => {
             setQuery(e.target.value);
             if (!isOpen) setIsOpen(true);
-            if (e.target.value === "" && handleChange) handleChange(null);
+            if (e.target.value === "") handleChange(null);
           }}
           onClick={() => {
             setIsOpen(true);

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Route, Routes, Navigate } from 'react-router-dom';
+import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import Index from './pages/Index';
 import Dashboard from './pages/Dashboard';
 import HeadOffice from './pages/HeadOffice';
@@ -20,6 +20,7 @@ import EditFundsForm from './components/funds/EditFundsForm';
 import EditAdvanceForm from './components/advances/EditAdvanceForm';
 
 function App() {
+  const location = useLocation();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -99,15 +100,14 @@ function App() {
     <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
       <Routes>
         <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Index />} />
-        {/* Use render props pattern to pass user prop to components */}
         <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/" />} />
         <Route path="/head-office" element={user ? <HeadOffice user={user} /> : <Navigate to="/" />} />
-        <Route path="/expenses" element={user ? <Expenses /> : <Navigate to="/" />} />
-        <Route path="/advances" element={user ? <Advances /> : <Navigate to="/" />} />
-        <Route path="/invoices" element={user ? <Invoices /> : <Navigate to="/" />} />
+        <Route path="/expenses" element={user ? <Expenses user={user} /> : <Navigate to="/" />} />
+        <Route path="/advances" element={user ? <Advances user={user} /> : <Navigate to="/" />} />
+        <Route path="/invoices" element={user ? <Invoices user={user} /> : <Navigate to="/" />} />
         <Route path="/admin-dashboard" element={user ? <AdminDashboard user={user} /> : <Navigate to="/" />} />
-        <Route path="/supervisor-sites" element={user ? <SupervisorSites user={user} /> : <Navigate to="/" />} />
-        <Route path="/site-transactions/:id" element={user ? <SiteTransactions user={user} /> : <Navigate to="/" />} />
+        <Route path="/supervisor-sites" element={user ? <SupervisorSites /> : <Navigate to="/" />} />
+        <Route path="/site-transactions/:id" element={user ? <SiteTransactions /> : <Navigate to="/" />} />
         <Route path="/edit-expense/:id" element={user ? <EditExpenseForm /> : <Navigate to="/" />} />
         <Route path="/edit-funds/:id" element={user ? <EditFundsForm /> : <Navigate to="/" />} />
         <Route path="/edit-advance/:id" element={user ? <EditAdvanceForm /> : <Navigate to="/" />} />

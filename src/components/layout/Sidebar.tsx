@@ -5,13 +5,11 @@ import { ChevronLeft, Home, BarChart3, Users, Settings, LogOut } from 'lucide-re
 import { UserRole } from '@/lib/types';
 
 interface SidebarProps {
-  user?: any;
   userRole?: UserRole;
   userName?: string;
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
   className?: string;
-  activePage?: string;
 }
 
 interface SidebarItem {
@@ -49,18 +47,13 @@ const sidebarItems: SidebarItem[] = [
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({
-  user,
   userRole = UserRole.VIEWER,
   userName = 'User',
   collapsed,
   setCollapsed,
   className,
-  activePage,
 }) => {
   const location = useLocation();
-
-  const displayName = user?.name || userName;
-  const displayRole = user?.role || userRole;
 
   return (
     <div 
@@ -143,7 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
             <span className="font-medium text-muted-foreground">
-              {displayName.charAt(0)}
+              {userName.charAt(0)}
             </span>
           </div>
           <div 
@@ -152,8 +145,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               collapsed ? "opacity-0 hidden" : "opacity-100"
             )}
           >
-            <p className="font-medium text-sm truncate">{displayName}</p>
-            <p className="text-xs text-muted-foreground capitalize">{displayRole}</p>
+            <p className="font-medium text-sm truncate">{userName}</p>
+            <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
           </div>
           <button 
             className={cn(

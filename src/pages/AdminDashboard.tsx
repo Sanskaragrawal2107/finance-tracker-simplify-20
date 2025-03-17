@@ -1,8 +1,9 @@
+
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import PageTitle from '../components/common/PageTitle';
-import SitesList from '../components/sites/SitesList';
+import { SitesList } from '../components/sites/SitesList';
 import SiteForm from '../components/sites/SiteForm';
 import Navbar from '../components/layout/Navbar';
 import Sidebar from '../components/layout/Sidebar';
@@ -11,12 +12,16 @@ import { Button } from '../components/ui/button';
 import { Plus, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SupervisorCard from '../components/dashboard/SupervisorCard';
+import { format } from 'date-fns';
 
-interface AdminDashboardProps {
-  user?: any;
+interface User {
+  id: string;
+  name?: string;
+  email: string;
+  role?: string;
 }
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
+const AdminDashboard = ({ user }: { user: User }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('sites');
   const [sites, setSites] = useState<any[]>([]);
@@ -24,7 +29,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [loadingSupervisors, setLoadingSupervisors] = useState(true);
   const [showSiteForm, setShowSiteForm] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     fetchSites();
@@ -95,11 +99,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     navigate(`/site-transactions/${site.id}`, { state: { site } });
   };
 
-  const handleSelectSite = (siteId: string) => {
-    const site = sites.find(s => s.id === siteId);
-    if (site) handleSiteClick(site);
-  };
-
   const renderSkeletonCards = (count: number) => {
     return Array(count)
       .fill(0)
@@ -112,12 +111,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar 
-        user={user} 
-        activePage="admin-dashboard" 
-        collapsed={sidebarCollapsed}
-        setCollapsed={setSidebarCollapsed}
-      />
+      <Sidebar activePage="admin-dashboard" user={user} />
       <div className="flex-1">
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-6">
@@ -160,11 +154,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                 <Card className="bg-white border shadow-sm mb-6">
                   <CardContent className="p-6">
                     <SiteForm 
-                      isOpen={showSiteForm}
-                      onClose={() => setShowSiteForm(false)}
-                      onSubmit={(site) => {
-                        console.log("Site submitted:", site);
-                      }}
+                      user={user}
                       onSuccess={() => {
                         setShowSiteForm(false);
                         fetchSites();
@@ -179,11 +169,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   {renderSkeletonCards(3)}
                 </div>
               ) : (
-                <SitesList 
-                  sites={sites} 
-                  onSiteClick={handleSiteClick}
-                  onSelectSite={handleSelectSite}
-                />
+                <SitesList sites={sites} onSiteClick={handleSiteClick} />
               )}
             </TabsContent>
 

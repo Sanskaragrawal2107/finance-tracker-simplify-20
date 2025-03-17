@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import PageTitle from '../components/common/PageTitle';
-import { SitesList } from '../components/sites/SitesList';
+import SitesList from '../components/sites/SitesList';
 import SiteForm from '../components/sites/SiteForm';
 import Navbar from '../components/layout/Navbar';
 import Sidebar from '../components/layout/Sidebar';
@@ -19,6 +19,23 @@ interface User {
   name?: string;
   email: string;
   role?: string;
+}
+
+// Add interface for Sidebar props
+interface SidebarProps {
+  user: User;
+  activePage?: string;
+}
+
+// Add interface for Navbar props
+interface NavbarProps {
+  user: User;
+}
+
+// Add interface for SiteForm props
+interface SiteFormProps {
+  user: User;
+  onSuccess: () => void;
 }
 
 const AdminDashboard = ({ user }: { user: User }) => {
@@ -111,7 +128,7 @@ const AdminDashboard = ({ user }: { user: User }) => {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar activePage="admin-dashboard" user={user} />
+      <Sidebar user={user} activePage="admin-dashboard" />
       <div className="flex-1">
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-6">

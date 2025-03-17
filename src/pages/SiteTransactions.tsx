@@ -9,6 +9,12 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Card } from '../components/ui/card';
 import SiteDetailTransactions from '../components/sites/SiteDetailTransactions';
 
+// Define the prop types for SiteDetailTransactions
+interface SiteDetailTransactionsProps {
+  site: any;
+  supervisor?: any; // Make supervisor optional
+}
+
 const SiteTransactions = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();

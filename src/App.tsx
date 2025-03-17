@@ -19,6 +19,11 @@ import EditExpenseForm from './components/expenses/EditExpenseForm';
 import EditFundsForm from './components/funds/EditFundsForm';
 import EditAdvanceForm from './components/advances/EditAdvanceForm';
 
+// Define interfaces for components that expect user props
+interface UserProps {
+  user: any;
+}
+
 function App() {
   const location = useLocation();
   const [user, setUser] = useState<any>(null);

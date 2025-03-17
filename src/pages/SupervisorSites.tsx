@@ -72,7 +72,7 @@ const SupervisorSites = () => {
           ))}
         </div>
       ) : sites.length > 0 ? (
-        <SitesList sites={sites} onSiteClick={handleSiteClick} />
+        <SitesList sites={sites} onSelectSite={handleSiteClick} />
       ) : (
         <div className="text-center py-10 border rounded-lg bg-white shadow-sm">
           <p className="text-gray-500">No sites found for this supervisor.</p>

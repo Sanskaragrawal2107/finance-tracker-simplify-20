@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../integrations/supabase/client';
@@ -14,7 +13,7 @@ import { format } from 'date-fns';
 import { Calendar } from '../ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { cn } from '../../lib/utils';
-import { SearchableDropdown } from './SearchableDropdown';
+import SearchableDropdown from './SearchableDropdown';
 
 const EditExpenseForm = () => {
   const { id } = useParams<{ id: string }>();

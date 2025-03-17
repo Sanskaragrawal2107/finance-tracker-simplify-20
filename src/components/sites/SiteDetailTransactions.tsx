@@ -2,17 +2,20 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Filter, Search, ChevronLeft, ChevronRight, Eye, CreditCard, Loader2 } from 'lucide-react';
+import { Plus, Download, Filter, Search, ChevronLeft, ChevronRight, Eye, CreditCard, Loader2, Trash2, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { supabase, fetchSiteInvoices } from '@/integrations/supabase/client';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Site, Invoice, PaymentStatus, MaterialItem, BankDetails } from '@/lib/types';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
+import { toast } from 'sonner';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 interface SiteDetailTransactionsProps {
   site: Site;
+  supervisor?: any;
 }
 
 const getStatusColor = (status: PaymentStatus) => {
@@ -26,21 +29,19 @@ const getStatusColor = (status: PaymentStatus) => {
   }
 };
 
-const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site }) => {
+const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site, supervisor }) => {
   const [activeTab, setActiveTab] = useState('invoices');
   const [searchTerm, setSearchTerm] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
 
-  // Fix for the boolean iterator error - ensure we're not trying to iterate over a boolean
-  // If there was code here trying to iterate over isLoading, it should be replaced with a conditional check
-  // For example, instead of: for (const _ of isLoading) { ... }
-  // Use: if (isLoading) { ... } else { ... }
-
+  // Function to load invoices with real-time updates
   useEffect(() => {
     const loadInvoices = async () => {
       setIsLoading(true);
@@ -60,6 +61,26 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
     };
     
     loadInvoices();
+
+    // Subscribe to real-time updates for this site's invoices
+    const channel = supabase
+      .channel('public:site_invoices')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'site_invoices',
+        filter: `site_id=eq.${site.id}`
+      }, (payload) => {
+        console.log('Real-time update received:', payload);
+        // Reload invoices when there's any change
+        loadInvoices();
+      })
+      .subscribe();
+
+    return () => {
+      // Unsubscribe when component unmounts
+      supabase.removeChannel(channel);
+    };
   }, [site.id, toast]);
 
   const filteredInvoices = invoices.filter(invoice => 
@@ -102,95 +123,10 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
         return;
       }
       
-      if (data && data.length > 0) {
-        // Properly handle material_items with type checking and conversion
-        let materialItems: MaterialItem[] = [];
-        try {
-          if (typeof data[0].material_items === 'object' && data[0].material_items !== null) {
-            if (Array.isArray(data[0].material_items)) {
-              // Explicitly cast with type guard to ensure we have necessary properties
-              materialItems = (data[0].material_items as any[]).map(item => ({
-                id: item.id || undefined,
-                material: item.material || '',
-                quantity: typeof item.quantity === 'number' ? item.quantity : null,
-                rate: typeof item.rate === 'number' ? item.rate : null,
-                gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
-                amount: typeof item.amount === 'number' ? item.amount : null
-              }));
-            }
-          } else if (data[0].material_items) {
-            const parsedItems = JSON.parse(data[0].material_items as string || '[]');
-            if (Array.isArray(parsedItems)) {
-              materialItems = parsedItems.map(item => ({
-                id: item.id || undefined,
-                material: item.material || '',
-                quantity: typeof item.quantity === 'number' ? item.quantity : null,
-                rate: typeof item.rate === 'number' ? item.rate : null,
-                gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
-                amount: typeof item.amount === 'number' ? item.amount : null
-              }));
-            }
-          }
-        } catch (e) {
-          console.error('Error parsing material items:', e);
-          materialItems = [];
-        }
-        
-        // Properly handle bank_details with type checking and conversion
-        let bankDetails: BankDetails = {
-          accountNumber: '',
-          bankName: '',
-          ifscCode: ''
-        };
-        
-        try {
-          if (typeof data[0].bank_details === 'object' && data[0].bank_details !== null) {
-            const typedBankDetails = data[0].bank_details as Record<string, any>;
-            bankDetails = {
-              accountNumber: typedBankDetails.accountNumber || '',
-              bankName: typedBankDetails.bankName || '',
-              ifscCode: typedBankDetails.ifscCode || ''
-            };
-          } else if (data[0].bank_details) {
-            const parsedDetails = JSON.parse(data[0].bank_details as string || '{}');
-            bankDetails = {
-              accountNumber: parsedDetails.accountNumber || '',
-              bankName: parsedDetails.bankName || '',
-              ifscCode: parsedDetails.ifscCode || ''
-            };
-          }
-        } catch (e) {
-          console.error('Error parsing bank details:', e);
-        }
-        
-        const newInvoice: Invoice = {
-          id: data[0].id,
-          date: new Date(data[0].date),
-          partyId: data[0].party_id,
-          partyName: data[0].party_name,
-          material: data[0].material,
-          quantity: Number(data[0].quantity),
-          rate: Number(data[0].rate),
-          gstPercentage: Number(data[0].gst_percentage),
-          grossAmount: Number(data[0].gross_amount),
-          netAmount: Number(data[0].net_amount),
-          materialItems: materialItems,
-          bankDetails: bankDetails,
-          billUrl: data[0].bill_url,
-          paymentStatus: data[0].payment_status as PaymentStatus,
-          createdBy: data[0].created_by || '',
-          createdAt: new Date(data[0].created_at),
-          approverType: data[0].approver_type as "ho" | "supervisor" || "ho",
-          siteId: data[0].site_id || ''
-        };
-        
-        setInvoices([newInvoice, ...invoices]);
-        
-        toast({
-          title: "Invoice Created",
-          description: `Invoice for ${invoice.partyName} has been created successfully.`,
-        });
-      }
+      toast({
+        title: "Invoice Created",
+        description: `Invoice for ${invoice.partyName} has been created successfully.`,
+      });
     } catch (error) {
       console.error('Error:', error);
       toast({
@@ -203,9 +139,103 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
     setIsCreateDialogOpen(false);
   };
 
+  const handleUpdateInvoice = async (invoice: Omit<Invoice, 'createdAt'>) => {
+    try {
+      const { error } = await supabase
+        .from('site_invoices')
+        .update({
+          date: invoice.date.toISOString(),
+          party_id: invoice.partyId,
+          party_name: invoice.partyName,
+          material: invoice.material,
+          quantity: invoice.quantity,
+          rate: invoice.rate,
+          gst_percentage: invoice.gstPercentage,
+          gross_amount: invoice.grossAmount,
+          net_amount: invoice.netAmount,
+          material_items: JSON.stringify(invoice.materialItems),
+          bank_details: JSON.stringify(invoice.bankDetails),
+          bill_url: invoice.billUrl,
+          payment_status: invoice.paymentStatus,
+          approver_type: invoice.approverType
+        })
+        .eq('id', invoice.id);
+        
+      if (error) {
+        console.error('Error updating invoice:', error);
+        toast({
+          title: "Invoice Update Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      toast({
+        title: "Invoice Updated",
+        description: `Invoice for ${invoice.partyName} has been updated successfully.`,
+      });
+      
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update invoice. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!selectedInvoice) return;
+    
+    try {
+      const { error } = await supabase
+        .from('site_invoices')
+        .delete()
+        .eq('id', selectedInvoice.id);
+        
+      if (error) {
+        console.error('Error deleting invoice:', error);
+        toast({
+          title: "Invoice Deletion Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      toast({
+        title: "Invoice Deleted",
+        description: `Invoice for ${selectedInvoice.partyName} has been deleted successfully.`,
+      });
+      
+      setIsDeleteConfirmOpen(false);
+      setSelectedInvoice(null);
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete invoice. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleViewInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setIsViewDialogOpen(true);
+  };
+
+  const handleEditInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setIsEditDialogOpen(true);
+  };
+
+  const confirmDeleteInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setIsDeleteConfirmOpen(true);
   };
 
   const handleMakePayment = async (invoice: Invoice) => {
@@ -228,18 +258,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
         return;
       }
       
-      // Update the invoice in state
-      const updatedInvoices = invoices.map(inv => {
-        if (inv.id === invoice.id) {
-          return {
-            ...inv,
-            paymentStatus: PaymentStatus.PAID
-          };
-        }
-        return inv;
-      });
-      
-      setInvoices(updatedInvoices);
       setIsViewDialogOpen(false);
       
       toast({
@@ -350,8 +368,14 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewInvoice(invoice)}>
                                 <Eye className="h-4 w-4 text-muted-foreground" />
                               </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditInvoice(invoice)}>
+                                <Edit className="h-4 w-4 text-muted-foreground" />
+                              </Button>
                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownloadInvoice(invoice)}>
                                 <Download className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteInvoice(invoice)}>
+                                <Trash2 className="h-4 w-4 text-muted-foreground" />
                               </Button>
                               {invoice.paymentStatus === PaymentStatus.PENDING && (
                                 <Button 
@@ -409,6 +433,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
         </TabsContent>
       </Tabs>
       
+      {/* Create Invoice Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>Create New Invoice</DialogTitle>
@@ -419,6 +444,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
         </DialogContent>
       </Dialog>
 
+      {/* View Invoice Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogTitle>Invoice Details</DialogTitle>
@@ -432,6 +458,38 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ site })
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Edit Invoice Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle>Edit Invoice</DialogTitle>
+          {selectedInvoice && (
+            <InvoiceForm 
+              onSubmit={handleUpdateInvoice} 
+              siteId={site.id}
+              initialData={selectedInvoice}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Invoice Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this invoice? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteInvoice} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

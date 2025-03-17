@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import RegisterForm from '@/components/auth/RegisterForm';
 import { supabase } from '@/integrations/supabase/client';
 import SiteForm from '@/components/sites/SiteForm';
+import SitesList from '@/components/sites/SitesList';
 
 interface SupervisorStats {
   totalSites: number;
@@ -87,6 +88,7 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const handleViewSites = (supervisorId: string) => {
+    // Navigate to expenses page with supervisorId as state
     navigate('/expenses', { state: { supervisorId } });
   };
 

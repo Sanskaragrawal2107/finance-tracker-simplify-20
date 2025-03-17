@@ -8,12 +8,21 @@ import { Button } from '@/components/ui/button';
 
 interface SitesListProps {
   sites: Site[];
-  onSelectSite: (siteId: string) => void;
+  onSelectSite?: (siteId: string) => void;
+  onSiteClick?: (site: Site) => void;
 }
 
-const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite }) => {
+const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite, onSiteClick }) => {
   const activeSites = sites.filter(site => !site.isCompleted);
   const completedSites = sites.filter(site => site.isCompleted);
+
+  const handleSiteSelect = (site: Site) => {
+    if (onSelectSite) {
+      onSelectSite(site.id);
+    } else if (onSiteClick) {
+      onSiteClick(site);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -25,7 +34,7 @@ const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite }) => {
               <CustomCard 
                 key={site.id} 
                 className="cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => onSelectSite(site.id)}
+                onClick={() => handleSiteSelect(site)}
               >
                 <div className="p-3 sm:p-4 border-b">
                   <div className="flex items-center justify-between">
@@ -51,7 +60,7 @@ const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite }) => {
                     className="mt-2 w-full text-xs sm:text-sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelectSite(site.id);
+                      handleSiteSelect(site);
                     }}
                   >
                     <span>View Details</span>
@@ -76,7 +85,7 @@ const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite }) => {
               <CustomCard 
                 key={site.id} 
                 className="cursor-pointer hover:border-primary/50 transition-colors bg-green-50/30"
-                onClick={() => onSelectSite(site.id)}
+                onClick={() => handleSiteSelect(site)}
               >
                 <div className="p-3 sm:p-4 border-b">
                   <div className="flex items-center justify-between">
@@ -102,7 +111,7 @@ const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite }) => {
                     className="mt-2 w-full text-xs sm:text-sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelectSite(site.id);
+                      handleSiteSelect(site);
                     }}
                   >
                     <span>View Details</span>

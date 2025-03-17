@@ -9,7 +9,13 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+});
 
 // Helper function for incrementing values
 if (!supabase.rpc) {
@@ -177,5 +183,36 @@ export const calculatePaidInvoicesTotalForSite = async (siteId: string) => {
   } catch (error) {
     console.error('Error calculating paid invoices total:', error);
     return 0;
+  }
+};
+
+// Helper function to fetch sites by supervisor ID
+export const fetchSitesBySupervisorId = async (supervisorId: string) => {
+  if (!supervisorId) {
+    console.error("No supervisor ID provided to fetchSitesBySupervisorId");
+    return [];
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('sites')
+      .select('*')
+      .eq('supervisor_id', supervisorId);
+      
+    if (error) {
+      console.error('Error fetching sites for supervisor:', error);
+      return [];
+    }
+    
+    if (!data || data.length === 0) {
+      console.log("No sites found for supervisor:", supervisorId);
+      return [];
+    }
+    
+    console.log(`Found ${data.length} sites for supervisor ${supervisorId}`);
+    return data;
+  } catch (error) {
+    console.error('Error in fetchSitesBySupervisorId:', error);
+    return [];
   }
 };

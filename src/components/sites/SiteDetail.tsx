@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import SiteDetailTransactions from './SiteDetailTransactions';
 import { useIsMobile } from '@/hooks/use-mobile';
 import BalanceCard from '../dashboard/BalanceCard';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SiteDetailProps {
   site: Site;
@@ -22,11 +24,12 @@ interface SiteDetailProps {
   balanceSummary: BalanceSummary;
   siteSupervisor?: { id: string; name: string } | null;
   onBack: () => void;
-  onAddExpense: (expense: Partial<Expense>) => void;
-  onAddAdvance: (advance: Partial<Advance>) => void;
-  onAddFunds: (fund: Partial<FundsReceived>) => void;
-  onAddInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
-  onCompleteSite: (siteId: string, completionDate: Date) => void;
+  onAddExpense?: (expense: Partial<Expense>) => void;
+  onAddAdvance?: (advance: Partial<Advance>) => void;
+  onAddFunds?: (fund: Partial<FundsReceived>) => void;
+  onAddInvoice?: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
+  onCompleteSite?: (siteId: string, completionDate: Date) => void;
+  supervisor?: any;
 }
 
 // Define DEBIT_ADVANCE_PURPOSES here for consistency
@@ -50,7 +53,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   onAddAdvance,
   onAddFunds,
   onAddInvoice,
-  onCompleteSite
+  onCompleteSite,
+  supervisor
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
@@ -63,9 +67,35 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const totalFundsReceived = balanceSummary.fundsReceived;
   const totalInvoices = balanceSummary.invoicesPaid || 0;
   
-  const handleMarkComplete = () => {
-    onCompleteSite(site.id, new Date());
-    setIsMarkingComplete(false);
+  const handleMarkComplete = async () => {
+    try {
+      const completionDate = new Date();
+      
+      // Update the site in Supabase
+      const { error } = await supabase
+        .from('sites')
+        .update({
+          is_completed: true,
+          completion_date: completionDate.toISOString()
+        })
+        .eq('id', site.id);
+        
+      if (error) {
+        console.error('Error marking site as complete:', error);
+        toast.error('Failed to mark site as complete: ' + error.message);
+        return;
+      }
+      
+      toast.success('Site marked as complete successfully');
+      if (onCompleteSite) {
+        onCompleteSite(site.id, completionDate);
+      }
+    } catch (error: any) {
+      console.error('Error in handleMarkComplete:', error);
+      toast.error('Failed to mark site as complete: ' + error.message);
+    } finally {
+      setIsMarkingComplete(false);
+    }
   };
   
   return (
@@ -235,6 +265,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         <TabsContent value="transactions">
           <SiteDetailTransactions 
             site={site}
+            supervisor={supervisor}
           />
         </TabsContent>
       </Tabs>

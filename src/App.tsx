@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import Index from './pages/Index';
@@ -109,11 +110,11 @@ function App() {
         <Route path="/advances" element={user ? <Advances user={user} /> : <Navigate to="/" />} />
         <Route path="/invoices" element={user ? <Invoices user={user} /> : <Navigate to="/" />} />
         <Route path="/admin-dashboard" element={user ? <AdminDashboard user={user} /> : <Navigate to="/" />} />
-        <Route path="/supervisor-sites" element={user ? <SupervisorSites /> : <Navigate to="/" />} />
-        <Route path="/site-transactions/:id" element={user ? <SiteTransactions /> : <Navigate to="/" />} />
-        <Route path="/edit-expense/:id" element={user ? <EditExpenseForm /> : <Navigate to="/" />} />
-        <Route path="/edit-funds/:id" element={user ? <EditFundsForm /> : <Navigate to="/" />} />
-        <Route path="/edit-advance/:id" element={user ? <EditAdvanceForm /> : <Navigate to="/" />} />
+        <Route path="/supervisor-sites" element={user ? <SupervisorSites user={user} /> : <Navigate to="/" />} />
+        <Route path="/site-transactions/:id" element={user ? <SiteTransactions user={user} /> : <Navigate to="/" />} />
+        <Route path="/edit-expense/:id" element={user ? <EditExpenseForm user={user} /> : <Navigate to="/" />} />
+        <Route path="/edit-funds/:id" element={user ? <EditFundsForm user={user} /> : <Navigate to="/" />} />
+        <Route path="/edit-advance/:id" element={user ? <EditAdvanceForm user={user} /> : <Navigate to="/" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster />

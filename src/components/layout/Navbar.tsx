@@ -9,6 +9,7 @@ import { UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 
 interface NavbarProps {
+  user?: any; // Add user prop to the interface
   onMenuClick?: () => void;
   pageTitle?: string;
   userRole?: UserRole;
@@ -16,6 +17,7 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({
+  user,
   onMenuClick,
   pageTitle,
   userRole,
@@ -23,7 +25,10 @@ const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
+  
+  // Use user.role if available, otherwise use the passed userRole prop
+  const effectiveUserRole = user?.role || userRole;
   
   return (
     <header className={cn("h-14 sm:h-16 border-b bg-background/50 backdrop-blur-md sticky top-0 z-10", className)}>

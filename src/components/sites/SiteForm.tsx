@@ -42,10 +42,12 @@ interface Supervisor {
 }
 
 interface SiteFormProps {
+  user?: any; // Add user prop to interface
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (site: Partial<Site>) => void;
   supervisorId?: string;
+  onSuccess?: () => void; // Add onSuccess callback to interface
 }
 
 const formSchema = z.object({
@@ -72,12 +74,19 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervisorId }) => {
+const SiteForm: React.FC<SiteFormProps> = ({ 
+  user, 
+  isOpen, 
+  onClose, 
+  onSubmit, 
+  supervisorId,
+  onSuccess 
+}) => {
   const [startDateOpen, setStartDateOpen] = React.useState(false);
   const [completionDateOpen, setCompletionDateOpen] = React.useState(false);
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { user } = useAuth();
+  const { user: authUser } = useAuth();
   
   useEffect(() => {
     const fetchSupervisors = async () => {
@@ -138,6 +147,11 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
       onSubmit(uppercaseValues);
       form.reset();
       onClose();
+      
+      // Call onSuccess if provided
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error: any) {
       console.error('Error in form submission:', error);
       toast.error(error.message || 'Failed to submit form');
@@ -298,7 +312,7 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
               )}
             />
             
-            {user?.role === UserRole.ADMIN && (
+            {authUser?.role === UserRole.ADMIN && (
               <FormField
                 control={form.control}
                 name="supervisorId"

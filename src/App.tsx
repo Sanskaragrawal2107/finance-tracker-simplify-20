@@ -100,6 +100,9 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
     }
   };
   
+  // For debugging location state
+  console.log("Current location state:", location.state);
+  
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar 

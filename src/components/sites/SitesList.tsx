@@ -24,6 +24,11 @@ const SitesList: React.FC<SitesListProps> = ({ sites, onSelectSite, onSiteClick 
     }
   };
 
+  // For debugging
+  console.log("SitesList received sites:", sites);
+  console.log("Active sites:", activeSites);
+  console.log("Completed sites:", completedSites);
+
   return (
     <div className="space-y-6">
       <div>

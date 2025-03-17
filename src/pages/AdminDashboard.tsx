@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
@@ -39,7 +38,6 @@ const AdminDashboard: React.FC = () => {
   const isMobile = useIsMobile();
   const { user } = useAuth();
   
-  // Function to fetch supervisors and their sites
   const fetchSupervisorsAndSites = async () => {
     setLoadingSupervisors(true);
     try {
@@ -88,8 +86,13 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const handleViewSites = (supervisorId: string) => {
-    // Navigate to expenses page with supervisorId as state
-    navigate('/expenses', { state: { supervisorId } });
+    console.log("Navigating to /expenses with supervisorId:", supervisorId);
+    navigate('/expenses', { 
+      state: { 
+        supervisorId: supervisorId,
+        showSites: true 
+      } 
+    });
   };
 
   const handleAddSite = () => {
@@ -114,7 +117,6 @@ const AdminDashboard: React.FC = () => {
         funds: site.funds || 0
       };
       
-      // Check if a site with the same name already exists
       const { data: existingSite, error: checkError } = await supabase
         .from('sites')
         .select('id')
@@ -126,7 +128,6 @@ const AdminDashboard: React.FC = () => {
         return;
       }
       
-      // Save the site to the database
       const { data, error } = await supabase
         .from('sites')
         .insert(siteData)
@@ -135,7 +136,6 @@ const AdminDashboard: React.FC = () => {
       if (error) {
         console.error('Error creating site:', error);
         
-        // Handle the duplicate key constraint error explicitly
         if (error.code === '23505' && error.message.includes('sites_name_key')) {
           toast.error(`Site with name "${siteData.name}" already exists`);
         } else {
@@ -144,7 +144,6 @@ const AdminDashboard: React.FC = () => {
         return;
       }
       
-      // Update the local state
       setSupervisorStats(prev => {
         const updatedStats = { ...prev };
         const supervisorId = site.supervisorId || selectedSupervisorId;

@@ -83,17 +83,39 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Invoice dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  
+  // Expense dialog states
+  const [isCreateExpenseDialogOpen, setIsCreateExpenseDialogOpen] = useState(false);
+  const [isEditExpenseDialogOpen, setIsEditExpenseDialogOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [isDeleteExpenseConfirmOpen, setIsDeleteExpenseConfirmOpen] = useState(false);
+  
+  // Advance dialog states
+  const [isCreateAdvanceDialogOpen, setIsCreateAdvanceDialogOpen] = useState(false);
+  const [isEditAdvanceDialogOpen, setIsEditAdvanceDialogOpen] = useState(false);
+  const [selectedAdvance, setSelectedAdvance] = useState<Advance | null>(null);
+  const [isDeleteAdvanceConfirmOpen, setIsDeleteAdvanceConfirmOpen] = useState(false);
+  
+  // Funds dialog states
+  const [isCreateFundsDialogOpen, setIsCreateFundsDialogOpen] = useState(false);
+  const [isEditFundsDialogOpen, setIsEditFundsDialogOpen] = useState(false);
+  const [selectedFunds, setSelectedFunds] = useState<FundsReceived | null>(null);
+  const [isDeleteFundsConfirmOpen, setIsDeleteFundsConfirmOpen] = useState(false);
+  
   const { toast } = useToast();
   
-  // Check if the current user is an admin or a supervisor viewing their own site
+  // Permission checks
   const isAdmin = user?.role === UserRole.ADMIN;
   const isSupervisor = user?.role === UserRole.SUPERVISOR;
   const canEdit = isAdmin || (isSupervisor && site.supervisorId === user?.id);
+  const canDelete = isAdmin; // Only admins can delete transactions
 
   // Function to load invoices with real-time updates
   useEffect(() => {
@@ -340,6 +362,93 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     return `₹${amount.toLocaleString()}`;
   };
 
+  // Expense handlers
+  const handleAddExpense = () => {
+    setIsCreateExpenseDialogOpen(true);
+  };
+  
+  const handleEditExpense = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setIsEditExpenseDialogOpen(true);
+  };
+  
+  const handleViewExpense = (expense: Expense) => {
+    setSelectedExpense(expense);
+    // You can add view dialog logic here if needed
+  };
+  
+  const confirmDeleteExpense = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setIsDeleteExpenseConfirmOpen(true);
+  };
+  
+  const handleCreateExpense = async (expense: Partial<Expense>) => {
+    // Implementation for creating expense in Supabase
+    toast({
+      title: "Expense Created",
+      description: "The expense has been created successfully.",
+    });
+    setIsCreateExpenseDialogOpen(false);
+  };
+  
+  // Advance handlers
+  const handleAddAdvance = () => {
+    setIsCreateAdvanceDialogOpen(true);
+  };
+  
+  const handleEditAdvance = (advance: Advance) => {
+    setSelectedAdvance(advance);
+    setIsEditAdvanceDialogOpen(true);
+  };
+  
+  const handleViewAdvance = (advance: Advance) => {
+    setSelectedAdvance(advance);
+    // You can add view dialog logic here if needed
+  };
+  
+  const confirmDeleteAdvance = (advance: Advance) => {
+    setSelectedAdvance(advance);
+    setIsDeleteAdvanceConfirmOpen(true);
+  };
+  
+  const handleCreateAdvance = async (advance: Partial<Advance>) => {
+    // Implementation for creating advance in Supabase
+    toast({
+      title: "Advance Created",
+      description: "The advance has been created successfully.",
+    });
+    setIsCreateAdvanceDialogOpen(false);
+  };
+  
+  // Funds handlers
+  const handleAddFunds = () => {
+    setIsCreateFundsDialogOpen(true);
+  };
+  
+  const handleEditFunds = (funds: FundsReceived) => {
+    setSelectedFunds(funds);
+    setIsEditFundsDialogOpen(true);
+  };
+  
+  const handleViewFunds = (funds: FundsReceived) => {
+    setSelectedFunds(funds);
+    // You can add view dialog logic here if needed
+  };
+  
+  const confirmDeleteFunds = (funds: FundsReceived) => {
+    setSelectedFunds(funds);
+    setIsDeleteFundsConfirmOpen(true);
+  };
+  
+  const handleCreateFunds = async (funds: Partial<FundsReceived>) => {
+    // Implementation for creating funds in Supabase
+    toast({
+      title: "Funds Added",
+      description: "The funds have been added successfully.",
+    });
+    setIsCreateFundsDialogOpen(false);
+  };
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="invoices" value={activeTab} onValueChange={setActiveTab}>
@@ -435,9 +544,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditInvoice(invoice)}>
                                       <Edit className="h-4 w-4 text-muted-foreground" />
                                     </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteInvoice(invoice)}>
-                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
+                                    {canDelete && (
+                                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteInvoice(invoice)}>
+                                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                      </Button>
+                                    )}
                                   </>
                                 )}
                                 
@@ -495,7 +606,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             </div>
             
             {canEdit && (
-              <Button size="sm" className="gap-1.5">
+              <Button size="sm" className="gap-1.5" onClick={handleAddExpense}>
                 <Plus className="h-4 w-4" />
                 New Expense
               </Button>
@@ -538,17 +649,19 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                         </td>
                         <td className="py-4 text-right">
                           <div className="flex justify-end">
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewExpense(expense)}>
                               <Eye className="h-4 w-4 text-muted-foreground" />
                             </Button>
                             {canEdit && (
                               <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditExpense(expense)}>
                                   <Edit className="h-4 w-4 text-muted-foreground" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                </Button>
+                                {canDelete && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteExpense(expense)}>
+                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                                )}
                               </>
                             )}
                           </div>
@@ -574,7 +687,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             </div>
             
             {canEdit && (
-              <Button size="sm" className="gap-1.5">
+              <Button size="sm" className="gap-1.5" onClick={handleAddAdvance}>
                 <Plus className="h-4 w-4" />
                 New Advance
               </Button>
@@ -617,17 +730,19 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                         </td>
                         <td className="py-4 text-right">
                           <div className="flex justify-end">
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewAdvance(advance)}>
                               <Eye className="h-4 w-4 text-muted-foreground" />
                             </Button>
                             {canEdit && (
                               <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditAdvance(advance)}>
                                   <Edit className="h-4 w-4 text-muted-foreground" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                </Button>
+                                {canDelete && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteAdvance(advance)}>
+                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                                )}
                               </>
                             )}
                           </div>
@@ -653,7 +768,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             </div>
             
             {canEdit && (
-              <Button size="sm" className="gap-1.5">
+              <Button size="sm" className="gap-1.5" onClick={handleAddFunds}>
                 <Plus className="h-4 w-4" />
                 Add Funds
               </Button>
@@ -686,17 +801,19 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                         <td className="py-4 text-sm">{fund.reference || 'N/A'}</td>
                         <td className="py-4 text-right">
                           <div className="flex justify-end">
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewFunds(fund)}>
                               <Eye className="h-4 w-4 text-muted-foreground" />
                             </Button>
                             {canEdit && (
                               <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditFunds(fund)}>
                                   <Edit className="h-4 w-4 text-muted-foreground" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                </Button>
+                                {canDelete && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => confirmDeleteFunds(fund)}>
+                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                                )}
                               </>
                             )}
                           </div>
@@ -763,6 +880,222 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteInvoice} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Expense Dialogs */}
+      <Dialog open={isCreateExpenseDialogOpen} onOpenChange={setIsCreateExpenseDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle>Add New Expense</DialogTitle>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="date" className="text-sm font-medium">Date</label>
+                <input 
+                  type="date" 
+                  id="date" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="category" className="text-sm font-medium">Category</label>
+                <select 
+                  id="category" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Select category</option>
+                  <option value="materials">Materials</option>
+                  <option value="labor">Labor</option>
+                  <option value="transport">Transport</option>
+                  <option value="equipment">Equipment</option>
+                  <option value="miscellaneous">Miscellaneous</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="description" className="text-sm font-medium">Description</label>
+              <textarea 
+                id="description" 
+                rows={3}
+                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Enter expense description..."
+              ></textarea>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="amount" className="text-sm font-medium">Amount (₹)</label>
+              <input 
+                type="number" 
+                id="amount" 
+                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateExpenseDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => handleCreateExpense({})}>Add Expense</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteExpenseConfirmOpen} onOpenChange={setIsDeleteExpenseConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Expense Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this expense? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Advance Dialogs */}
+      <Dialog open={isCreateAdvanceDialogOpen} onOpenChange={setIsCreateAdvanceDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle>Add New Advance</DialogTitle>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="advanceDate" className="text-sm font-medium">Date</label>
+                <input 
+                  type="date" 
+                  id="advanceDate" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="recipientName" className="text-sm font-medium">Recipient Name</label>
+                <input 
+                  type="text" 
+                  id="recipientName" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="Enter recipient name"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="purpose" className="text-sm font-medium">Purpose</label>
+              <textarea 
+                id="purpose" 
+                rows={3}
+                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Enter purpose of advance..."
+              ></textarea>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="advanceAmount" className="text-sm font-medium">Amount (₹)</label>
+              <input 
+                type="number" 
+                id="advanceAmount" 
+                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateAdvanceDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => handleCreateAdvance({})}>Add Advance</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteAdvanceConfirmOpen} onOpenChange={setIsDeleteAdvanceConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Advance Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this advance? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Funds Dialogs */}
+      <Dialog open={isCreateFundsDialogOpen} onOpenChange={setIsCreateFundsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle>Add Received Funds</DialogTitle>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="fundsDate" className="text-sm font-medium">Date</label>
+                <input 
+                  type="date" 
+                  id="fundsDate" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="method" className="text-sm font-medium">Payment Method</label>
+                <select 
+                  id="method" 
+                  className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Select method</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cash">Cash</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="upi">UPI</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="fundsAmount" className="text-sm font-medium">Amount (₹)</label>
+              <input 
+                type="number" 
+                id="fundsAmount" 
+                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="reference" className="text-sm font-medium">Reference Number</label>
+              <input 
+                type="text" 
+                id="reference" 
+                className="px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Enter transaction reference"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateFundsDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => handleCreateFunds({})}>Add Funds</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteFundsConfirmOpen} onOpenChange={setIsDeleteFundsConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Funds Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this funds entry? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

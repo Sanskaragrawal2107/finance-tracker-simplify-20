@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
 import { ArrowLeft, Building, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Site, Expense, Advance, Invoice, FundsReceived, BalanceSummary, UserRole } from '@/lib/types';
+import { Site, Expense, Advance, Invoice, FundsReceived, BalanceSummary, UserRole, ApprovalStatus, RecipientType, AdvancePurpose, PaymentStatus } from '@/lib/types';
 import { toast } from 'sonner';
 import SitesList from '@/components/sites/SitesList';
 import SiteDetail from '@/components/sites/SiteDetail';
@@ -117,14 +118,14 @@ const SupervisorSites: React.FC = () => {
         const transformedExpenses: Expense[] = expensesData.map(expense => ({
           id: expense.id,
           date: new Date(expense.date),
-          description: expense.description,
+          description: expense.description || "",
           category: expense.category,
           amount: Number(expense.amount),
-          status: expense.status,
-          createdBy: expense.created_by,
+          status: ApprovalStatus.PENDING, // Default to pending if not provided
+          createdBy: expense.created_by || "",
           createdAt: new Date(expense.created_at),
           siteId: expense.site_id,
-          supervisorId: expense.supervisor_id
+          supervisorId: supervisorId // Use the supervisor ID from the component
         }));
         
         setExpenses(transformedExpenses);
@@ -145,14 +146,14 @@ const SupervisorSites: React.FC = () => {
         const transformedAdvances: Advance[] = advancesData.map(advance => ({
           id: advance.id,
           date: new Date(advance.date),
-          recipientId: advance.recipient_id,
+          recipientId: undefined, // No recipient_id in the database
           recipientName: advance.recipient_name,
-          recipientType: advance.recipient_type,
-          purpose: advance.purpose,
+          recipientType: advance.recipient_type as RecipientType,
+          purpose: advance.purpose as AdvancePurpose,
           amount: Number(advance.amount),
-          remarks: advance.remarks,
-          status: advance.status,
-          createdBy: advance.created_by,
+          remarks: advance.remarks || "",
+          status: advance.status as ApprovalStatus,
+          createdBy: advance.created_by || "",
           createdAt: new Date(advance.created_at),
           siteId: advance.site_id
         }));
@@ -178,8 +179,8 @@ const SupervisorSites: React.FC = () => {
           amount: Number(fund.amount),
           siteId: fund.site_id,
           createdAt: new Date(fund.created_at),
-          reference: fund.reference,
-          method: fund.method
+          reference: fund.reference || "",
+          method: fund.method || ""
         }));
         
         setFundsReceived(transformedFunds);
@@ -207,13 +208,13 @@ const SupervisorSites: React.FC = () => {
           gstPercentage: invoice.gst_percentage,
           grossAmount: invoice.gross_amount,
           netAmount: invoice.net_amount,
-          materialItems: invoice.material_items ? JSON.parse(invoice.material_items) : undefined,
-          bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details) : { accountNumber: '', bankName: '', ifscCode: '' },
+          materialItems: invoice.material_items ? JSON.parse(String(invoice.material_items)) : undefined,
+          bankDetails: invoice.bank_details ? JSON.parse(String(invoice.bank_details)) : { accountNumber: '', bankName: '', ifscCode: '' },
           billUrl: invoice.bill_url,
-          paymentStatus: invoice.payment_status,
-          createdBy: invoice.created_by,
+          paymentStatus: invoice.payment_status as PaymentStatus,
+          createdBy: invoice.created_by || "",
           createdAt: new Date(invoice.created_at),
-          approverType: invoice.approver_type,
+          approverType: invoice.approver_type as "ho" | "supervisor" | undefined,
           siteId: invoice.site_id
         }));
         
@@ -249,7 +250,7 @@ const SupervisorSites: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [sites]);
+  }, [sites, supervisorId]);
 
   // Handle site selection
   const handleSelectSite = (siteId: string) => {
@@ -303,9 +304,10 @@ const SupervisorSites: React.FC = () => {
     if (!selectedSite || !user) return;
     
     try {
+      console.log('Adding advance:', newAdvance);
+      
       const advanceData = {
         date: newAdvance.date?.toISOString(),
-        recipient_id: newAdvance.recipientId,
         recipient_name: newAdvance.recipientName,
         recipient_type: newAdvance.recipientType,
         purpose: newAdvance.purpose,
@@ -316,6 +318,8 @@ const SupervisorSites: React.FC = () => {
         site_id: selectedSite.id
       };
       
+      console.log('Advance data to insert:', advanceData);
+      
       const { data, error } = await supabase
         .from('advances')
         .insert(advanceData)
@@ -323,9 +327,12 @@ const SupervisorSites: React.FC = () => {
         .single();
       
       if (error) {
+        console.error('Error adding advance:', error);
         toast.error('Failed to add advance: ' + error.message);
         return;
       }
+      
+      console.log('Advance added successfully:', data);
       
       if (data) {
         toast.success('Advance added successfully');
@@ -460,7 +467,7 @@ const SupervisorSites: React.FC = () => {
           Back to Admin
         </Button>
         
-        <PageTitle>
+        <PageTitle title={selectedSite ? selectedSite.name : `Sites for ${supervisorName}`}>
           {selectedSite ? selectedSite.name : `Sites for ${supervisorName}`}
         </PageTitle>
       </div>

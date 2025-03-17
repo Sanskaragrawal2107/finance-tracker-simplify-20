@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -126,6 +127,10 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
 
   const handleSubmit = async (values: FormValues) => {
     try {
+      console.log('Submitting advance with values:', values);
+      console.log('Site ID:', siteId);
+      console.log('User ID:', user?.id);
+      
       // Insert into Supabase advances table
       const advanceData = {
         site_id: siteId,
@@ -140,7 +145,8 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         created_at: new Date().toISOString(),
       };
       
-      // Using the raw SQL query approach to insert into advances table
+      console.log('Advance data to insert:', advanceData);
+      
       const { data, error } = await supabase
         .from('advances')
         .insert([advanceData])
@@ -151,6 +157,8 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         toast.error('Failed to create advance: ' + error.message);
         return;
       }
+      
+      console.log('Advance created successfully:', data);
       
       if (data && data.length > 0) {
         const firstRow = data[0];

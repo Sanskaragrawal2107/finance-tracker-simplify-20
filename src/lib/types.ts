@@ -1,4 +1,3 @@
-
 // User related types
 export enum UserRole {
   ADMIN = "admin",
@@ -81,10 +80,6 @@ export enum ExpenseCategory {
 }
 
 export enum AdvancePurpose {
-  MATERIAL = "material",
-  WAGES = "wages",
-  TRANSPORT = "transport",
-  MISC = "misc",
   ADVANCE = "advance",
   SAFETY_SHOES = "safety_shoes",
   TOOLS = "tools",

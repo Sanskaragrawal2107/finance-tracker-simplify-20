@@ -239,12 +239,8 @@ const Expenses: React.FC = () => {
 
   const fetchSiteInvoices = async (siteId: string) => {
     try {
-      setInvoices([]);
-      return;
-      
-      /* This code will be enabled once the invoices table has the correct structure
       const { data, error } = await supabase
-        .from('invoices')
+        .from('site_invoices')
         .select('*')
         .eq('site_id', siteId);
       
@@ -253,28 +249,32 @@ const Expenses: React.FC = () => {
       if (data) {
         const transformedInvoices: Invoice[] = data.map(invoice => ({
           id: invoice.id,
-          siteId: invoice.site_id,
           date: new Date(invoice.date),
           partyId: invoice.party_id,
           partyName: invoice.party_name,
           material: invoice.material,
-          quantity: invoice.quantity,
-          rate: invoice.rate,
-          gstPercentage: invoice.gst_percentage,
-          grossAmount: invoice.gross_amount,
-          netAmount: invoice.net_amount,
+          quantity: Number(invoice.quantity),
+          rate: Number(invoice.rate),
+          gstPercentage: Number(invoice.gst_percentage),
+          grossAmount: Number(invoice.gross_amount),
+          netAmount: Number(invoice.net_amount),
+          materialItems: invoice.material_items ? JSON.parse(invoice.material_items as string) : [],
+          bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details as string) : {
+            bankName: '',
+            accountNumber: '',
+            ifscCode: ''
+          },
+          billUrl: invoice.bill_url,
           paymentStatus: invoice.payment_status as PaymentStatus,
-          bankDetails: invoice.bank_details,
           createdBy: invoice.created_by,
           createdAt: new Date(invoice.created_at),
-          approverType: invoice.approver_type,
+          siteId: invoice.site_id
         }));
         
         setInvoices(transformedInvoices);
       } else {
         setInvoices([]);
       }
-      */
     } catch (error) {
       console.error('Error fetching invoices:', error);
       toast.error('Failed to load invoices for this site');

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Calendar as CalendarIcon,
   ArrowLeft,
@@ -100,8 +100,7 @@ import {
   RecipientType,
   BalanceSummary,
   MaterialItem,
-  BankDetails,
-  Json
+  BankDetails
 } from '@/lib/types';
 import PageTitle from '@/components/common/PageTitle';
 import SiteDetail from '@/components/sites/SiteDetail';
@@ -112,6 +111,7 @@ interface DataTableProps<TData, TValue> {
   searchKey?: string;
 }
 
+// Define columns for the sites table
 const columns = [
   {
     accessorKey: 'name',
@@ -132,12 +132,30 @@ const columns = [
   {
     accessorKey: 'startDate',
     header: 'Start Date',
-    cell: ({ row }) => format(new Date(row.startDate), 'dd/MM/yyyy'),
+    cell: ({ row }: { row: any }) => {
+      try {
+        // Check if startDate is a valid date
+        const date = row.startDate instanceof Date ? row.startDate : new Date(row.startDate);
+        return format(date, 'dd/MM/yyyy');
+      } catch (error) {
+        console.error("Error formatting date:", error);
+        return 'Invalid date';
+      }
+    },
   },
   {
     accessorKey: 'completionDate',
     header: 'Completion Date',
-    cell: ({ row }) => row.completionDate ? format(new Date(row.completionDate), 'dd/MM/yyyy') : 'N/A',
+    cell: ({ row }: { row: any }) => {
+      try {
+        if (!row.completionDate) return 'N/A';
+        const date = row.completionDate instanceof Date ? row.completionDate : new Date(row.completionDate);
+        return format(date, 'dd/MM/yyyy');
+      } catch (error) {
+        console.error("Error formatting date:", error);
+        return 'Invalid date';
+      }
+    },
   },
 ];
 
@@ -184,6 +202,8 @@ const SupervisorSites: React.FC = () => {
           return;
         }
 
+        console.log("Fetching sites for user ID:", user.id);
+
         let query = supabase
           .from('sites')
           .select('*')
@@ -202,7 +222,9 @@ const SupervisorSites: React.FC = () => {
           return;
         }
 
-        if (sitesData) {
+        console.log("Sites data from Supabase:", sitesData);
+
+        if (sitesData && sitesData.length > 0) {
           const mappedSites: Site[] = sitesData.map(item => ({
             id: item.id,
             name: item.name,
@@ -212,13 +234,18 @@ const SupervisorSites: React.FC = () => {
             startDate: new Date(item.start_date || new Date()),
             completionDate: item.completion_date ? new Date(item.completion_date) : undefined,
             supervisorId: item.supervisor_id || '',
-            supervisor: '',
+            supervisor: user.name || '',
             createdAt: new Date(item.created_at || new Date()),
             isCompleted: item.is_completed || false,
-            funds: item.funds,
-            totalFunds: item.total_funds
+            funds: item.funds || 0,
+            totalFunds: item.total_funds || 0
           }));
+          
+          console.log("Mapped sites:", mappedSites);
           setSites(mappedSites);
+        } else {
+          console.log("No sites found or empty array returned");
+          setSites([]);
         }
       } catch (error) {
         console.error('Error fetching sites:', error);
@@ -245,7 +272,8 @@ const SupervisorSites: React.FC = () => {
             start_date: format(newSite.startDate, 'yyyy-MM-dd'),
             supervisor_id: user?.id
           },
-        ]);
+        ])
+        .select();
 
       if (error) {
         console.error('Error adding site:', error);
@@ -253,14 +281,28 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      const newSiteData = data?.[0] || { id: '', created_at: new Date().toISOString() };
-      
-      setSites([...sites, { 
-        id: newSiteData.id, 
-        createdAt: new Date(newSiteData.created_at), 
-        isCompleted: false, 
-        ...newSite 
-      }]);
+      if (data && data.length > 0) {
+        const newSiteData = data[0];
+        
+        const newSiteMapped: Site = { 
+          id: newSiteData.id, 
+          name: newSiteData.name,
+          jobName: newSiteData.job_name || '',
+          posNo: newSiteData.pos_no || '',
+          location: newSiteData.location,
+          startDate: new Date(newSiteData.start_date || new Date()),
+          completionDate: newSiteData.completion_date ? new Date(newSiteData.completion_date) : undefined,
+          supervisorId: newSiteData.supervisor_id || user?.id || '',
+          supervisor: user?.name || '',
+          createdAt: new Date(newSiteData.created_at),
+          isCompleted: newSiteData.is_completed || false,
+          funds: newSiteData.funds || 0,
+          totalFunds: newSiteData.total_funds || 0
+        };
+        
+        setSites(prevSites => [...prevSites, newSiteMapped]);
+        toast.success('Site added successfully!');
+      }
       
       setIsAddingSite(false);
       setNewSite({
@@ -272,7 +314,6 @@ const SupervisorSites: React.FC = () => {
         supervisorId: user?.id || '',
         supervisor: user?.name || '',
       });
-      toast.success('Site added successfully!');
     } catch (error) {
       console.error('Error adding site:', error);
       toast.error(`Error adding site: ${error}`);
@@ -342,6 +383,9 @@ const SupervisorSites: React.FC = () => {
     if (!selectedSiteId) return;
 
     try {
+      console.log("Fetching data for site ID:", selectedSiteId);
+      
+      // Fetch expenses
       const { data: expensesData, error: expensesError } = await supabase
         .from('expenses')
         .select('*')
@@ -353,6 +397,7 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
+      // Fetch advances
       const { data: advancesData, error: advancesError } = await supabase
         .from('advances')
         .select('*')
@@ -364,6 +409,7 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
+      // Fetch funds
       const { data: fundsData, error: fundsError } = await supabase
         .from('funds_received')
         .select('*')
@@ -375,6 +421,7 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
+      // Fetch invoices
       const { data: invoicesData, error: invoicesError } = await supabase
         .from('site_invoices')
         .select('*')
@@ -386,7 +433,8 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      const mappedExpenses: Expense[] = expensesData?.map(item => ({
+      // Map expenses data
+      const mappedExpenses: Expense[] = (expensesData || []).map(item => ({
         id: item.id,
         date: new Date(item.date),
         description: item.description || '',
@@ -397,9 +445,10 @@ const SupervisorSites: React.FC = () => {
         createdAt: new Date(item.created_at || new Date()),
         siteId: item.site_id,
         supervisorId: item.created_by || ''
-      })) || [];
+      }));
 
-      const mappedAdvances: Advance[] = advancesData?.map(item => ({
+      // Map advances data
+      const mappedAdvances: Advance[] = (advancesData || []).map(item => ({
         id: item.id,
         date: new Date(item.date),
         recipientId: '',
@@ -412,9 +461,10 @@ const SupervisorSites: React.FC = () => {
         createdBy: item.created_by || '',
         createdAt: new Date(item.created_at || new Date()),
         siteId: item.site_id
-      })) || [];
+      }));
 
-      const mappedFunds: FundsReceived[] = fundsData?.map(item => ({
+      // Map funds data
+      const mappedFunds: FundsReceived[] = (fundsData || []).map(item => ({
         id: item.id,
         date: new Date(item.date),
         amount: item.amount,
@@ -422,9 +472,10 @@ const SupervisorSites: React.FC = () => {
         createdAt: new Date(item.created_at || new Date()),
         reference: item.reference || '',
         method: item.method || ''
-      })) || [];
+      }));
 
-      const mappedInvoices: Invoice[] = invoicesData?.map(item => ({
+      // Map invoices data
+      const mappedInvoices: Invoice[] = (invoicesData || []).map(item => ({
         id: item.id,
         date: new Date(item.date),
         partyId: item.party_id,
@@ -448,7 +499,14 @@ const SupervisorSites: React.FC = () => {
         createdAt: new Date(item.created_at || new Date()),
         approverType: item.approver_type as "ho" | "supervisor",
         siteId: item.site_id
-      })) || [];
+      }));
+
+      console.log("Mapped data:", {
+        expenses: mappedExpenses,
+        advances: mappedAdvances,
+        funds: mappedFunds,
+        invoices: mappedInvoices
+      });
 
       setExpenses(mappedExpenses);
       setAdvances(mappedAdvances);
@@ -467,20 +525,26 @@ const SupervisorSites: React.FC = () => {
   }, [selectedSiteId, handleTransactionsUpdate]);
 
   const handleAddExpense = async (expense: Partial<Expense>) => {
+    if (!selectedSiteId || !expense.amount || !expense.category) {
+      toast.error("Missing required fields for expense");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
       const expenseData = {
-        date: format(new Date(expense.date as Date), 'yyyy-MM-dd'),
+        date: expense.date ? format(new Date(expense.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         site_id: selectedSiteId,
         category: expense.category,
-        description: expense.description,
+        description: expense.description || '',
         amount: expense.amount,
-        created_by: user?.id
+        created_by: user?.id || ''
       };
 
       const { data, error } = await supabase
         .from('expenses')
-        .insert([expenseData]);
+        .insert(expenseData)
+        .select();
 
       if (error) {
         console.error('Error adding expense:', error);
@@ -488,21 +552,24 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      const newExpense: Expense = {
-        id: data?.[0]?.id || '',
-        date: new Date(expense.date as Date),
-        description: expense.description || '',
-        category: expense.category as ExpenseCategory,
-        amount: expense.amount || 0,
-        status: ApprovalStatus.PENDING,
-        createdBy: user?.id || '',
-        createdAt: new Date(),
-        supervisorId: user?.id || '',
-        siteId: selectedSiteId
-      };
+      if (data && data.length > 0) {
+        const newExpense: Expense = {
+          id: data[0].id,
+          date: new Date(data[0].date),
+          description: data[0].description || '',
+          category: data[0].category as ExpenseCategory,
+          amount: data[0].amount || 0,
+          status: ApprovalStatus.PENDING,
+          createdBy: data[0].created_by || user?.id || '',
+          createdAt: new Date(data[0].created_at),
+          supervisorId: user?.id || '',
+          siteId: selectedSiteId
+        };
 
-      setExpenses([...expenses, newExpense]);
-      toast.success('Expense added successfully!');
+        setExpenses(prevExpenses => [...prevExpenses, newExpense]);
+        toast.success('Expense added successfully!');
+      }
+      
       handleTransactionsUpdate();
     } catch (error) {
       console.error('Error adding expense:', error);
@@ -513,23 +580,29 @@ const SupervisorSites: React.FC = () => {
   };
 
   const handleAddAdvance = async (advance: Partial<Advance>) => {
+    if (!selectedSiteId || !advance.amount || !advance.recipientName || !advance.recipientType || !advance.purpose) {
+      toast.error("Missing required fields for advance");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
       const advanceData = {
-        date: format(new Date(advance.date as Date), 'yyyy-MM-dd'),
+        date: advance.date ? format(new Date(advance.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         site_id: selectedSiteId,
-        created_by: user?.id,
+        created_by: user?.id || '',
         recipient_name: advance.recipientName,
         recipient_type: advance.recipientType,
         purpose: advance.purpose,
         amount: advance.amount,
-        remarks: advance.remarks,
+        remarks: advance.remarks || '',
         status: advance.status || ApprovalStatus.PENDING
       };
 
       const { data, error } = await supabase
         .from('advances')
-        .insert([advanceData]);
+        .insert(advanceData)
+        .select();
 
       if (error) {
         console.error('Error adding advance:', error);
@@ -537,23 +610,26 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      const newAdvance: Advance = {
-        id: data?.[0]?.id || '',
-        date: new Date(advance.date as Date),
-        recipientId: advance.recipientId,
-        recipientName: advance.recipientName || '',
-        recipientType: advance.recipientType as RecipientType,
-        purpose: advance.purpose as AdvancePurpose,
-        amount: advance.amount || 0,
-        remarks: advance.remarks,
-        status: advance.status as ApprovalStatus || ApprovalStatus.PENDING,
-        createdBy: user?.id || '',
-        createdAt: new Date(),
-        siteId: selectedSiteId
-      };
+      if (data && data.length > 0) {
+        const newAdvance: Advance = {
+          id: data[0].id,
+          date: new Date(data[0].date),
+          recipientId: advance.recipientId || '',
+          recipientName: data[0].recipient_name,
+          recipientType: data[0].recipient_type as RecipientType,
+          purpose: data[0].purpose as AdvancePurpose,
+          amount: data[0].amount,
+          remarks: data[0].remarks || '',
+          status: data[0].status as ApprovalStatus,
+          createdBy: data[0].created_by || user?.id || '',
+          createdAt: new Date(data[0].created_at),
+          siteId: selectedSiteId
+        };
 
-      setAdvances([...advances, newAdvance]);
-      toast.success('Advance added successfully!');
+        setAdvances(prevAdvances => [...prevAdvances, newAdvance]);
+        toast.success('Advance added successfully!');
+      }
+      
       handleTransactionsUpdate();
     } catch (error) {
       console.error('Error adding advance:', error);
@@ -564,19 +640,25 @@ const SupervisorSites: React.FC = () => {
   };
 
   const handleAddFunds = async (fund: Partial<FundsReceived>) => {
+    if (!selectedSiteId || !fund.amount) {
+      toast.error("Missing required fields for funds");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
       const fundData = {
-        date: format(new Date(fund.date as Date), 'yyyy-MM-dd'),
-        site_id: selectedSiteId || '',
+        date: fund.date ? format(new Date(fund.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+        site_id: selectedSiteId,
         amount: fund.amount,
-        reference: fund.reference,
-        method: fund.method
+        reference: fund.reference || null,
+        method: fund.method || null
       };
 
       const { data, error } = await supabase
         .from('funds_received')
-        .insert([fundData]);
+        .insert(fundData)
+        .select();
 
       if (error) {
         console.error('Error adding funds:', error);
@@ -584,18 +666,21 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      const newFund: FundsReceived = {
-        id: data?.[0]?.id || '',
-        date: new Date(fund.date as Date),
-        amount: fund.amount || 0,
-        siteId: selectedSiteId || '',
-        createdAt: new Date(),
-        reference: fund.reference,
-        method: fund.method
-      };
+      if (data && data.length > 0) {
+        const newFund: FundsReceived = {
+          id: data[0].id,
+          date: new Date(data[0].date),
+          amount: data[0].amount,
+          siteId: data[0].site_id,
+          createdAt: new Date(data[0].created_at),
+          reference: data[0].reference || undefined,
+          method: data[0].method || undefined
+        };
 
-      setFundsReceived([...fundsReceived, newFund]);
-      toast.success('Funds added successfully!');
+        setFundsReceived(prevFunds => [...prevFunds, newFund]);
+        toast.success('Funds added successfully!');
+      }
+      
       handleTransactionsUpdate();
     } catch (error) {
       console.error('Error adding funds:', error);
@@ -606,17 +691,21 @@ const SupervisorSites: React.FC = () => {
   };
 
   const handleAddInvoice = async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
+    if (!selectedSiteId || !invoice.amount || !invoice.netAmount) {
+      toast.error("Missing required fields for invoice");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
-      // Convert BankDetails to Json compatible format
-      const bankDetailsJson = invoice.bankDetails as unknown as Json;
-      // Convert MaterialItems to Json compatible format
-      const materialItemsJson = invoice.materialItems ? invoice.materialItems as unknown as Json : null;
+      // Convert objects to JSON compatible format
+      const bankDetailsJson = invoice.bankDetails as any;
+      const materialItemsJson = invoice.materialItems as any;
       
       const invoiceData = {
         date: format(new Date(invoice.date), 'yyyy-MM-dd'),
         site_id: selectedSiteId,
-        created_by: user?.id,
+        created_by: user?.id || '',
         party_id: invoice.partyId,
         party_name: invoice.partyName,
         material: invoice.material,
@@ -628,13 +717,16 @@ const SupervisorSites: React.FC = () => {
         bank_details: bankDetailsJson,
         material_items: materialItemsJson,
         payment_status: invoice.paymentStatus,
-        bill_url: invoice.billUrl,
+        bill_url: invoice.billUrl || null,
         approver_type: invoice.approverType
       };
 
+      console.log("Sending invoice data to Supabase:", invoiceData);
+
       const { data, error } = await supabase
         .from('site_invoices')
-        .insert([invoiceData]);
+        .insert(invoiceData)
+        .select();
 
       if (error) {
         console.error('Error adding invoice:', error);
@@ -642,16 +734,17 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      const newInvoiceId = data?.[0]?.id || '';
-      
-      const newInvoice: Invoice = {
-        ...invoice,
-        id: newInvoiceId,
-        createdAt: new Date()
-      };
+      if (data && data.length > 0) {
+        const newInvoice: Invoice = {
+          ...invoice,
+          id: data[0].id,
+          createdAt: new Date(data[0].created_at)
+        };
 
-      setInvoices([...invoices, newInvoice]);
-      toast.success('Invoice added successfully!');
+        setInvoices(prevInvoices => [...prevInvoices, newInvoice]);
+        toast.success('Invoice added successfully!');
+      }
+      
       handleTransactionsUpdate();
     } catch (error) {
       console.error('Error adding invoice:', error);
@@ -662,11 +755,32 @@ const SupervisorSites: React.FC = () => {
   };
 
   const handleCompleteSite = async (siteId: string, completionDate: Date) => {
-    setSites(
-      sites.map((site) =>
-        site.id === siteId ? { ...site, isCompleted: true, completionDate: completionDate } : site
-      )
-    );
+    try {
+      const { error } = await supabase
+        .from('sites')
+        .update({
+          is_completed: true,
+          completion_date: format(completionDate, 'yyyy-MM-dd')
+        })
+        .eq('id', siteId);
+      
+      if (error) {
+        console.error('Error completing site:', error);
+        toast.error(`Error completing site: ${error.message}`);
+        return;
+      }
+      
+      setSites(
+        sites.map((site) =>
+          site.id === siteId ? { ...site, isCompleted: true, completionDate: completionDate } : site
+        )
+      );
+      
+      toast.success('Site marked as completed');
+    } catch (error) {
+      console.error('Error completing site:', error);
+      toast.error(`Error completing site: ${error}`);
+    }
   };
 
   const calculateSiteFinancials = (siteId: string): BalanceSummary => {
@@ -700,31 +814,6 @@ const SupervisorSites: React.FC = () => {
   const siteAdvances = advances.filter(advance => advance.siteId === selectedSiteId);
   const siteFunds = fundsReceived.filter(fund => fund.siteId === selectedSiteId);
   const siteInvoices = invoices.filter(invoice => invoice.siteId === selectedSiteId);
-
-  const renderInvoiceContent = (invoice: Invoice) => (
-    <div className="flex flex-col space-y-1">
-      <div className="flex justify-between">
-        <span className="text-sm font-medium">{invoice.partyName}</span>
-        <Badge 
-          variant="outline" 
-          className={`text-xs ${
-            invoice.paymentStatus === 'paid' 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-orange-100 text-orange-600'
-          }`}
-        >
-          {invoice.paymentStatus}
-        </Badge>
-      </div>
-      <p className="text-xs text-muted-foreground">{invoice.material}</p>
-      <div className="flex justify-between text-sm">
-        <span>₹{invoice.netAmount?.toLocaleString()}</span>
-        <span className="text-xs text-muted-foreground">
-          {invoice.approverType === 'ho' ? 'HO Approval' : 'Supervisor Approval'}
-        </span>
-      </div>
-    </div>
-  );
 
   return (
     <div className="container mx-auto py-6">
@@ -814,19 +903,29 @@ const SupervisorSites: React.FC = () => {
           </div>
         )
       ) : (
-        sites.length > 0 ? (
-          <DataTable 
-            columns={columns} 
-            data={sites} 
-            onView={(site) => setSelectedSiteId(site.id)}
-          />
-        ) : (
-          <Card className="w-full">
-            <CardContent className="p-6">
-              <p className="text-center text-muted-foreground">No sites found. Add a new site to get started.</p>
-            </CardContent>
-          </Card>
-        )
+        <>
+          {sites.length > 0 ? (
+            <div>
+              <div className="bg-gray-50 p-4 rounded-md mb-4">
+                <h3 className="text-md font-medium mb-2">Debug Information</h3>
+                <p className="text-sm text-gray-600">Sites count: {sites.length}</p>
+                <p className="text-sm text-gray-600">User ID: {user?.id}</p>
+              </div>
+            
+              <DataTable 
+                columns={columns} 
+                data={sites} 
+                onView={(site) => setSelectedSiteId(site.id)}
+              />
+            </div>
+          ) : (
+            <Card className="w-full">
+              <CardContent className="p-6">
+                <p className="text-center text-muted-foreground">No sites found. Add a new site to get started.</p>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       <Dialog open={isAddingSite} onOpenChange={setIsAddingSite}>

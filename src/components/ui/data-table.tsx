@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -33,7 +33,11 @@ export function DataTable<TData, TValue>({
   onEdit,
   onDelete,
 }: DataTableProps<TData, TValue>) {
-  const [searchValue, setSearchValue] = React.useState("");
+  const [searchValue, setSearchValue] = useState("");
+
+  // Add a console log to help debug the data
+  console.log("DataTable component received data:", data);
+  console.log("DataTable component received columns:", columns);
 
   const filteredData = React.useMemo(() => {
     if (!searchKey || !searchValue) return data;

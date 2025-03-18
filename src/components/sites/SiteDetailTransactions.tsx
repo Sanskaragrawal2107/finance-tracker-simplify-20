@@ -21,20 +21,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-interface SiteDetailTransactionsProps {
+export interface SiteDetailTransactionsProps {
   siteId: string;
-  expensesCount?: number;
-  advancesCount?: number;
-  fundsReceivedCount?: number;
+  expensesCount: number;
+  advancesCount: number;
+  fundsReceivedCount: number;
   userRole: UserRole;
-  isAdminView?: boolean;
-  site?: Site;
+  isAdminView: boolean;
+  site: Site;
   supervisor?: any;
-  expenses?: Expense[];
-  advances?: Advance[];
-  fundsReceived?: FundsReceived[];
-  onUpdateTransactions?: () => void;
-  onTransactionsUpdate?: () => Promise<void> | void;
+  expenses: Expense[];
+  advances: Advance[];
+  fundsReceived: FundsReceived[];
+  onUpdateTransactions: () => void;
+  onTransactionsUpdate: () => void | Promise<void>;
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({

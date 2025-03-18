@@ -29,7 +29,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-
 import { supervisors } from '@/data/supervisors';
 
 const initialExpenses: Expense[] = [];
@@ -241,6 +240,7 @@ const Expenses: React.FC = () => {
 
   const fetchSiteInvoices = async (siteId: string) => {
     try {
+      console.log('Fetching invoices for site ID:', siteId);
       const { data, error } = await supabase
         .from('site_invoices')
         .select('*')
@@ -249,23 +249,67 @@ const Expenses: React.FC = () => {
       if (error) throw error;
       
       if (data) {
-        const transformedInvoices: Invoice[] = data.map(invoice => ({
-          id: invoice.id,
-          siteId: invoice.site_id,
-          invoiceNumber: invoice.invoice_number,
-          date: new Date(invoice.date),
-          dueDate: invoice.due_date ? new Date(invoice.due_date) : undefined,
-          vendorName: invoice.vendor_name,
-          amount: Number(invoice.amount),
-          status: invoice.status as PaymentStatus,
-          paymentDate: invoice.payment_date ? new Date(invoice.payment_date) : undefined,
-          description: invoice.description || '',
-          category: invoice.category || '',
-          notes: invoice.notes || '',
-          createdAt: new Date(invoice.created_at),
-          materialItems: invoice.material_items ? JSON.parse(invoice.material_items) as MaterialItem[] : [],
-          bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details) as BankDetails : undefined,
-        }));
+        console.log('Raw site_invoices data:', data);
+        
+        const transformedInvoices: Invoice[] = data.map(invoice => {
+          let materialItems: MaterialItem[] = [];
+          try {
+            if (invoice.material_items) {
+              if (typeof invoice.material_items === 'string') {
+                materialItems = JSON.parse(invoice.material_items);
+              } else if (Array.isArray(invoice.material_items)) {
+                materialItems = invoice.material_items;
+              } else if (typeof invoice.material_items === 'object') {
+                materialItems = [invoice.material_items];
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing material items:', e);
+          }
+          
+          let bankDetails: BankDetails = {
+            bankName: '',
+            accountNumber: '',
+            ifscCode: ''
+          };
+          
+          try {
+            if (invoice.bank_details) {
+              if (typeof invoice.bank_details === 'string') {
+                bankDetails = JSON.parse(invoice.bank_details);
+              } else if (typeof invoice.bank_details === 'object') {
+                bankDetails = invoice.bank_details as any;
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing bank details:', e);
+          }
+          
+          return {
+            id: invoice.id,
+            siteId: invoice.site_id,
+            date: new Date(invoice.date),
+            partyId: invoice.party_id,
+            partyName: invoice.party_name,
+            material: invoice.material,
+            quantity: Number(invoice.quantity),
+            rate: Number(invoice.rate),
+            gstPercentage: Number(invoice.gst_percentage),
+            grossAmount: Number(invoice.gross_amount),
+            netAmount: Number(invoice.net_amount),
+            materialItems,
+            bankDetails,
+            billUrl: invoice.bill_url,
+            paymentStatus: invoice.payment_status as PaymentStatus,
+            createdBy: invoice.created_by || '',
+            createdAt: new Date(invoice.created_at),
+            approverType: invoice.approver_type as "ho" | "supervisor",
+            vendorName: invoice.party_name,  
+            invoiceNumber: invoice.id.slice(0, 8),
+            amount: Number(invoice.net_amount),
+            status: invoice.payment_status as PaymentStatus
+          };
+        });
         
         setInvoices(transformedInvoices);
       } else {
@@ -492,7 +536,6 @@ const Expenses: React.FC = () => {
         
         setFundsReceived(prevFunds => [fundWithId, ...prevFunds]);
         
-        // Update the site's funds directly
         const updatedFunds = (sites.find(site => site.id === selectedSiteId)?.funds || 0) + Number(fundWithId.amount);
         
         const { error: updateError } = await supabase
@@ -604,13 +647,8 @@ const Expenses: React.FC = () => {
       const site = sites.find(s => s.id === siteId);
       
       if (site) {
-        // Calculate total expenses
         const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-        
-        // Calculate total funds received
         const totalFunds = fundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
-        
-        // Calculate total advances (excluding debit to worker)
         const totalAdvances = advances.reduce((sum, advance) => {
           if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;
@@ -618,7 +656,6 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
-        // Calculate total debit to worker advances
         const totalDebitToWorker = advances.reduce((sum, advance) => {
           if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;
@@ -626,12 +663,10 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
-        // Calculate supervisor invoices (only those paid by supervisor)
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.payment_by === 'supervisor')
+          .filter(invoice => invoice.paymentStatus === 'paid' && invoice.approverType === 'supervisor')
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
-        // Calculate total balance
         const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;
         
         return {
@@ -640,7 +675,7 @@ const Expenses: React.FC = () => {
           totalAdvances,
           debitsToWorker: totalDebitToWorker,
           invoicesPaid: supervisorInvoiceTotal,
-          pendingInvoices: 0, // This will be implemented later
+          pendingInvoices: 0,
           totalBalance: totalBalance
         };
       }

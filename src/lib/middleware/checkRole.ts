@@ -1,28 +1,36 @@
-import { UserRole } from '@/lib/types';
-import { Request, Response, NextFunction } from 'express';
+// Note: This middleware is for server-side usage and should be removed if not needed
+// Since we're using a client-side application with Supabase, this middleware isn't needed
+// But we'll keep a stub to prevent build errors
 
-export const checkAdminRole = (req: Request, res: Response, next: NextFunction) => {
-  const userRole = req.user?.role;
-  
-  if (!userRole || userRole !== UserRole.ADMIN) {
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'You do not have permission to perform this action. Admin access required.'
-    });
+// Mocked types to avoid requiring express
+interface Request {
+  user?: {
+    role?: string
   }
-  
-  next();
+}
+
+interface Response {
+  status: (code: number) => Response;
+  json: (data: any) => void;
+}
+
+interface NextFunction {
+  (err?: any): void;
+}
+
+export const checkRole = (allowedRoles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const hasRole = allowedRoles.includes(req.user.role || '');
+    if (!hasRole) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    next();
+  };
 };
 
-export const checkSupervisorOrAdminRole = (req: Request, res: Response, next: NextFunction) => {
-  const userRole = req.user?.role;
-  
-  if (!userRole || (userRole !== UserRole.ADMIN && userRole !== UserRole.SUPERVISOR)) {
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'You do not have permission to perform this action. Supervisor or Admin access required.'
-    });
-  }
-  
-  next();
-}; 
+export default checkRole;

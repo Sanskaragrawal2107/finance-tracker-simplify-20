@@ -78,24 +78,42 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
     setIsSubmitting(true);
     
     try {
-      const newFunds: Partial<FundsReceived> = {
-        date: values.date,
-        amount: values.amount,
-        reference: values.reference,
-        method: values.method,
+      if (!siteId) {
+        throw new Error("Site ID is required");
+      }
+      
+      // Create the database entry object with snake_case keys for Supabase
+      const fundsData = {
         site_id: siteId,
+        date: values.date.toISOString(),
+        amount: values.amount,
+        reference: values.reference || null,
+        method: values.method || null,
       };
 
-      console.log("Submitting funds received:", newFunds);
+      console.log("Submitting funds received:", fundsData);
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('funds_received')
-        .insert(newFunds);
+        .insert(fundsData)
+        .select()
+        .single();
         
       if (error) {
         console.error("Error inserting funds received:", error);
         throw error;
       }
+
+      // Convert the data from snake_case to camelCase for the application
+      const newFunds: Partial<FundsReceived> = {
+        id: data.id,
+        date: new Date(data.date),
+        amount: data.amount,
+        reference: data.reference,
+        method: data.method,
+        siteId: data.site_id,
+        createdAt: new Date(data.created_at),
+      };
 
       onSubmit(newFunds);
       form.reset();

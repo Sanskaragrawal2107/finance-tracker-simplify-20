@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { IndianRupee, RefreshCw } from 'lucide-react';
 import CustomCard from '../ui/CustomCard';
-import { BalanceSummary } from '@/lib/types';
-import { supabase, calculatePaidInvoicesTotalForSite } from '@/integrations/supabase/client';
+import { BalanceSummary, AdvancePurpose } from '@/lib/types';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '../ui/button';
 
 interface BalanceCardProps {
@@ -11,6 +12,12 @@ interface BalanceCardProps {
   className?: string;
   siteId?: string;
 }
+
+const DEBIT_ADVANCE_PURPOSES = [
+  AdvancePurpose.SAFETY_SHOES,
+  AdvancePurpose.TOOLS,
+  AdvancePurpose.OTHER
+];
 
 const BalanceCard: React.FC<BalanceCardProps> = ({ 
   balanceData,
@@ -20,20 +27,87 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   const [localBalanceData, setLocalBalanceData] = useState(balanceData);
   const [isLoading, setIsLoading] = useState(false);
   
-  const refreshInvoiceData = async () => {
+  const refreshSiteData = async () => {
     if (!siteId) return;
     
     setIsLoading(true);
     try {
-      const invoicesPaid = await calculatePaidInvoicesTotalForSite(siteId);
-      console.log("Refreshed invoices paid amount:", invoicesPaid);
+      // Fetch funds received
+      const { data: fundsData, error: fundsError } = await supabase
+        .from('funds_received')
+        .select('amount')
+        .eq('site_id', siteId);
       
-      setLocalBalanceData(prev => ({
-        ...prev,
-        invoicesPaid: invoicesPaid
-      }));
+      if (fundsError) throw fundsError;
+      const fundsReceived = fundsData?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+      
+      // Fetch expenses
+      const { data: expensesData, error: expensesError } = await supabase
+        .from('expenses')
+        .select('amount')
+        .eq('site_id', siteId);
+      
+      if (expensesError) throw expensesError;
+      const totalExpenditure = expensesData?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+      
+      // Fetch advances and calculate totals based on purpose
+      const { data: advancesData, error: advancesError } = await supabase
+        .from('advances')
+        .select('amount, purpose')
+        .eq('site_id', siteId);
+      
+      if (advancesError) throw advancesError;
+      
+      let totalAdvances = 0;
+      let debitsToWorker = 0;
+      
+      advancesData?.forEach(advance => {
+        if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose as AdvancePurpose)) {
+          debitsToWorker += Number(advance.amount);
+        } else {
+          totalAdvances += Number(advance.amount);
+        }
+      });
+      
+      // Fetch invoices paid by supervisor
+      const { data: invoicesData, error: invoicesError } = await supabase
+        .from('site_invoices')
+        .select('net_amount, approver_type')
+        .eq('site_id', siteId)
+        .eq('payment_status', 'paid');
+      
+      if (invoicesError) throw invoicesError;
+      
+      const invoicesPaid = invoicesData?.reduce((sum, invoice) => {
+        // Only count invoices approved by supervisor in the balance calculation
+        if (invoice.approver_type === 'supervisor') {
+          return sum + Number(invoice.net_amount);
+        }
+        return sum;
+      }, 0) || 0;
+      
+      console.log("Refreshed site data:", {
+        fundsReceived,
+        totalExpenditure,
+        totalAdvances,
+        debitsToWorker,
+        invoicesPaid
+      });
+      
+      // Calculate total balance
+      const totalBalance = fundsReceived - totalExpenditure - totalAdvances - invoicesPaid;
+      
+      setLocalBalanceData({
+        fundsReceived,
+        totalExpenditure,
+        totalAdvances,
+        debitsToWorker,
+        invoicesPaid,
+        pendingInvoices: 0, // Not calculating this for now
+        totalBalance
+      });
     } catch (error) {
-      console.error("Error refreshing invoice data:", error);
+      console.error("Error refreshing site data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -41,7 +115,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   
   useEffect(() => {
     if (siteId) {
-      refreshInvoiceData();
+      refreshSiteData();
     }
   }, [siteId]);
   
@@ -75,7 +149,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
               variant="ghost" 
               size="icon" 
               className="text-white hover:bg-white/20 p-2 h-auto w-auto rounded-full" 
-              onClick={refreshInvoiceData}
+              onClick={refreshSiteData}
               disabled={isLoading}
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />

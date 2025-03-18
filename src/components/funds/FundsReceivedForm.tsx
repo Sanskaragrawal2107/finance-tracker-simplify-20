@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -59,6 +60,8 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -70,18 +73,29 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
   });
 
   const handleSubmit = async (values: FormValues) => {
-    const newFunds: Partial<FundsReceived> = {
-      date: values.date,
-      amount: values.amount,
-      reference: values.reference,
-      method: values.method,
-      siteId: siteId,
-    };
+    // Prevent multiple submissions
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    try {
+      const newFunds: Partial<FundsReceived> = {
+        date: values.date,
+        amount: values.amount,
+        reference: values.reference,
+        method: values.method,
+        siteId: siteId,
+      };
 
-    onSubmit(newFunds);
-    form.reset();
-    onClose();
-    toast.success("Funds received recorded successfully");
+      onSubmit(newFunds);
+      form.reset();
+      onClose();
+      toast.success("Funds received recorded successfully");
+    } catch (error) {
+      console.error('Error submitting funds:', error);
+      toast.error('Failed to record funds');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -204,10 +218,10 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
             />
 
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={onClose}>
+              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
                 CANCEL
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={isSubmitting}>
                 <Plus className="h-4 w-4 mr-2" />
                 SUBMIT
               </Button>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
@@ -13,7 +12,6 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import BalanceCard from '../dashboard/BalanceCard';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-// Import the form components
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
@@ -68,7 +66,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
   const isMobile = useIsMobile();
   
-  // Form states
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
   const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
@@ -122,34 +119,23 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     }
   };
 
-  // Handle expense submission
   const handleExpenseSubmit = (expense: Partial<Expense>) => {
     if (onAddExpense) {
-      const expenseWithSiteId = {
-        ...expense,
-        siteId: site.id
-      };
-      onAddExpense(expenseWithSiteId);
+      onAddExpense(expense);
     }
     setIsExpenseFormOpen(false);
   };
 
-  // Handle advance submission
   const handleAdvanceSubmit = (advance: Partial<Advance>) => {
     if (onAddAdvance) {
-      const advanceWithSiteId = {
-        ...advance,
-        siteId: site.id
-      };
-      onAddAdvance(advanceWithSiteId);
+      onAddAdvance(advance);
     }
     setIsAdvanceFormOpen(false);
   };
 
-  // Handle funds received submission
   const handleFundsSubmit = (funds: Partial<FundsReceived>) => {
     if (onAddFunds) {
-      const fundsWithSiteId = {
+      const fundsWithSiteId = funds.siteId ? funds : {
         ...funds,
         siteId: site.id
       };
@@ -158,14 +144,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     setIsFundsFormOpen(false);
   };
 
-  // Handle invoice submission
   const handleInvoiceSubmit = (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
     if (onAddInvoice) {
-      const invoiceWithSiteId = {
-        ...invoice,
-        siteId: site.id
-      };
-      onAddInvoice(invoiceWithSiteId);
+      onAddInvoice(invoice);
     }
     setIsInvoiceFormOpen(false);
   };
@@ -260,7 +241,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         <BalanceCard balanceData={siteSummary} siteId={site.id} />
       </div>
 
-      {/* Action Buttons */}
       {userRole !== UserRole.VIEWER && !site.isCompleted && (
         <div className="flex flex-wrap gap-2">
           <Button 
@@ -389,7 +369,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         </TabsContent>
       </Tabs>
 
-      {/* Forms */}
       {isExpenseFormOpen && (
         <ExpenseForm
           isOpen={isExpenseFormOpen}
@@ -413,6 +392,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           isOpen={isFundsFormOpen}
           onClose={() => setIsFundsFormOpen(false)}
           onSubmit={handleFundsSubmit}
+          siteId={site.id}
         />
       )}
       

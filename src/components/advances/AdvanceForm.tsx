@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -83,6 +82,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
   const [recipientOptions, setRecipientOptions] = useState<any[]>([]);
   const [showRemarks, setShowRemarks] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
   
   const form = useForm<FormValues>({
@@ -127,6 +127,10 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
 
   const handleSubmit = async (values: FormValues) => {
     try {
+      // Prevent multiple submissions
+      if (isSubmitting) return;
+      setIsSubmitting(true);
+      
       console.log('Submitting advance with values:', values);
       console.log('Site ID:', siteId);
       console.log('User ID:', user?.id);
@@ -184,6 +188,8 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
     } catch (error: any) {
       console.error('Submission error:', error);
       toast.error('An error occurred while submitting the advance');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

@@ -279,13 +279,14 @@ const Expenses: React.FC = () => {
             if (invoice.bank_details) {
               if (typeof invoice.bank_details === 'string') {
                 bankDetails = JSON.parse(invoice.bank_details);
-              } else if (typeof invoice.bank_details === 'object') {
+              } else if (typeof invoice.bank_details === 'object' && invoice.bank_details !== null) {
+                const bd = invoice.bank_details as any;
                 bankDetails = {
-                  bankName: invoice.bank_details.bankName || '',
-                  accountNumber: invoice.bank_details.accountNumber || '',
-                  ifscCode: invoice.bank_details.ifscCode || '',
-                  email: invoice.bank_details.email,
-                  mobile: invoice.bank_details.mobile
+                  bankName: bd.bankName || '',
+                  accountNumber: bd.accountNumber || '',
+                  ifscCode: bd.ifscCode || '',
+                  email: bd.email,
+                  mobile: bd.mobile
                 };
               }
             }
@@ -332,12 +333,12 @@ const Expenses: React.FC = () => {
 
   const ensureMaterialItemStructure = (item: any): MaterialItem => {
     return {
-      id: item.id || String(Date.now()),
-      material: item.material || '',
-      quantity: typeof item.quantity === 'number' ? item.quantity : null,
-      rate: typeof item.rate === 'number' ? item.rate : null,
-      gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
-      amount: typeof item.amount === 'number' ? item.amount : null
+      id: item?.id || String(Date.now()),
+      material: item?.material || '',
+      quantity: typeof item?.quantity === 'number' ? item.quantity : null,
+      rate: typeof item?.rate === 'number' ? item.rate : null,
+      gstPercentage: typeof item?.gstPercentage === 'number' ? item.gstPercentage : null,
+      amount: typeof item?.amount === 'number' ? item.amount : null
     };
   };
 
@@ -346,7 +347,7 @@ const Expenses: React.FC = () => {
       ...site,
       startDate: site.startDate instanceof Date ? site.startDate : new Date(site.startDate),
       completionDate: site.completionDate ? 
-        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completion_date)) 
+        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completionDate)) 
         : undefined
     };
   };
@@ -625,6 +626,45 @@ const Expenses: React.FC = () => {
     } catch (error: any) {
       console.error('Error completing site:', error);
       toast.error('Failed to mark site as completed: ' + error.message);
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteTransaction(expenseId, user.id);
+      setExpenses(prevExpenses => prevExpenses.filter(expense => expense.id !== expenseId));
+      toast.success('Expense deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting expense:', error);
+      toast.error(error.message || 'Failed to delete expense');
+    }
+  };
+
+  const handleDeleteAdvance = async (advanceId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteAdvance(advanceId, user.id);
+      setAdvances(prevAdvances => prevAdvances.filter(advance => advance.id !== advanceId));
+      toast.success('Advance deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting advance:', error);
+      toast.error(error.message || 'Failed to delete advance');
+    }
+  };
+
+  const handleDeleteFunds = async (fundsId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteFundsReceived(fundsId, user.id);
+      setFundsReceived(prevFunds => prevFunds.filter(fund => fund.id !== fundsId));
+      toast.success('Funds record deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting funds:', error);
+      toast.error(error.message || 'Failed to delete funds record');
     }
   };
 

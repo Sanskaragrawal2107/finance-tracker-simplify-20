@@ -1,427 +1,502 @@
-import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
-import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus, UserRole } from '@/lib/types';
+
+import React, { useState } from 'react';
+import { Site, Expense, Advance, FundsReceived, Invoice, Balance, BalanceSummary, ExpenseCategory, UserRole } from '@/lib/types';
+import { ArrowLeft, Building, PieChart, Wallet, Banknote, Calendar, RefreshCw, ChevronDown, ChevronUp, User, DollarSign, File, CheckCircle, ChevronRight, MoreVertical, FileEdit, Clock, CircleDollarSign, ArrowDownToLine, CreditCard, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import CustomCard from '@/components/ui/CustomCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
+import { BarChart } from '@tremor/react';
+import BalanceCard from '@/components/dashboard/BalanceCard';
 import SiteDetailTransactions from './SiteDetailTransactions';
-import { useIsMobile } from '@/hooks/use-mobile';
-import BalanceCard from '../dashboard/BalanceCard';
-import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
+import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { DatePicker } from '@/components/ui/date-picker';
+import { deleteTransaction, deleteAdvance, deleteFundsReceived } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/use-auth';
+import { toast } from 'sonner';
 
 interface SiteDetailProps {
   site: Site;
-  expenses?: Expense[];
-  advances?: Advance[];
-  fundsReceived?: FundsReceived[];
-  invoices?: Invoice[];
-  supervisorInvoices?: Invoice[];
-  balanceSummary?: BalanceSummary;
-  siteSupervisor?: { id: string; name: string } | null;
-  onBack?: () => void;
-  onAddExpense?: (expense: Partial<Expense>) => void;
-  onAddAdvance?: (advance: Partial<Advance>) => void;
-  onAddFunds?: (fund: Partial<FundsReceived>) => void;
-  onAddInvoice?: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
-  onCompleteSite?: (siteId: string, completionDate: Date) => void;
-  supervisor?: any;
-  isAdminView?: boolean;
+  expenses: Expense[];
+  advances: Advance[];
+  fundsReceived: FundsReceived[];
+  invoices: Invoice[];
+  supervisorInvoices: Invoice[];
+  onBack: () => void;
+  onAddExpense: (expense: Partial<Expense>) => Promise<void>;
+  onAddAdvance: (advance: Partial<Advance>) => Promise<void>;
+  onAddFunds: (funds: Partial<FundsReceived>) => Promise<void>;
+  onAddInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
+  onCompleteSite: (siteId: string, completionDate: Date) => Promise<void>;
+  balanceSummary: BalanceSummary;
+  siteSupervisor: { id: string; name: string } | null;
   userRole: UserRole;
 }
 
-const DEBIT_ADVANCE_PURPOSES = [
-  AdvancePurpose.SAFETY_SHOES,
-  AdvancePurpose.TOOLS,
-  AdvancePurpose.OTHER
-];
-
 const SiteDetail: React.FC<SiteDetailProps> = ({
   site,
-  expenses = [],
-  advances = [],
-  fundsReceived = [],
-  invoices = [],
-  supervisorInvoices = [],
-  balanceSummary,
-  siteSupervisor,
+  expenses,
+  advances,
+  fundsReceived,
+  invoices,
+  supervisorInvoices,
   onBack,
   onAddExpense,
   onAddAdvance,
   onAddFunds,
   onAddInvoice,
   onCompleteSite,
-  supervisor,
-  isAdminView,
+  balanceSummary,
+  siteSupervisor,
   userRole
 }) => {
-  const [activeTab, setActiveTab] = useState('summary');
-  const [isMarkingComplete, setIsMarkingComplete] = useState(false);
-  const isMobile = useIsMobile();
-  
+  const { user } = useAuth();
+  const [showFinancialDetails, setShowFinancialDetails] = useState(true);
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
   const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+  const [completionDate, setCompletionDate] = useState<Date | undefined>(new Date());
+  const [isCompletionDialogOpen, setIsCompletionDialogOpen] = useState(false);
 
-  const defaultBalanceSummary: BalanceSummary = {
-    fundsReceived: 0,
-    totalExpenditure: 0,
-    totalAdvances: 0,
-    debitsToWorker: 0,
-    invoicesPaid: 0,
-    pendingInvoices: 0,
-    totalBalance: 0
-  };
+  const siteDuration = site.startDate && site.completionDate 
+    ? Math.ceil((site.completionDate.getTime() - site.startDate.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
 
-  const siteSummary = balanceSummary || defaultBalanceSummary;
+  const formattedStartDate = format(site.startDate, 'dd MMM yyyy');
+  const formattedCompletionDate = site.completionDate ? format(site.completionDate, 'dd MMM yyyy') : 'Ongoing';
 
-  // Calculate total advances excluding debit to worker advances
-  const totalAdvances = advances.reduce((sum, advance) => {
-    if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
-      return sum + (Number(advance.amount) || 0);
-    }
-    return sum;
-  }, 0);
-
-  // Calculate total debit to worker advances
-  const totalDebitToWorker = advances.reduce((sum, advance) => {
-    if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
-      return sum + (Number(advance.amount) || 0);
-    }
-    return sum;
-  }, 0);
-
-  const totalExpenses = siteSummary.totalExpenditure;
-  const totalFundsReceived = siteSummary.fundsReceived;
-  const totalInvoices = siteSummary.invoicesPaid || 0;
-
-  // Calculate current balance
-  const currentBalance = totalFundsReceived - totalExpenses - totalAdvances - totalInvoices;
-
-  const handleMarkComplete = async () => {
+  const handleExpenseSubmit = async (newExpense: Partial<Expense>) => {
     try {
-      const completionDate = new Date();
-      
-      const { error } = await supabase
-        .from('sites')
-        .update({
-          is_completed: true,
-          completion_date: completionDate.toISOString()
-        })
-        .eq('id', site.id);
-        
-      if (error) {
-        console.error('Error marking site as complete:', error);
-        toast.error('Failed to mark site as complete: ' + error.message);
-        return;
-      }
-      
-      toast.success('Site marked as complete successfully');
-      if (onCompleteSite) {
-        onCompleteSite(site.id, completionDate);
-      }
-    } catch (error: any) {
-      console.error('Error in handleMarkComplete:', error);
-      toast.error('Failed to mark site as complete: ' + error.message);
-    } finally {
-      setIsMarkingComplete(false);
+      await onAddExpense({
+        ...newExpense,
+        siteId: site.id,
+      });
+      setIsExpenseFormOpen(false);
+    } catch (error) {
+      console.error('Error submitting expense:', error);
     }
   };
 
-  const handleExpenseSubmit = (expense: Partial<Expense>) => {
-    if (onAddExpense) {
-      onAddExpense(expense);
+  const handleAdvanceSubmit = async (newAdvance: Partial<Advance>) => {
+    try {
+      await onAddAdvance({
+        ...newAdvance,
+        siteId: site.id,
+      });
+      setIsAdvanceFormOpen(false);
+    } catch (error) {
+      console.error('Error submitting advance:', error);
     }
-    setIsExpenseFormOpen(false);
   };
 
-  const handleAdvanceSubmit = (advance: Partial<Advance>) => {
-    if (onAddAdvance) {
-      onAddAdvance(advance);
+  const handleFundsSubmit = async (newFunds: Partial<FundsReceived>) => {
+    try {
+      await onAddFunds({
+        ...newFunds,
+        siteId: site.id,
+      });
+      setIsFundsFormOpen(false);
+    } catch (error) {
+      console.error('Error submitting funds:', error);
     }
-    setIsAdvanceFormOpen(false);
   };
 
-  const handleFundsSubmit = (funds: Partial<FundsReceived>) => {
-    if (onAddFunds) {
-      const fundsWithSiteId = funds.siteId ? funds : {
-        ...funds,
-        siteId: site.id
-      };
-      onAddFunds(fundsWithSiteId);
-    }
-    setIsFundsFormOpen(false);
-  };
-
-  const handleInvoiceSubmit = (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
-    if (onAddInvoice) {
-      onAddInvoice(invoice);
-    }
+  const handleInvoiceSubmit = (newInvoice: Omit<Invoice, 'id' | 'createdAt'>) => {
+    onAddInvoice({
+      ...newInvoice,
+      siteId: site.id,
+    });
     setIsInvoiceFormOpen(false);
   };
 
+  const handleMarkAsComplete = async () => {
+    if (!completionDate) return;
+    
+    try {
+      await onCompleteSite(site.id, completionDate);
+      setIsCompletionDialogOpen(false);
+    } catch (error) {
+      console.error('Error marking site as complete:', error);
+    }
+  };
+
+  // Handle delete functions
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteTransaction(expenseId, user.id);
+      toast.success('Expense deleted successfully');
+      // Refresh the expenses list - update the parent component
+      onAddExpense({ siteId: site.id, isRefresh: true } as Partial<Expense>);
+    } catch (error: any) {
+      console.error('Error deleting expense:', error);
+      toast.error(error.message || 'Failed to delete expense');
+    }
+  };
+
+  const handleDeleteAdvance = async (advanceId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteAdvance(advanceId, user.id);
+      toast.success('Advance deleted successfully');
+      // Refresh the advances list - update the parent component
+      onAddAdvance({ siteId: site.id, isRefresh: true } as Partial<Advance>);
+    } catch (error: any) {
+      console.error('Error deleting advance:', error);
+      toast.error(error.message || 'Failed to delete advance');
+    }
+  };
+
+  const handleDeleteFunds = async (fundsId: string) => {
+    if (!user) return;
+    
+    try {
+      await deleteFundsReceived(fundsId, user.id);
+      toast.success('Funds record deleted successfully');
+      // Refresh the funds list - update the parent component
+      onAddFunds({ siteId: site.id, isRefresh: true } as Partial<FundsReceived>);
+    } catch (error: any) {
+      console.error('Error deleting funds:', error);
+      toast.error(error.message || 'Failed to delete funds record');
+    }
+  };
+
+  // Calculate category distribution for pie chart
+  const getCategoryTotals = () => {
+    const categoryTotals = expenses.reduce((acc, expense) => {
+      const category = expense.category;
+      acc[category] = (acc[category] || 0) + expense.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(categoryTotals).map(([name, value]) => ({
+      name,
+      value,
+    }));
+  };
+
+  const categoryData = getCategoryTotals();
+
+  const isAdmin = userRole === UserRole.ADMIN;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
+        <div className="flex items-center">
+          <Button variant="ghost" size="icon" onClick={onBack} className="mr-2">
+            <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <span className="text-sm font-medium text-muted-foreground">Site Name</span>
-            <h1 className="text-xl md:text-2xl font-bold">{site.name}</h1>
+            <h1 className="text-2xl font-bold flex items-center">
+              {site.name}
+              {site.isCompleted && (
+                <Badge variant="outline" className="ml-2 bg-green-100 text-green-800 hover:bg-green-100">
+                  Completed
+                </Badge>
+              )}
+            </h1>
+            <p className="text-gray-500 flex items-center mt-1">
+              <Building className="h-4 w-4 mr-1" />
+              Job Name: {site.jobName || 'N/A'} | POS #: {site.posNo || 'N/A'}
+            </p>
           </div>
-          {site.isCompleted ? (
-            <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">
-              Completed
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
-              Active
-            </Badge>
-          )}
         </div>
         
-        {!site.isCompleted && (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="text-green-600 border-green-200 hover:bg-green-50 w-full sm:w-auto mt-2 sm:mt-0" 
-            onClick={() => setIsMarkingComplete(true)}
-          >
-            <Check className="mr-2 h-4 w-4" />
-            Mark as Complete
-          </Button>
-        )}
-
-        {isMarkingComplete && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle>Mark Site as Complete?</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p>Are you sure you want to mark this site as complete? This action cannot be undone.</p>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsMarkingComplete(false)}>Cancel</Button>
-                  <Button onClick={handleMarkComplete}>Confirm</Button>
+        {!site.isCompleted && isAdmin && (
+          <Dialog open={isCompletionDialogOpen} onOpenChange={setIsCompletionDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Mark as Completed
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Mark Site as Completed</DialogTitle>
+                <DialogDescription>
+                  This will mark the site as completed and all site activities will be concluded.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Completion Date</p>
+                  <DatePicker date={completionDate} setDate={setCompletionDate} />
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCompletionDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleMarkAsComplete}>Complete Site</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
-
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <CustomCard className="md:col-span-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Job Name</h3>
-              <p className="text-lg font-semibold mt-1">{site.jobName}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">PO Number</h3>
-              <p className="text-lg font-semibold mt-1">{site.posNo}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Start Date</h3>
-              <p className="text-lg font-semibold mt-1">{format(site.startDate, 'dd/MM/yyyy')}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">
-                {site.isCompleted ? 'Completion Date' : 'Est. Completion'}
-              </h3>
-              <p className="text-lg font-semibold mt-1">
-                {site.completionDate ? format(site.completionDate, 'dd/MM/yyyy') : 'Not specified'}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Supervisor</CardTitle>
+            <User className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{siteSupervisor?.name || 'Unassigned'}</div>
+            <p className="text-xs text-muted-foreground mt-1">Assigned supervisor for this site</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Duration</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col">
+              <div className="text-2xl font-bold">
+                {siteDuration ? `${siteDuration} days` : 'Ongoing'}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formattedStartDate} - {formattedCompletionDate}
               </p>
             </div>
-            {siteSupervisor && (
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Supervisor</h3>
-                <p className="text-lg font-semibold mt-1 flex items-center">
-                  <User className="h-4 w-4 mr-1 text-muted-foreground" />
-                  {siteSupervisor.name}
-                </p>
-              </div>
-            )}
-          </div>
-        </CustomCard>
-
-        <BalanceCard balanceData={siteSummary} siteId={site.id} />
-      </div>
-
-      {userRole !== UserRole.VIEWER && !site.isCompleted && (
-        <div className="flex flex-wrap gap-2">
-          <Button 
-            onClick={() => setIsExpenseFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Expense
-          </Button>
-          <Button 
-            onClick={() => setIsAdvanceFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Advance
-          </Button>
-          <Button 
-            onClick={() => setIsFundsFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Funds From HO
-          </Button>
-          <Button 
-            onClick={() => setIsInvoiceFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Invoice
-          </Button>
-        </div>
-      )}
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className={`grid grid-cols-2 ${isMobile ? 'w-full' : 'max-w-md'} mb-4`}>
-          <TabsTrigger value="summary">Summary</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-        </TabsList>
+          </CardContent>
+        </Card>
         
-        <TabsContent value="summary" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CustomCard>
-              <h3 className="text-lg font-medium mb-4">Quick Overview</h3>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Location</CardTitle>
+            <Building className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{site.location || 'N/A'}</div>
+            <p className="text-xs text-muted-foreground mt-1">Site location</p>
+          </CardContent>
+        </Card>
+      </div>
+      
+      <div>
+        <Button 
+          variant="ghost" 
+          className="flex items-center justify-between w-full p-2 mb-4"
+          onClick={() => setShowFinancialDetails(!showFinancialDetails)}
+        >
+          <span className="font-semibold flex items-center">
+            <Wallet className="h-5 w-5 mr-2" />
+            Financial Summary
+          </span>
+          {showFinancialDetails ? (
+            <ChevronUp className="h-5 w-5" />
+          ) : (
+            <ChevronDown className="h-5 w-5" />
+          )}
+        </Button>
+        
+        {showFinancialDetails && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+            <BalanceCard 
+              title="Funds Received"
+              amount={balanceSummary.fundsReceived}
+              icon={<ArrowDownToLine className="h-5 w-5" />}
+              description={`Total funds received: ₹${balanceSummary.fundsReceived.toLocaleString()}`}
+              trend={{
+                value: fundsReceived.length > 0 ? fundsReceived.length : 0,
+                label: 'transactions',
+                direction: 'up'
+              }}
+            />
+            
+            <BalanceCard 
+              title="Total Expenditure"
+              amount={balanceSummary.totalExpenditure}
+              icon={<CreditCard className="h-5 w-5" />}
+              description={`Total expenses: ₹${balanceSummary.totalExpenditure.toLocaleString()}`}
+              trend={{
+                value: expenses.length > 0 ? expenses.length : 0,
+                label: 'transactions',
+                direction: balanceSummary.totalExpenditure > 0 ? 'up' : 'neutral'
+              }}
+            />
+            
+            <BalanceCard 
+              title="Total Advances"
+              amount={balanceSummary.totalAdvances}
+              icon={<Banknote className="h-5 w-5" />}
+              description={`Total advances: ₹${balanceSummary.totalAdvances.toLocaleString()}`}
+              trend={{
+                value: advances.length > 0 ? advances.length : 0,
+                label: 'transactions',
+                direction: balanceSummary.totalAdvances > 0 ? 'up' : 'neutral'
+              }}
+            />
+            
+            <BalanceCard 
+              title="Balance Remaining"
+              amount={balanceSummary.totalBalance}
+              icon={<CircleDollarSign className="h-5 w-5" />}
+              description={`Available balance: ₹${balanceSummary.totalBalance.toLocaleString()}`}
+              trend={{
+                value: Math.round((balanceSummary.totalBalance / balanceSummary.fundsReceived) * 100) || 0,
+                label: '% of total funds',
+                direction: balanceSummary.totalBalance > 0 ? 'up' : 'down'
+              }}
+            />
+          </div>
+        )}
+      </div>
+      
+      {/* Expenses by Category */}
+      {expenses.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Expense Categories</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Expenses</span>
-                  <span className="font-medium">₹{totalExpenses.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Advances</span>
-                  <span className="font-medium">₹{totalAdvances.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Invoices</span>
-                  <span className="font-medium">₹{totalInvoices.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Debits to Worker</span>
-                  <span className="font-medium">₹{totalDebitToWorker.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Funds Received</span>
-                  <span className="font-medium">₹{totalFundsReceived.toLocaleString()}</span>
-                </div>
-                <div className="pt-2 border-t">
-                  <div className="flex justify-between items-center font-medium">
-                    <span>Current Balance</span>
-                    <span className={currentBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ₹{currentBalance.toLocaleString()}
+                {/* Add category distribution visualization */}
+                {Object.entries(expenses.reduce((acc, expense) => {
+                  const category = expense.category;
+                  acc[category] = (acc[category] || 0) + expense.amount;
+                  return acc;
+                }, {} as Record<string, number>)).map(([category, amount]) => {
+                  const percentage = Math.round((amount / balanceSummary.totalExpenditure) * 100);
+                  return (
+                    <div key={category} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span>{category}</span>
+                        <span className="font-medium">₹{amount.toLocaleString()} ({percentage}%)</span>
+                      </div>
+                      <Progress value={percentage} className="h-2" />
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Site Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Expenses</span>
+                    <span className="font-medium">
+                      ₹{balanceSummary.totalExpenditure.toLocaleString()} 
+                      ({Math.round((balanceSummary.totalExpenditure / balanceSummary.fundsReceived) * 100) || 0}%)
                     </span>
                   </div>
+                  <Progress 
+                    value={Math.round((balanceSummary.totalExpenditure / balanceSummary.fundsReceived) * 100) || 0} 
+                    className="h-2" 
+                  />
                 </div>
-              </div>
-            </CustomCard>
-            
-            <CustomCard>
-              <h3 className="text-lg font-medium mb-4">Activity Summary</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Expense Entries</span>
-                  <span className="font-medium">{expenses.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Advance Entries</span>
-                  <span className="font-medium">{advances.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Invoice Entries</span>
-                  <span className="font-medium">{invoices.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Funds Received Entries</span>
-                  <span className="font-medium">{fundsReceived.length}</span>
-                </div>
-                <div className="pt-2 border-t">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Site Status</span>
-                    <Badge variant="outline" className={site.isCompleted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
-                      {site.isCompleted ? 'Completed' : 'Active'}
-                    </Badge>
+                
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Advances</span>
+                    <span className="font-medium">
+                      ₹{balanceSummary.totalAdvances.toLocaleString()}
+                      ({Math.round((balanceSummary.totalAdvances / balanceSummary.fundsReceived) * 100) || 0}%)
+                    </span>
                   </div>
+                  <Progress 
+                    value={Math.round((balanceSummary.totalAdvances / balanceSummary.fundsReceived) * 100) || 0} 
+                    className="h-2" 
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Invoices Paid</span>
+                    <span className="font-medium">
+                      ₹{balanceSummary.invoicesPaid.toLocaleString()}
+                      ({Math.round((balanceSummary.invoicesPaid / balanceSummary.fundsReceived) * 100) || 0}%)
+                    </span>
+                  </div>
+                  <Progress 
+                    value={Math.round((balanceSummary.invoicesPaid / balanceSummary.fundsReceived) * 100) || 0} 
+                    className="h-2" 
+                  />
+                </div>
+                
+                <Separator className="my-2" />
+                
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Balance</span>
+                    <span className="font-bold text-green-600">
+                      ₹{balanceSummary.totalBalance.toLocaleString()}
+                      ({Math.round((balanceSummary.totalBalance / balanceSummary.fundsReceived) * 100) || 0}%)
+                    </span>
+                  </div>
+                  <Progress 
+                    value={Math.round((balanceSummary.totalBalance / balanceSummary.fundsReceived) * 100) || 0} 
+                    className="h-2 bg-gray-100" 
+                  />
                 </div>
               </div>
-            </CustomCard>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="transactions">
-          <SiteDetailTransactions 
-            siteId={site.id}
-            userRole={userRole}
-            isAdminView={isAdminView}
-            expensesCount={expenses.length}
-            advancesCount={advances.length}
-            fundsReceivedCount={fundsReceived.length}
-            site={site}
-            supervisor={supervisor}
-            expenses={expenses}
-            advances={advances}
-            fundsReceived={fundsReceived}
-            onTransactionsUpdate={onCompleteSite ? () => {} : undefined}
-          />
-        </TabsContent>
-      </Tabs>
-
-      {isExpenseFormOpen && (
-        <ExpenseForm
-          isOpen={isExpenseFormOpen}
-          onClose={() => setIsExpenseFormOpen(false)}
-          onSubmit={handleExpenseSubmit}
-          siteId={site.id}
-        />
+            </CardContent>
+          </Card>
+        </div>
       )}
       
-      {isAdvanceFormOpen && (
-        <AdvanceForm
-          isOpen={isAdvanceFormOpen}
-          onClose={() => setIsAdvanceFormOpen(false)}
-          onSubmit={handleAdvanceSubmit}
-          siteId={site.id}
+      <div className="bg-white rounded-md border p-4">
+        <h2 className="text-xl font-bold mb-4">Transactions</h2>
+        <SiteDetailTransactions 
+          expenses={expenses}
+          advances={advances}
+          fundsReceived={fundsReceived}
+          invoices={invoices}
+          userRole={userRole}
+          onAddExpense={() => setIsExpenseFormOpen(true)}
+          onAddAdvance={() => setIsAdvanceFormOpen(true)}
+          onAddFunds={() => setIsFundsFormOpen(true)}
+          onDeleteExpense={isAdmin ? handleDeleteExpense : undefined}
+          onDeleteAdvance={isAdmin ? handleDeleteAdvance : undefined}
+          onDeleteFundsReceived={isAdmin ? handleDeleteFunds : undefined}
         />
-      )}
+      </div>
       
-      {isFundsFormOpen && (
-        <FundsReceivedForm
-          isOpen={isFundsFormOpen}
-          onClose={() => setIsFundsFormOpen(false)}
-          onSubmit={handleFundsSubmit}
-          siteId={site.id}
-        />
-      )}
+      <ExpenseForm 
+        isOpen={isExpenseFormOpen}
+        onClose={() => setIsExpenseFormOpen(false)}
+        onSubmit={handleExpenseSubmit}
+        siteId={site.id}
+      />
       
-      {isInvoiceFormOpen && (
-        <InvoiceForm
-          isOpen={isInvoiceFormOpen}
-          onClose={() => setIsInvoiceFormOpen(false)}
-          onSubmit={handleInvoiceSubmit}
-          siteId={site.id}
-        />
-      )}
+      <AdvanceForm 
+        isOpen={isAdvanceFormOpen}
+        onClose={() => setIsAdvanceFormOpen(false)}
+        onSubmit={handleAdvanceSubmit}
+        siteId={site.id}
+      />
+      
+      <FundsReceivedForm 
+        isOpen={isFundsFormOpen}
+        onClose={() => setIsFundsFormOpen(false)}
+        onSubmit={handleFundsSubmit}
+        siteId={site.id}
+      />
+      
+      <InvoiceForm 
+        isOpen={isInvoiceFormOpen}
+        onClose={() => setIsInvoiceFormOpen(false)}
+        onSubmit={handleInvoiceSubmit}
+        siteId={site.id}
+      />
     </div>
   );
 };

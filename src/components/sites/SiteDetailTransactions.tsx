@@ -1,455 +1,374 @@
 
-import React, { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card } from '@/components/ui/card';
-import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem, Site, RecipientType } from '@/lib/types';
-import CustomCard from '@/components/ui/CustomCard';
-import InvoiceDetails from '@/components/invoices/InvoiceDetails';
-import { fetchSiteInvoices } from '@/integrations/supabase/client';
+import React, { useState } from 'react';
+import { Expense, Advance, FundsReceived, Invoice, ExpenseCategory, AdvancePurpose, RecipientType, UserRole } from '@/lib/types';
 import { format } from 'date-fns';
-import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Edit, Trash2, Plus, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 
 interface SiteDetailTransactionsProps {
-  siteId: string;
-  expensesCount?: number;
-  advancesCount?: number;
-  fundsReceivedCount?: number;
+  expenses: Expense[];
+  advances: Advance[];
+  fundsReceived: FundsReceived[];
+  invoices: Invoice[];
   userRole: UserRole;
-  isAdminView?: boolean;
-  site?: Site;
-  supervisor?: any;
-  expenses?: Expense[];
-  advances?: Advance[];
-  fundsReceived?: FundsReceived[];
-  onTransactionsUpdate?: () => void;
+  onAddExpense: () => void;
+  onAddAdvance: () => void;
+  onAddFunds: () => void;
+  onDeleteExpense?: (id: string) => void;
+  onDeleteAdvance?: (id: string) => void;
+  onDeleteFundsReceived?: (id: string) => void;
+  onEditExpense?: (expense: Expense) => void;
+  onEditAdvance?: (advance: Advance) => void;
+  onEditFundsReceived?: (funds: FundsReceived) => void;
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
-  siteId,
-  expensesCount = 0,
-  advancesCount = 0,
-  fundsReceivedCount = 0,
+  expenses,
+  advances,
+  fundsReceived,
+  invoices,
   userRole,
-  isAdminView,
-  site,
-  supervisor,
-  expenses = [],
-  advances = [],
-  fundsReceived = [],
-  onTransactionsUpdate
+  onAddExpense,
+  onAddAdvance,
+  onAddFunds,
+  onDeleteExpense,
+  onDeleteAdvance,
+  onDeleteFundsReceived,
+  onEditExpense,
+  onEditAdvance,
+  onEditFundsReceived
 }) => {
-  console.info('SiteDetailTransactions props:', { 
-    siteId, 
-    expensesCount, 
-    advancesCount, 
-    fundsReceivedCount, 
-    userRole, 
-    isAdminView,
-    site,
-    supervisor
-  });
+  const [activeTab, setActiveTab] = useState('expenses');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const [localExpenses, setLocalExpenses] = useState<Expense[]>(expenses);
-  const [localAdvances, setLocalAdvances] = useState<Advance[]>(advances);
-  const [localFundsReceived, setLocalFundsReceived] = useState<FundsReceived[]>(fundsReceived);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState({
-    expenses: false,
-    advances: false,
-    fundsReceived: false,
-    invoices: false,
-  });
-  const [error, setError] = useState<string | null>(null);
+  const isAdmin = userRole === UserRole.ADMIN;
 
-  // Ensure advances are not duplicated by setting them only once on initial render
-  useEffect(() => {
-    setLocalAdvances(advances);
-  }, [advances]);
+  const filteredExpenses = expenses.filter(expense => 
+    expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    expense.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  // Update local state when props change
-  useEffect(() => {
-    setLocalExpenses(expenses);
-    setLocalFundsReceived(fundsReceived);
-  }, [expenses, fundsReceived]);
+  const filteredAdvances = advances.filter(advance => 
+    advance.recipientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    advance.purpose.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  useEffect(() => {
-    const loadInvoices = async () => {
-      if (!siteId) {
-        console.error('No siteId provided to load invoices');
-        return;
-      }
-      
-      setIsLoading(prev => ({ ...prev, invoices: true }));
-      setError(null);
-      
-      try {
-        console.log('Fetching invoices for site:', siteId);
-        const invoicesData = await fetchSiteInvoices(siteId);
-        console.log('Invoices data:', invoicesData);
-        setInvoices(invoicesData as Invoice[]);
-      } catch (error) {
-        console.error('Error loading invoices:', error);
-        setError('Failed to load invoices. Please try again.');
-      } finally {
-        setIsLoading(prev => ({ ...prev, invoices: false }));
-      }
-    };
-    
-    loadInvoices();
-  }, [siteId]);
+  const filteredFunds = fundsReceived.filter(fund => 
+    fund.reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    fund.method?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'paid':
-        return 'text-green-600 bg-green-100';
-      case 'pending':
-        return 'text-orange-600 bg-orange-100';
-      case 'rejected':
-        return 'text-red-600 bg-red-100';
-      default:
-        return 'text-gray-600 bg-gray-100';
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  };
+
+  const handleDeleteExpense = (id: string) => {
+    if (onDeleteExpense) {
+      onDeleteExpense(id);
+    } else {
+      console.log('Delete expense handler not provided for ID:', id);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'paid':
-        return <Check className="h-4 w-4" />;
-      case 'pending':
-        return <Clock className="h-4 w-4" />;
-      default:
-        return null;
+  const handleDeleteAdvance = (id: string) => {
+    if (onDeleteAdvance) {
+      onDeleteAdvance(id);
+    } else {
+      console.log('Delete advance handler not provided for ID:', id);
     }
   };
 
-  const getRecipientTypeIcon = (type: RecipientType) => {
-    switch (type) {
-      case RecipientType.WORKER:
-        return <User className="h-4 w-4 mr-1 text-muted-foreground" />;
-      case RecipientType.SUBCONTRACTOR:
-        return <Briefcase className="h-4 w-4 mr-1 text-muted-foreground" />;
-      case RecipientType.SUPERVISOR:
-        return <UserCog className="h-4 w-4 mr-1 text-muted-foreground" />;
-      default:
-        return null;
+  const handleDeleteFunds = (id: string) => {
+    if (onDeleteFundsReceived) {
+      onDeleteFundsReceived(id);
+    } else {
+      console.log('Delete funds handler not provided for ID:', id);
     }
   };
-
-  const openInvoiceDetails = (invoice: Invoice) => {
-    setSelectedInvoice(invoice);
-    setIsDetailsOpen(true);
-  };
-
-  const closeInvoiceDetails = () => {
-    setIsDetailsOpen(false);
-    setSelectedInvoice(null);
-  };
-
-  const renderExpensesTab = () => (
-    <div className="space-y-4">
-      {isLoading.expenses ? (
-        <p className="text-center text-muted-foreground py-8">Loading expenses...</p>
-      ) : error ? (
-        <p className="text-center text-red-500 py-8">{error}</p>
-      ) : localExpenses.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">No expenses found for this site.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Description</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Category</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {localExpenses.map((expense) => (
-                <tr key={expense.id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {format(new Date(expense.date), 'dd MMM yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    {expense.description}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
-                      {expense.category}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      <IndianRupee className="h-3 w-3 mr-1" />
-                      {expense.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(expense.status)}`}>
-                      {getStatusIcon(expense.status)}
-                      <span className="ml-1 capitalize">{expense.status}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-
-  const canEditDelete = userRole === UserRole.ADMIN;
-
-  const renderAdvancesTab = () => (
-    <div className="space-y-4">
-      {isLoading.advances ? (
-        <p className="text-center text-muted-foreground py-8">Loading advances...</p>
-      ) : error ? (
-        <p className="text-center text-red-500 py-8">{error}</p>
-      ) : localAdvances.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">No advances found for this site.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Recipient</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Type</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Purpose</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                {canEditDelete && (
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {localAdvances.map((advance) => (
-                <tr key={advance.id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {format(new Date(advance.date), 'dd MMM yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      {getRecipientTypeIcon(advance.recipientType)}
-                      {advance.recipientName}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
-                      {advance.recipientType}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className="capitalize">{advance.purpose.replace('_', ' ')}</span>
-                    {advance.remarks && advance.remarks.length > 0 && (
-                      <span className="block text-xs text-muted-foreground mt-1">
-                        Note: {advance.remarks}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      <IndianRupee className="h-3 w-3 mr-1" />
-                      {advance.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(advance.status)}`}>
-                      {getStatusIcon(advance.status)}
-                      <span className="ml-1 capitalize">{advance.status}</span>
-                    </div>
-                  </td>
-                  {canEditDelete && (
-                    <td className="px-4 py-3 text-sm">
-                      <button
-                        className="text-primary hover:text-primary/80 transition-colors flex items-center"
-                      >
-                        View <ArrowUpRight className="h-3 w-3 ml-1" />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderFundsReceivedTab = () => (
-    <div className="space-y-4">
-      {isLoading.fundsReceived ? (
-        <p className="text-center text-muted-foreground py-8">Loading funds received...</p>
-      ) : error ? (
-        <p className="text-center text-red-500 py-8">{error}</p>
-      ) : localFundsReceived.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">No funds received for this site.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {localFundsReceived.map((fund) => (
-                <tr key={fund.id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {format(new Date(fund.date), 'dd MMM yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      <IndianRupee className="h-3 w-3 mr-1" />
-                      {fund.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {fund.method || 'N/A'}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {fund.reference || 'N/A'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderInvoicesTab = () => (
-    <div className="space-y-4">
-      {isLoading.invoices ? (
-        <p className="text-center text-muted-foreground py-8">Loading invoices...</p>
-      ) : error ? (
-        <p className="text-center text-red-500 py-8">{error}</p>
-      ) : invoices.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">No invoices found for this site.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Invoice #</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Vendor</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                {canEditDelete && (
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {format(new Date(invoice.date), 'dd MMM yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    {invoice.invoiceNumber || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {invoice.vendorName || invoice.partyName}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      <IndianRupee className="h-3 w-3 mr-1" />
-                      {(invoice.amount || invoice.netAmount)?.toLocaleString() || '0'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status || invoice.paymentStatus)}`}>
-                      {getStatusIcon(invoice.status || invoice.paymentStatus)}
-                      <span className="ml-1 capitalize">{invoice.status || invoice.paymentStatus}</span>
-                    </div>
-                  </td>
-                  {canEditDelete && (
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex space-x-2">
-                        <button
-                          className="text-primary hover:text-primary/80 transition-colors flex items-center"
-                          onClick={() => openInvoiceDetails(invoice)}
-                        >
-                          View <ArrowUpRight className="h-3 w-3 ml-1" />
-                        </button>
-                        <button className="text-blue-600 hover:text-blue-800">
-                          Edit
-                        </button>
-                        <button className="text-red-600 hover:text-red-800">
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      
-      {isDetailsOpen && selectedInvoice && (
-        <InvoiceDetails
-          invoice={selectedInvoice}
-          isOpen={isDetailsOpen}
-          onClose={closeInvoiceDetails}
-        />
-      )}
-    </div>
-  );
-
-  // Add console logs to debug the component rendering
-  console.log('Rendering SiteDetailTransactions with data:', {
-    expenses: localExpenses.length,
-    advances: localAdvances.length,
-    funds: localFundsReceived.length,
-    invoices: invoices.length,
-    loading: isLoading,
-    error
-  });
 
   return (
-    <CustomCard className="mt-6">
-      <Tabs defaultValue="expenses">
-        <TabsList className="grid grid-cols-4 mb-4">
-          <TabsTrigger value="expenses" className="text-sm">
-            Expenses
-            {expensesCount > 0 && <span className="ml-1 text-xs">({expensesCount})</span>}
-          </TabsTrigger>
-          <TabsTrigger value="advances" className="text-sm">
-            Advances
-            {advancesCount > 0 && <span className="ml-1 text-xs">({advancesCount})</span>}
-          </TabsTrigger>
-          <TabsTrigger value="funds" className="text-sm">
-            Funds Received
-            {fundsReceivedCount > 0 && <span className="ml-1 text-xs">({fundsReceivedCount})</span>}
-          </TabsTrigger>
-          <TabsTrigger value="invoices" className="text-sm">
-            Invoices
-            {invoices.length > 0 && <span className="ml-1 text-xs">({invoices.length})</span>}
-          </TabsTrigger>
-        </TabsList>
+    <div className="w-full mt-6">
+      <Tabs defaultValue="expenses" onValueChange={setActiveTab} value={activeTab}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+          <TabsList className="h-10">
+            <TabsTrigger value="expenses" className="text-sm">Expenses</TabsTrigger>
+            <TabsTrigger value="advances" className="text-sm">Advances</TabsTrigger>
+            <TabsTrigger value="funds" className="text-sm">Funds Received</TabsTrigger>
+            <TabsTrigger value="invoices" className="text-sm">Invoices</TabsTrigger>
+          </TabsList>
+          
+          <div className="flex items-center gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder={`Search ${activeTab}...`}
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className="w-full pl-8"
+              />
+            </div>
+            
+            {activeTab === 'expenses' && (
+              <Button size="sm" onClick={onAddExpense}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
+            )}
+            {activeTab === 'advances' && (
+              <Button size="sm" onClick={onAddAdvance}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
+            )}
+            {activeTab === 'funds' && (
+              <Button size="sm" onClick={onAddFunds}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
+            )}
+          </div>
+        </div>
         
-        <TabsContent value="expenses">{renderExpensesTab()}</TabsContent>
-        <TabsContent value="advances">{renderAdvancesTab()}</TabsContent>
-        <TabsContent value="funds">{renderFundsReceivedTab()}</TabsContent>
-        <TabsContent value="invoices">{renderInvoicesTab()}</TabsContent>
+        <TabsContent value="expenses" className="mt-2">
+          <div className="bg-white rounded-md border">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Description</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Category</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Amount</th>
+                    {isAdmin && (
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Actions</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredExpenses.length > 0 ? (
+                    filteredExpenses.map((expense) => (
+                      <tr key={expense.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {format(expense.date, 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{expense.description}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                            {expense.category}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium">₹{expense.amount.toLocaleString()}</td>
+                        {isAdmin && (
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              {onEditExpense && (
+                                <Button variant="ghost" size="icon" onClick={() => onEditExpense(expense)}>
+                                  <Edit className="h-4 w-4 text-gray-500" />
+                                </Button>
+                              )}
+                              {onDeleteExpense && (
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteExpense(expense.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={isAdmin ? 5 : 4} className="px-4 py-6 text-center text-sm text-gray-500">
+                        No expenses found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="advances" className="mt-2">
+          <div className="bg-white rounded-md border">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Recipient</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Type</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Purpose</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Amount</th>
+                    {isAdmin && (
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Actions</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAdvances.length > 0 ? (
+                    filteredAdvances.map((advance) => (
+                      <tr key={advance.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {format(advance.date, 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{advance.recipientName}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                            {advance.recipientType}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{advance.purpose}</td>
+                        <td className="px-4 py-3 text-sm font-medium">₹{advance.amount.toLocaleString()}</td>
+                        {isAdmin && (
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              {onEditAdvance && (
+                                <Button variant="ghost" size="icon" onClick={() => onEditAdvance(advance)}>
+                                  <Edit className="h-4 w-4 text-gray-500" />
+                                </Button>
+                              )}
+                              {onDeleteAdvance && (
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteAdvance(advance.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={isAdmin ? 6 : 5} className="px-4 py-6 text-center text-sm text-gray-500">
+                        No advances found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="funds" className="mt-2">
+          <div className="bg-white rounded-md border">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Reference</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Method</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Amount</th>
+                    {isAdmin && (
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Actions</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFunds.length > 0 ? (
+                    filteredFunds.map((fund) => (
+                      <tr key={fund.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {format(fund.date, 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{fund.reference || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {fund.method ? (
+                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                              {fund.method}
+                            </span>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium">₹{fund.amount.toLocaleString()}</td>
+                        {isAdmin && (
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              {onEditFundsReceived && (
+                                <Button variant="ghost" size="icon" onClick={() => onEditFundsReceived(fund)}>
+                                  <Edit className="h-4 w-4 text-gray-500" />
+                                </Button>
+                              )}
+                              {onDeleteFundsReceived && (
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteFunds(fund.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={isAdmin ? 5 : 4} className="px-4 py-6 text-center text-sm text-gray-500">
+                        No funds received found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="invoices" className="mt-2">
+          <div className="bg-white rounded-md border">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Invoice #</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Vendor</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Material</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Amount</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.length > 0 ? (
+                    invoices.map((invoice) => (
+                      <tr key={invoice.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {format(invoice.date, 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{invoice.invoiceNumber || invoice.id.slice(0, 8)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{invoice.partyName}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{invoice.material}</td>
+                        <td className="px-4 py-3 text-sm font-medium">₹{invoice.netAmount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            invoice.paymentStatus === 'paid' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {invoice.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
+                        No invoices found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </TabsContent>
       </Tabs>
-    </CustomCard>
+    </div>
   );
 };
 

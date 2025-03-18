@@ -10,8 +10,8 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Fix type instantiation by specifying the type parameter explicitly
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Create the supabase client - use any instead of explicit type to avoid excessive type instantiation
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 // Function to calculate total paid invoices for a site
 export const calculatePaidInvoicesTotalForSite = async (siteId: string): Promise<number> => {
@@ -61,11 +61,8 @@ export const fetchSiteInvoices = async (siteId: string) => {
         let materialItems: MaterialItem[] = [];
         if (invoice.material_items) {
           try {
-            // Handle case where it might be a string or already parsed JSON
             if (typeof invoice.material_items === 'string') {
-              const parsedItems = JSON.parse(invoice.material_items);
-              materialItems = Array.isArray(parsedItems) ? 
-                parsedItems.map(item => ensureMaterialItemProperties(item)) : [];
+              materialItems = JSON.parse(invoice.material_items).map(item => ensureMaterialItemProperties(item));
             } else if (Array.isArray(invoice.material_items)) {
               materialItems = invoice.material_items.map(item => ensureMaterialItemProperties(item));
             } else if (typeof invoice.material_items === 'object') {
@@ -85,16 +82,16 @@ export const fetchSiteInvoices = async (siteId: string) => {
         
         if (invoice.bank_details) {
           try {
-            // Handle case where it might be a string or already parsed JSON
             if (typeof invoice.bank_details === 'string') {
               bankDetails = JSON.parse(invoice.bank_details);
-            } else if (typeof invoice.bank_details === 'object') {
+            } else if (typeof invoice.bank_details === 'object' && invoice.bank_details !== null) {
+              const bd = invoice.bank_details as any;
               bankDetails = {
-                bankName: invoice.bank_details.bankName || '',
-                accountNumber: invoice.bank_details.accountNumber || '',
-                ifscCode: invoice.bank_details.ifscCode || '',
-                email: invoice.bank_details.email,
-                mobile: invoice.bank_details.mobile
+                bankName: bd.bankName || '',
+                accountNumber: bd.accountNumber || '',
+                ifscCode: bd.ifscCode || '',
+                email: bd.email,
+                mobile: bd.mobile
               };
             }
           } catch (e) {
@@ -163,12 +160,12 @@ export const fetchSiteInvoices = async (siteId: string) => {
 // Helper function to ensure a JSON object has all MaterialItem properties
 function ensureMaterialItemProperties(item: any): MaterialItem {
   return {
-    id: item.id || String(Date.now()),
-    material: item.material || '',
-    quantity: typeof item.quantity === 'number' ? item.quantity : null,
-    rate: typeof item.rate === 'number' ? item.rate : null,
-    gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
-    amount: typeof item.amount === 'number' ? item.amount : null
+    id: item?.id || String(Date.now()),
+    material: item?.material || '',
+    quantity: typeof item?.quantity === 'number' ? item.quantity : null,
+    rate: typeof item?.rate === 'number' ? item.rate : null,
+    gstPercentage: typeof item?.gstPercentage === 'number' ? item.gstPercentage : null,
+    amount: typeof item?.amount === 'number' ? item.amount : null
   };
 }
 
@@ -248,6 +245,82 @@ export const updateTransaction = async (transactionId: string, updates: Database
     
   if (error) {
     console.error('Error updating transaction:', error);
+    throw error;
+  }
+};
+
+// Function to delete an advance with role check
+export const deleteAdvance = async (advanceId: string, userId: string) => {
+  const isAdmin = await checkAdminRole(userId);
+  
+  if (!isAdmin) {
+    throw new Error('You do not have permission to delete advances. Admin access required.');
+  }
+  
+  const { error } = await supabase
+    .from('advances')
+    .delete()
+    .eq('id', advanceId);
+    
+  if (error) {
+    console.error('Error deleting advance:', error);
+    throw error;
+  }
+};
+
+// Function to update an advance with role check
+export const updateAdvance = async (advanceId: string, updates: Database['public']['Tables']['advances']['Update'], userId: string) => {
+  const isAdmin = await checkAdminRole(userId);
+  
+  if (!isAdmin) {
+    throw new Error('You do not have permission to update advances. Admin access required.');
+  }
+  
+  const { error } = await supabase
+    .from('advances')
+    .update(updates)
+    .eq('id', advanceId);
+    
+  if (error) {
+    console.error('Error updating advance:', error);
+    throw error;
+  }
+};
+
+// Function to delete funds received with role check
+export const deleteFundsReceived = async (fundsId: string, userId: string) => {
+  const isAdmin = await checkAdminRole(userId);
+  
+  if (!isAdmin) {
+    throw new Error('You do not have permission to delete funds. Admin access required.');
+  }
+  
+  const { error } = await supabase
+    .from('funds_received')
+    .delete()
+    .eq('id', fundsId);
+    
+  if (error) {
+    console.error('Error deleting funds received:', error);
+    throw error;
+  }
+};
+
+// Function to update funds received with role check
+export const updateFundsReceived = async (fundsId: string, updates: Database['public']['Tables']['funds_received']['Update'], userId: string) => {
+  const isAdmin = await checkAdminRole(userId);
+  
+  if (!isAdmin) {
+    throw new Error('You do not have permission to update funds. Admin access required.');
+  }
+  
+  const { error } = await supabase
+    .from('funds_received')
+    .update(updates)
+    .eq('id', fundsId);
+    
+  if (error) {
+    console.error('Error updating funds received:', error);
     throw error;
   }
 };

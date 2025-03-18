@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -132,63 +131,21 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       if (isSubmitting) return;
       setIsSubmitting(true);
       
-      console.log('Submitting advance with values:', values);
-      console.log('Site ID:', siteId);
-      console.log('User ID:', user?.id);
-      
-      // Insert into Supabase advances table
       const advanceData = {
-        site_id: siteId,
-        date: values.date.toISOString(),
-        recipient_name: values.recipientName,
-        recipient_type: values.recipientType,
+        siteId,
+        date: values.date,
+        recipientName: values.recipientName,
+        recipientType: values.recipientType,
         purpose: values.purpose,
         amount: values.amount,
         remarks: values.remarks || "",
-        status: ApprovalStatus.PENDING,
-        created_by: user?.id || "",
-        created_at: new Date().toISOString(),
       };
       
-      console.log('Advance data to insert:', advanceData);
-      
-      const { data, error } = await supabase
-        .from('advances')
-        .insert([advanceData])
-        .select();
-      
-      if (error) {
-        console.error('Error creating advance:', error);
-        toast.error('Failed to create advance: ' + error.message);
-        return;
-      }
-      
-      console.log('Advance created successfully:', data);
-      
-      if (data && data.length > 0) {
-        const firstRow = data[0];
-        const advanceWithId: Partial<Advance> = {
-          id: firstRow.id,
-          date: new Date(firstRow.date),
-          recipientName: firstRow.recipient_name,
-          recipientType: firstRow.recipient_type as RecipientType,
-          purpose: firstRow.purpose as AdvancePurpose,
-          amount: Number(firstRow.amount),
-          remarks: firstRow.remarks,
-          status: firstRow.status as ApprovalStatus,
-          createdBy: firstRow.created_by,
-          createdAt: new Date(firstRow.created_at),
-          siteId: firstRow.site_id,
-        };
-        
-        onSubmit(advanceWithId);
-        form.reset();
-        onClose();
-        toast.success("Advance added successfully");
-      }
-    } catch (error: any) {
-      console.error('Submission error:', error);
-      toast.error('An error occurred while submitting the advance');
+      onSubmit(advanceData);
+      onClose();
+    } catch (error) {
+      console.error('Error submitting advance:', error);
+      toast.error('Failed to submit advance');
     } finally {
       setIsSubmitting(false);
     }

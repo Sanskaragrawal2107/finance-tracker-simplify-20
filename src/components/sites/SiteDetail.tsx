@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User } from 'lucide-react';
@@ -34,7 +33,6 @@ interface SiteDetailProps {
   userRole: UserRole;
 }
 
-// Define DEBIT_ADVANCE_PURPOSES here for consistency
 const DEBIT_ADVANCE_PURPOSES = [
   AdvancePurpose.SAFETY_SHOES,
   AdvancePurpose.TOOLS,
@@ -64,7 +62,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
   const isMobile = useIsMobile();
 
-  // Create a default balanceSummary if none is provided
   const defaultBalanceSummary: BalanceSummary = {
     fundsReceived: 0,
     totalExpenditure: 0,
@@ -75,21 +72,18 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     totalBalance: 0
   };
 
-  // Use provided balanceSummary or default
   const siteSummary = balanceSummary || defaultBalanceSummary;
 
-  // Calculate these from the passed balanceSummary to ensure consistent calculation
   const totalExpenses = siteSummary.totalExpenditure;
   const totalAdvances = siteSummary.totalAdvances || 0;
   const totalDebitToWorker = siteSummary.debitsToWorker || 0;
   const totalFundsReceived = siteSummary.fundsReceived;
   const totalInvoices = siteSummary.invoicesPaid || 0;
-  
+
   const handleMarkComplete = async () => {
     try {
       const completionDate = new Date();
       
-      // Update the site in Supabase
       const { error } = await supabase
         .from('sites')
         .update({
@@ -115,7 +109,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       setIsMarkingComplete(false);
     }
   };
-  
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

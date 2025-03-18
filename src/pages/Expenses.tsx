@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
@@ -88,6 +89,8 @@ const Expenses: React.FC = () => {
           startDate: new Date(site.start_date),
           completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
           supervisorId: site.supervisor_id,
+          supervisor: site.supervisor_id ? 
+            (supervisors.find(s => s.id === site.supervisor_id)?.name || 'Unknown') : 'Unassigned',
           createdAt: new Date(site.created_at),
           isCompleted: site.is_completed,
           funds: site.funds || 0,
@@ -684,6 +687,7 @@ const Expenses: React.FC = () => {
             onCompleteSite={handleCompleteSite}
             balanceSummary={calculateSiteFinancials(selectedSite.id)}
             siteSupervisor={siteSupervisor}
+            userRole={user?.role || UserRole.VIEWER}
           />
         </div>
       ) : (

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { IndianRupee, RefreshCw } from 'lucide-react';
@@ -21,7 +20,6 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   const [localBalanceData, setLocalBalanceData] = useState(balanceData);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Refresh invoice data from Supabase
   const refreshInvoiceData = async () => {
     if (!siteId) return;
     
@@ -30,7 +28,6 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
       const invoicesPaid = await calculatePaidInvoicesTotalForSite(siteId);
       console.log("Refreshed invoices paid amount:", invoicesPaid);
       
-      // Update the local balance data with the fresh invoice amount
       setLocalBalanceData(prev => ({
         ...prev,
         invoicesPaid: invoicesPaid
@@ -42,19 +39,16 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
     }
   };
   
-  // Initial data fetch
   useEffect(() => {
     if (siteId) {
       refreshInvoiceData();
     }
   }, [siteId]);
   
-  // Update local state when props change
   useEffect(() => {
     setLocalBalanceData(balanceData);
   }, [balanceData]);
 
-  // Ensure all properties have default values to prevent TypeScript errors
   const safeBalanceData = {
     fundsReceived: localBalanceData.fundsReceived || 0,
     totalExpenditure: localBalanceData.totalExpenditure || 0,

@@ -59,7 +59,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     invoices: false,
   });
 
-  // Load site invoices
   useEffect(() => {
     const loadInvoices = async () => {
       if (!siteId) return;
@@ -68,7 +67,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       
       try {
         const invoicesData = await fetchSiteInvoices(siteId);
-        // We need to cast this directly to Invoice[] since the function is now returning the correct type
         setInvoices(invoicesData as Invoice[]);
       } catch (error) {
         console.error('Error loading invoices:', error);
@@ -80,7 +78,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     loadInvoices();
   }, [siteId]);
 
-  // Helper function to get status color
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'paid':
@@ -94,7 +91,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     }
   };
 
-  // Helper function to get status icon
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
       case 'paid':
@@ -106,19 +102,16 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     }
   };
 
-  // Open invoice details
   const openInvoiceDetails = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setIsDetailsOpen(true);
   };
 
-  // Close invoice details
   const closeInvoiceDetails = () => {
     setIsDetailsOpen(false);
     setSelectedInvoice(null);
   };
 
-  // Function to render expenses tab content
   const renderExpensesTab = () => (
     <div className="space-y-4">
       {localExpenses.length === 0 ? (
@@ -127,7 +120,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {localExpenses.map((expense) => (
             <Card key={expense.id} className="p-4">
-              {/* Expense card content */}
               <p>Expense: {expense.description}</p>
             </Card>
           ))}
@@ -136,7 +128,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     </div>
   );
 
-  // Function to render advances tab content
   const renderAdvancesTab = () => (
     <div className="space-y-4">
       {localAdvances.length === 0 ? (
@@ -145,7 +136,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {localAdvances.map((advance) => (
             <Card key={advance.id} className="p-4">
-              {/* Advance card content */}
               <p>Advance: {advance.recipientName}</p>
             </Card>
           ))}
@@ -154,7 +144,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     </div>
   );
 
-  // Function to render funds received tab content
   const renderFundsReceivedTab = () => (
     <div className="space-y-4">
       {localFundsReceived.length === 0 ? (
@@ -163,7 +152,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {localFundsReceived.map((fund) => (
             <Card key={fund.id} className="p-4">
-              {/* Fund card content */}
               <p>Fund: ₹{fund.amount}</p>
             </Card>
           ))}
@@ -172,7 +160,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     </div>
   );
 
-  // Function to render invoices tab content
   const renderInvoicesTab = () => (
     <div className="space-y-4">
       {isLoading.invoices ? (
@@ -222,7 +209,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         </div>
       )}
       
-      {/* Invoice Details Modal */}
       {isDetailsOpen && selectedInvoice && (
         <InvoiceDetails
           invoice={selectedInvoice}

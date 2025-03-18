@@ -1,3 +1,4 @@
+
 // User related types
 export enum UserRole {
   ADMIN = "admin",
@@ -23,7 +24,7 @@ export interface Site {
   startDate: Date;
   completionDate?: Date;
   supervisorId: string;
-  supervisor: string; // Add this field to support showing supervisor name
+  supervisor: string; // This field is required based on error messages
   createdAt: Date;
   isCompleted: boolean;
   funds?: number;
@@ -172,6 +173,17 @@ export interface Invoice {
   vendorName?: string;  // Added for compatibility
   invoiceNumber?: string; // Added for compatibility
   amount?: number;       // Added for compatibility
+}
+
+// Add the BalanceSummary interface that was missing
+export interface BalanceSummary {
+  fundsReceived: number;
+  totalExpenditure: number;
+  totalAdvances: number;
+  debitsToWorker: number;
+  invoicesPaid: number;
+  pendingInvoices: number;
+  totalBalance: number;
 }
 
 export interface ChartDataPoint {

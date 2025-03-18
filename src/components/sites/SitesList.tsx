@@ -38,7 +38,7 @@ const SitesList: React.FC<SitesListProps> = ({
           
           const { data, error } = await supabase
             .from('sites')
-            .select('*')
+            .select('*, users!sites_supervisor_id_fkey(name)')
             .eq('supervisor_id', supervisorId);
           
           if (error) {
@@ -58,6 +58,7 @@ const SitesList: React.FC<SitesListProps> = ({
               startDate: new Date(site.start_date),
               completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
               supervisorId: site.supervisor_id,
+              supervisor: site.users?.name || 'Unassigned', // Add supervisor name
               isCompleted: site.is_completed || false,
               funds: site.funds || 0,
               totalFunds: site.total_funds || 0,

@@ -1,4 +1,3 @@
-
 // User related types
 export enum UserRole {
   ADMIN = "admin",
@@ -173,6 +172,7 @@ export interface Invoice {
   vendorName?: string;  // Added for compatibility
   invoiceNumber?: string; // Added for compatibility
   amount?: number;       // Added for compatibility
+  status: PaymentStatus;
 }
 
 // Add the BalanceSummary interface that was missing

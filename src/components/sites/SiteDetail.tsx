@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Site, Expense, Advance, FundsReceived, Invoice, BalanceSummary, UserRole } from '@/lib/types';
 import { ArrowLeft, Calendar, MapPin, User, CheckCircle, IndianRupee, PlusCircle, BarChart } from 'lucide-react';
@@ -20,6 +21,22 @@ import {
 } from '@/components/ui/dialog';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import BalanceCard from '@/components/dashboard/BalanceCard';
+import { AdvancePurpose, RecipientType } from '@/lib/types';
+import { useMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+import { 
+  Card, 
+  CardHeader, 
+  CardTitle, 
+  CardContent 
+} from '@/components/ui/card';
+import { 
+  Tabs, 
+  TabsList, 
+  TabsTrigger, 
+  TabsContent 
+} from '@/components/ui/tabs';
 
 interface SiteDetailProps {
   site: Site;
@@ -66,7 +83,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
-  const isMobile = useIsMobile();
+  const isMobile = useMobile();
   
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);

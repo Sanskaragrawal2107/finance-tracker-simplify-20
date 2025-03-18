@@ -630,9 +630,9 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
-        // Calculate supervisor invoices (only those paid by supervisor)
+        // Calculate supervisor invoices (only those with approverType 'supervisor')
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.payment_by === 'supervisor')
+          .filter(invoice => invoice.approverType === 'supervisor')
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
         // Calculate total balance

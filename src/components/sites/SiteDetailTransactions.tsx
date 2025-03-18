@@ -252,11 +252,13 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             <thead className="bg-muted/50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Party</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Material</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Invoice #</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Vendor</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -265,23 +267,42 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                   <td className="px-4 py-3 text-sm">
                     {format(new Date(invoice.date), 'dd MMM yyyy')}
                   </td>
-                  <td className="px-4 py-3 text-sm font-medium">{invoice.partyName}</td>
-                  <td className="px-4 py-3 text-sm">{invoice.material}</td>
-                  <td className="px-4 py-3 text-sm">₹{invoice.netAmount.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    {invoice.invoiceNumber || '-'}
+                  </td>
                   <td className="px-4 py-3 text-sm">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.paymentStatus)}`}>
-                      {getStatusIcon(invoice.paymentStatus)}
-                      <span className="ml-1">{invoice.paymentStatus}</span>
+                    {invoice.vendorName}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      <IndianRupee className="h-3 w-3 mr-1" />
+                      {invoice.amount.toLocaleString()}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <button
-                      onClick={() => openInvoiceDetails(invoice)}
-                      className="text-primary hover:text-primary/80 transition-colors flex items-center"
-                    >
-                      View <ArrowUpRight className="h-3 w-3 ml-1" />
-                    </button>
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status)}`}>
+                      {getStatusIcon(invoice.status)}
+                      <span className="ml-1 capitalize">{invoice.status}</span>
+                    </div>
                   </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-primary hover:text-primary/80 transition-colors flex items-center"
+                          onClick={() => openInvoiceDetails(invoice)}
+                        >
+                          View <ArrowUpRight className="h-3 w-3 ml-1" />
+                        </button>
+                        <button className="text-blue-600 hover:text-blue-800">
+                          Edit
+                        </button>
+                        <button className="text-red-600 hover:text-red-800">
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -331,3 +352,4 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 };
 
 export default SiteDetailTransactions;
+

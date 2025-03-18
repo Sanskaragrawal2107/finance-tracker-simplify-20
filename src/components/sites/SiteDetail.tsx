@@ -1,12 +1,11 @@
 
 import React, { useState } from 'react';
-import { Site, Expense, Advance, FundsReceived, Invoice, Balance, BalanceSummary, ExpenseCategory, UserRole } from '@/lib/types';
+import { Site, Expense, Advance, FundsReceived, Invoice, BalanceSummary, ExpenseCategory, UserRole } from '@/lib/types';
 import { ArrowLeft, Building, PieChart, Wallet, Banknote, Calendar, RefreshCw, ChevronDown, ChevronUp, User, DollarSign, File, CheckCircle, ChevronRight, MoreVertical, FileEdit, Clock, CircleDollarSign, ArrowDownToLine, CreditCard, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { BarChart } from '@tremor/react';
 import BalanceCard from '@/components/dashboard/BalanceCard';
 import SiteDetailTransactions from './SiteDetailTransactions';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
@@ -16,36 +15,53 @@ import InvoiceForm from '@/components/invoices/InvoiceForm';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { DatePicker } from '@/components/ui/date-picker';
-import { deleteTransaction, deleteAdvance, deleteFundsReceived } from '@/integrations/supabase/client';
+import { supabase, deleteTransaction, deleteAdvance, deleteFundsReceived } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 
+// DatePicker interface
+interface DatePickerProps {
+  date: Date | undefined;
+  setDate: (date: Date | undefined) => void;
+}
+
+// Simple DatePicker implementation
+const DatePicker: React.FC<DatePickerProps> = ({ date, setDate }) => {
+  return (
+    <input
+      type="date"
+      className="px-3 py-2 border rounded-md w-full"
+      value={date ? date.toISOString().split('T')[0] : ''}
+      onChange={(e) => setDate(e.target.value ? new Date(e.target.value) : undefined)}
+    />
+  );
+};
+
 interface SiteDetailProps {
   site: Site;
-  expenses: Expense[];
-  advances: Advance[];
-  fundsReceived: FundsReceived[];
-  invoices: Invoice[];
-  supervisorInvoices: Invoice[];
+  expenses?: Expense[];
+  advances?: Advance[];
+  fundsReceived?: FundsReceived[];
+  invoices?: Invoice[];
+  supervisorInvoices?: Invoice[];
   onBack: () => void;
-  onAddExpense: (expense: Partial<Expense>) => Promise<void>;
-  onAddAdvance: (advance: Partial<Advance>) => Promise<void>;
-  onAddFunds: (funds: Partial<FundsReceived>) => Promise<void>;
-  onAddInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
-  onCompleteSite: (siteId: string, completionDate: Date) => Promise<void>;
-  balanceSummary: BalanceSummary;
-  siteSupervisor: { id: string; name: string } | null;
+  onAddExpense?: (expense: Partial<Expense>) => Promise<void>;
+  onAddAdvance?: (advance: Partial<Advance>) => Promise<void>;
+  onAddFunds?: (funds: Partial<FundsReceived>) => Promise<void>;
+  onAddInvoice?: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
+  onCompleteSite?: (siteId: string, completionDate: Date) => Promise<void>;
+  balanceSummary?: BalanceSummary;
+  siteSupervisor?: { id: string; name: string } | null;
   userRole: UserRole;
 }
 
 const SiteDetail: React.FC<SiteDetailProps> = ({
   site,
-  expenses,
-  advances,
-  fundsReceived,
-  invoices,
-  supervisorInvoices,
+  expenses = [],
+  advances = [],
+  fundsReceived = [],
+  invoices = [],
+  supervisorInvoices = [],
   onBack,
   onAddExpense,
   onAddAdvance,
@@ -65,6 +81,19 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [completionDate, setCompletionDate] = useState<Date | undefined>(new Date());
   const [isCompletionDialogOpen, setIsCompletionDialogOpen] = useState(false);
 
+  // Use empty balance summary if not provided
+  const defaultBalanceSummary: BalanceSummary = {
+    fundsReceived: 0,
+    totalExpenditure: 0,
+    totalAdvances: 0,
+    debitsToWorker: 0,
+    invoicesPaid: 0,
+    pendingInvoices: 0,
+    totalBalance: 0
+  };
+
+  const summary = balanceSummary || defaultBalanceSummary;
+
   const siteDuration = site.startDate && site.completionDate 
     ? Math.ceil((site.completionDate.getTime() - site.startDate.getTime()) / (1000 * 60 * 60 * 24))
     : null;
@@ -73,6 +102,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const formattedCompletionDate = site.completionDate ? format(site.completionDate, 'dd MMM yyyy') : 'Ongoing';
 
   const handleExpenseSubmit = async (newExpense: Partial<Expense>) => {
+    if (!onAddExpense) return;
+    
     try {
       await onAddExpense({
         ...newExpense,
@@ -85,6 +116,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   };
 
   const handleAdvanceSubmit = async (newAdvance: Partial<Advance>) => {
+    if (!onAddAdvance) return;
+    
     try {
       await onAddAdvance({
         ...newAdvance,
@@ -97,6 +130,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   };
 
   const handleFundsSubmit = async (newFunds: Partial<FundsReceived>) => {
+    if (!onAddFunds) return;
+    
     try {
       await onAddFunds({
         ...newFunds,
@@ -109,6 +144,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   };
 
   const handleInvoiceSubmit = (newInvoice: Omit<Invoice, 'id' | 'createdAt'>) => {
+    if (!onAddInvoice) return;
+    
     onAddInvoice({
       ...newInvoice,
       siteId: site.id,
@@ -117,7 +154,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   };
 
   const handleMarkAsComplete = async () => {
-    if (!completionDate) return;
+    if (!completionDate || !onCompleteSite) return;
     
     try {
       await onCompleteSite(site.id, completionDate);
@@ -135,7 +172,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       await deleteTransaction(expenseId, user.id);
       toast.success('Expense deleted successfully');
       // Refresh the expenses list - update the parent component
-      onAddExpense({ siteId: site.id, isRefresh: true } as Partial<Expense>);
+      if (onAddExpense) {
+        onAddExpense({ siteId: site.id, isRefresh: true } as Partial<Expense>);
+      }
     } catch (error: any) {
       console.error('Error deleting expense:', error);
       toast.error(error.message || 'Failed to delete expense');
@@ -149,7 +188,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       await deleteAdvance(advanceId, user.id);
       toast.success('Advance deleted successfully');
       // Refresh the advances list - update the parent component
-      onAddAdvance({ siteId: site.id, isRefresh: true } as Partial<Advance>);
+      if (onAddAdvance) {
+        onAddAdvance({ siteId: site.id, isRefresh: true } as Partial<Advance>);
+      }
     } catch (error: any) {
       console.error('Error deleting advance:', error);
       toast.error(error.message || 'Failed to delete advance');
@@ -163,7 +204,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       await deleteFundsReceived(fundsId, user.id);
       toast.success('Funds record deleted successfully');
       // Refresh the funds list - update the parent component
-      onAddFunds({ siteId: site.id, isRefresh: true } as Partial<FundsReceived>);
+      if (onAddFunds) {
+        onAddFunds({ siteId: site.id, isRefresh: true } as Partial<FundsReceived>);
+      }
     } catch (error: any) {
       console.error('Error deleting funds:', error);
       toast.error(error.message || 'Failed to delete funds record');
@@ -211,7 +254,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           </div>
         </div>
         
-        {!site.isCompleted && isAdmin && (
+        {!site.isCompleted && isAdmin && onCompleteSite && (
           <Dialog open={isCompletionDialogOpen} onOpenChange={setIsCompletionDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100">
@@ -304,10 +347,10 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         {showFinancialDetails && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
             <BalanceCard 
-              title="Funds Received"
-              amount={balanceSummary.fundsReceived}
+              name="Funds Received"
+              value={summary.fundsReceived}
               icon={<ArrowDownToLine className="h-5 w-5" />}
-              description={`Total funds received: ₹${balanceSummary.fundsReceived.toLocaleString()}`}
+              description={`Total funds received: ₹${summary.fundsReceived.toLocaleString()}`}
               trend={{
                 value: fundsReceived.length > 0 ? fundsReceived.length : 0,
                 label: 'transactions',
@@ -316,38 +359,38 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             />
             
             <BalanceCard 
-              title="Total Expenditure"
-              amount={balanceSummary.totalExpenditure}
+              name="Total Expenditure"
+              value={summary.totalExpenditure}
               icon={<CreditCard className="h-5 w-5" />}
-              description={`Total expenses: ₹${balanceSummary.totalExpenditure.toLocaleString()}`}
+              description={`Total expenses: ₹${summary.totalExpenditure.toLocaleString()}`}
               trend={{
                 value: expenses.length > 0 ? expenses.length : 0,
                 label: 'transactions',
-                direction: balanceSummary.totalExpenditure > 0 ? 'up' : 'neutral'
+                direction: summary.totalExpenditure > 0 ? 'up' : 'neutral'
               }}
             />
             
             <BalanceCard 
-              title="Total Advances"
-              amount={balanceSummary.totalAdvances}
+              name="Total Advances"
+              value={summary.totalAdvances}
               icon={<Banknote className="h-5 w-5" />}
-              description={`Total advances: ₹${balanceSummary.totalAdvances.toLocaleString()}`}
+              description={`Total advances: ₹${summary.totalAdvances.toLocaleString()}`}
               trend={{
                 value: advances.length > 0 ? advances.length : 0,
                 label: 'transactions',
-                direction: balanceSummary.totalAdvances > 0 ? 'up' : 'neutral'
+                direction: summary.totalAdvances > 0 ? 'up' : 'neutral'
               }}
             />
             
             <BalanceCard 
-              title="Balance Remaining"
-              amount={balanceSummary.totalBalance}
+              name="Balance Remaining"
+              value={summary.totalBalance}
               icon={<CircleDollarSign className="h-5 w-5" />}
-              description={`Available balance: ₹${balanceSummary.totalBalance.toLocaleString()}`}
+              description={`Available balance: ₹${summary.totalBalance.toLocaleString()}`}
               trend={{
-                value: Math.round((balanceSummary.totalBalance / balanceSummary.fundsReceived) * 100) || 0,
+                value: Math.round((summary.totalBalance / (summary.fundsReceived || 1)) * 100) || 0,
                 label: '% of total funds',
-                direction: balanceSummary.totalBalance > 0 ? 'up' : 'down'
+                direction: summary.totalBalance > 0 ? 'up' : 'down'
               }}
             />
           </div>
@@ -369,7 +412,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                   acc[category] = (acc[category] || 0) + expense.amount;
                   return acc;
                 }, {} as Record<string, number>)).map(([category, amount]) => {
-                  const percentage = Math.round((amount / balanceSummary.totalExpenditure) * 100);
+                  const percentage = Math.round((amount / (summary.totalExpenditure || 1)) * 100);
                   return (
                     <div key={category} className="space-y-1">
                       <div className="flex justify-between text-sm">
@@ -394,12 +437,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                   <div className="flex justify-between text-sm">
                     <span>Expenses</span>
                     <span className="font-medium">
-                      ₹{balanceSummary.totalExpenditure.toLocaleString()} 
-                      ({Math.round((balanceSummary.totalExpenditure / balanceSummary.fundsReceived) * 100) || 0}%)
+                      ₹{summary.totalExpenditure.toLocaleString()} 
+                      ({Math.round((summary.totalExpenditure / (summary.fundsReceived || 1)) * 100) || 0}%)
                     </span>
                   </div>
                   <Progress 
-                    value={Math.round((balanceSummary.totalExpenditure / balanceSummary.fundsReceived) * 100) || 0} 
+                    value={Math.round((summary.totalExpenditure / (summary.fundsReceived || 1)) * 100) || 0} 
                     className="h-2" 
                   />
                 </div>
@@ -408,12 +451,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                   <div className="flex justify-between text-sm">
                     <span>Advances</span>
                     <span className="font-medium">
-                      ₹{balanceSummary.totalAdvances.toLocaleString()}
-                      ({Math.round((balanceSummary.totalAdvances / balanceSummary.fundsReceived) * 100) || 0}%)
+                      ₹{summary.totalAdvances.toLocaleString()}
+                      ({Math.round((summary.totalAdvances / (summary.fundsReceived || 1)) * 100) || 0}%)
                     </span>
                   </div>
                   <Progress 
-                    value={Math.round((balanceSummary.totalAdvances / balanceSummary.fundsReceived) * 100) || 0} 
+                    value={Math.round((summary.totalAdvances / (summary.fundsReceived || 1)) * 100) || 0} 
                     className="h-2" 
                   />
                 </div>
@@ -422,12 +465,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                   <div className="flex justify-between text-sm">
                     <span>Invoices Paid</span>
                     <span className="font-medium">
-                      ₹{balanceSummary.invoicesPaid.toLocaleString()}
-                      ({Math.round((balanceSummary.invoicesPaid / balanceSummary.fundsReceived) * 100) || 0}%)
+                      ₹{summary.invoicesPaid.toLocaleString()}
+                      ({Math.round((summary.invoicesPaid / (summary.fundsReceived || 1)) * 100) || 0}%)
                     </span>
                   </div>
                   <Progress 
-                    value={Math.round((balanceSummary.invoicesPaid / balanceSummary.fundsReceived) * 100) || 0} 
+                    value={Math.round((summary.invoicesPaid / (summary.fundsReceived || 1)) * 100) || 0} 
                     className="h-2" 
                   />
                 </div>
@@ -438,12 +481,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                   <div className="flex justify-between text-sm font-medium">
                     <span>Balance</span>
                     <span className="font-bold text-green-600">
-                      ₹{balanceSummary.totalBalance.toLocaleString()}
-                      ({Math.round((balanceSummary.totalBalance / balanceSummary.fundsReceived) * 100) || 0}%)
+                      ₹{summary.totalBalance.toLocaleString()}
+                      ({Math.round((summary.totalBalance / (summary.fundsReceived || 1)) * 100) || 0}%)
                     </span>
                   </div>
                   <Progress 
-                    value={Math.round((balanceSummary.totalBalance / balanceSummary.fundsReceived) * 100) || 0} 
+                    value={Math.round((summary.totalBalance / (summary.fundsReceived || 1)) * 100) || 0} 
                     className="h-2 bg-gray-100" 
                   />
                 </div>
@@ -461,42 +504,50 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           fundsReceived={fundsReceived}
           invoices={invoices}
           userRole={userRole}
-          onAddExpense={() => setIsExpenseFormOpen(true)}
-          onAddAdvance={() => setIsAdvanceFormOpen(true)}
-          onAddFunds={() => setIsFundsFormOpen(true)}
+          onAddExpense={onAddExpense ? () => setIsExpenseFormOpen(true) : undefined}
+          onAddAdvance={onAddAdvance ? () => setIsAdvanceFormOpen(true) : undefined}
+          onAddFunds={onAddFunds ? () => setIsFundsFormOpen(true) : undefined}
           onDeleteExpense={isAdmin ? handleDeleteExpense : undefined}
           onDeleteAdvance={isAdmin ? handleDeleteAdvance : undefined}
           onDeleteFundsReceived={isAdmin ? handleDeleteFunds : undefined}
         />
       </div>
       
-      <ExpenseForm 
-        isOpen={isExpenseFormOpen}
-        onClose={() => setIsExpenseFormOpen(false)}
-        onSubmit={handleExpenseSubmit}
-        siteId={site.id}
-      />
+      {onAddExpense && (
+        <ExpenseForm 
+          isOpen={isExpenseFormOpen}
+          onClose={() => setIsExpenseFormOpen(false)}
+          onSubmit={handleExpenseSubmit}
+          siteId={site.id}
+        />
+      )}
       
-      <AdvanceForm 
-        isOpen={isAdvanceFormOpen}
-        onClose={() => setIsAdvanceFormOpen(false)}
-        onSubmit={handleAdvanceSubmit}
-        siteId={site.id}
-      />
+      {onAddAdvance && (
+        <AdvanceForm 
+          isOpen={isAdvanceFormOpen}
+          onClose={() => setIsAdvanceFormOpen(false)}
+          onSubmit={handleAdvanceSubmit}
+          siteId={site.id}
+        />
+      )}
       
-      <FundsReceivedForm 
-        isOpen={isFundsFormOpen}
-        onClose={() => setIsFundsFormOpen(false)}
-        onSubmit={handleFundsSubmit}
-        siteId={site.id}
-      />
+      {onAddFunds && (
+        <FundsReceivedForm 
+          isOpen={isFundsFormOpen}
+          onClose={() => setIsFundsFormOpen(false)}
+          onSubmit={handleFundsSubmit}
+          siteId={site.id}
+        />
+      )}
       
-      <InvoiceForm 
-        isOpen={isInvoiceFormOpen}
-        onClose={() => setIsInvoiceFormOpen(false)}
-        onSubmit={handleInvoiceSubmit}
-        siteId={site.id}
-      />
+      {onAddInvoice && (
+        <InvoiceForm 
+          isOpen={isInvoiceFormOpen}
+          onClose={() => setIsInvoiceFormOpen(false)}
+          onSubmit={handleInvoiceSubmit}
+          siteId={site.id}
+        />
+      )}
     </div>
   );
 };

@@ -199,7 +199,22 @@ const SupervisorSites: React.FC = () => {
         }
 
         if (sitesData) {
-          setSites(sitesData as Site[]);
+          const mappedSites: Site[] = sitesData.map(item => ({
+            id: item.id,
+            name: item.name,
+            jobName: item.job_name || '',
+            posNo: item.pos_no || '',
+            location: item.location,
+            startDate: new Date(item.start_date || new Date()),
+            completionDate: item.completion_date ? new Date(item.completion_date) : undefined,
+            supervisorId: item.supervisor_id || '',
+            supervisor: '',
+            createdAt: new Date(item.created_at || new Date()),
+            isCompleted: item.is_completed || false,
+            funds: item.funds,
+            totalFunds: item.total_funds
+          }));
+          setSites(mappedSites);
         }
       } catch (error) {
         console.error('Error fetching sites:', error);
@@ -355,10 +370,74 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      setExpenses(expensesData as Expense[]);
-      setAdvances(advancesData as Advance[]);
-      setFundsReceived(fundsData as FundsReceived[]);
-      setInvoices(invoicesData as Invoice[]);
+      const mappedExpenses: Expense[] = expensesData?.map(item => ({
+        id: item.id,
+        date: new Date(item.date),
+        description: item.description || '',
+        category: item.category as ExpenseCategory,
+        amount: item.amount,
+        status: ApprovalStatus.PENDING,
+        createdBy: item.created_by || '',
+        createdAt: new Date(item.created_at || new Date()),
+        siteId: item.site_id,
+        supervisorId: item.created_by || ''
+      })) || [];
+
+      const mappedAdvances: Advance[] = advancesData?.map(item => ({
+        id: item.id,
+        date: new Date(item.date),
+        recipientId: '',
+        recipientName: item.recipient_name,
+        recipientType: item.recipient_type as RecipientType,
+        purpose: item.purpose as AdvancePurpose,
+        amount: item.amount,
+        remarks: item.remarks || '',
+        status: item.status as ApprovalStatus,
+        createdBy: item.created_by || '',
+        createdAt: new Date(item.created_at || new Date()),
+        siteId: item.site_id
+      })) || [];
+
+      const mappedFunds: FundsReceived[] = fundsData?.map(item => ({
+        id: item.id,
+        date: new Date(item.date),
+        amount: item.amount,
+        siteId: item.site_id,
+        createdAt: new Date(item.created_at || new Date()),
+        reference: item.reference || '',
+        method: item.method || ''
+      })) || [];
+
+      const mappedInvoices: Invoice[] = invoicesData?.map(item => ({
+        id: item.id,
+        date: new Date(item.date),
+        partyId: item.party_id,
+        partyName: item.party_name,
+        material: item.material,
+        quantity: item.quantity || 0,
+        rate: item.rate || 0,
+        gstPercentage: item.gst_percentage || 0,
+        grossAmount: item.gross_amount || 0,
+        netAmount: item.net_amount || 0,
+        materialItems: item.material_items ? (item.material_items as unknown as MaterialItem[]) : [],
+        bankDetails: item.bank_details ? (item.bank_details as unknown as BankDetails) : {
+          accountNumber: '',
+          bankName: '',
+          ifscCode: ''
+        },
+        billUrl: item.bill_url,
+        invoiceImageUrl: item.bill_url,
+        paymentStatus: item.payment_status as PaymentStatus,
+        createdBy: item.created_by || '',
+        createdAt: new Date(item.created_at || new Date()),
+        approverType: item.approver_type as "ho" | "supervisor",
+        siteId: item.site_id
+      })) || [];
+
+      setExpenses(mappedExpenses);
+      setAdvances(mappedAdvances);
+      setFundsReceived(mappedFunds);
+      setInvoices(mappedInvoices);
     } catch (error) {
       console.error('Error updating transactions:', error);
       toast.error(`Error updating transactions: ${error}`);
@@ -374,17 +453,19 @@ const SupervisorSites: React.FC = () => {
   const handleAddExpense = async (expense: Partial<Expense>) => {
     setIsSubmitting(true);
     try {
+      const expenseData = {
+        date: format(new Date(expense.date as Date), 'yyyy-MM-dd'),
+        site_id: selectedSiteId,
+        supervisor_id: user?.id,
+        created_by: user?.id,
+        category: expense.category,
+        description: expense.description,
+        amount: expense.amount
+      };
+
       const { data, error } = await supabase
         .from('expenses')
-        .insert([
-          {
-            ...expense,
-            date: format(new Date(expense.date as Date), 'yyyy-MM-dd'),
-            site_id: selectedSiteId,
-            supervisor_id: user?.id,
-            created_by: user?.id,
-          },
-        ]);
+        .insert([expenseData]);
 
       if (error) {
         console.error('Error adding expense:', error);
@@ -392,7 +473,20 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      setExpenses([...expenses, { id: data[0].id, createdAt: new Date(), createdBy: user?.id || '', status: ApprovalStatus.PENDING, supervisorId: user?.id || '', ...expense }]);
+      const newExpense: Expense = {
+        id: data?.[0]?.id || '',
+        date: new Date(expense.date as Date),
+        description: expense.description || '',
+        category: expense.category as ExpenseCategory,
+        amount: expense.amount || 0,
+        status: ApprovalStatus.PENDING,
+        createdBy: user?.id || '',
+        createdAt: new Date(),
+        supervisorId: user?.id || '',
+        siteId: selectedSiteId
+      };
+
+      setExpenses([...expenses, newExpense]);
       toast.success('Expense added successfully!');
       handleTransactionsUpdate();
     } catch (error) {
@@ -406,16 +500,21 @@ const SupervisorSites: React.FC = () => {
   const handleAddAdvance = async (advance: Partial<Advance>) => {
     setIsSubmitting(true);
     try {
+      const advanceData = {
+        date: format(new Date(advance.date as Date), 'yyyy-MM-dd'),
+        site_id: selectedSiteId,
+        created_by: user?.id,
+        recipient_name: advance.recipientName,
+        recipient_type: advance.recipientType,
+        purpose: advance.purpose,
+        amount: advance.amount,
+        remarks: advance.remarks,
+        status: advance.status || ApprovalStatus.PENDING
+      };
+
       const { data, error } = await supabase
         .from('advances')
-        .insert([
-          {
-            ...advance,
-            date: format(new Date(advance.date as Date), 'yyyy-MM-dd'),
-            site_id: selectedSiteId,
-            created_by: user?.id,
-          },
-        ]);
+        .insert([advanceData]);
 
       if (error) {
         console.error('Error adding advance:', error);
@@ -423,7 +522,22 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      setAdvances([...advances, { id: data[0].id, createdAt: new Date(), createdBy: user?.id || '', status: ApprovalStatus.PENDING, ...advance }]);
+      const newAdvance: Advance = {
+        id: data?.[0]?.id || '',
+        date: new Date(advance.date as Date),
+        recipientId: advance.recipientId,
+        recipientName: advance.recipientName || '',
+        recipientType: advance.recipientType as RecipientType,
+        purpose: advance.purpose as AdvancePurpose,
+        amount: advance.amount || 0,
+        remarks: advance.remarks,
+        status: advance.status as ApprovalStatus || ApprovalStatus.PENDING,
+        createdBy: user?.id || '',
+        createdAt: new Date(),
+        siteId: selectedSiteId
+      };
+
+      setAdvances([...advances, newAdvance]);
       toast.success('Advance added successfully!');
       handleTransactionsUpdate();
     } catch (error) {
@@ -437,15 +551,17 @@ const SupervisorSites: React.FC = () => {
   const handleAddFunds = async (fund: Partial<FundsReceived>) => {
     setIsSubmitting(true);
     try {
+      const fundData = {
+        date: format(new Date(fund.date as Date), 'yyyy-MM-dd'),
+        site_id: selectedSiteId || '',
+        amount: fund.amount,
+        reference: fund.reference,
+        method: fund.method
+      };
+
       const { data, error } = await supabase
         .from('funds_received')
-        .insert([
-          {
-            ...fund,
-            date: format(new Date(fund.date as Date), 'yyyy-MM-dd'),
-            site_id: selectedSiteId,
-          },
-        ]);
+        .insert([fundData]);
 
       if (error) {
         console.error('Error adding funds:', error);
@@ -453,7 +569,17 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      setFundsReceived([...fundsReceived, { id: data[0].id, createdAt: new Date(), ...fund }]);
+      const newFund: FundsReceived = {
+        id: data?.[0]?.id || '',
+        date: new Date(fund.date as Date),
+        amount: fund.amount || 0,
+        siteId: selectedSiteId || '',
+        createdAt: new Date(),
+        reference: fund.reference,
+        method: fund.method
+      };
+
+      setFundsReceived([...fundsReceived, newFund]);
       toast.success('Funds added successfully!');
       handleTransactionsUpdate();
     } catch (error) {
@@ -467,16 +593,28 @@ const SupervisorSites: React.FC = () => {
   const handleAddInvoice = async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
     setIsSubmitting(true);
     try {
+      const invoiceData = {
+        date: format(new Date(invoice.date), 'yyyy-MM-dd'),
+        site_id: selectedSiteId,
+        created_by: user?.id,
+        party_id: invoice.partyId,
+        party_name: invoice.partyName,
+        material: invoice.material,
+        quantity: invoice.quantity,
+        rate: invoice.rate,
+        gst_percentage: invoice.gstPercentage,
+        gross_amount: invoice.grossAmount,
+        net_amount: invoice.netAmount,
+        bank_details: invoice.bankDetails,
+        material_items: invoice.materialItems,
+        payment_status: invoice.paymentStatus,
+        bill_url: invoice.billUrl,
+        approver_type: invoice.approverType
+      };
+
       const { data, error } = await supabase
         .from('site_invoices')
-        .insert([
-          {
-            ...invoice,
-            date: format(new Date(invoice.date), 'yyyy-MM-dd'),
-            site_id: selectedSiteId,
-            created_by: user?.id,
-          },
-        ]);
+        .insert([invoiceData]);
 
       if (error) {
         console.error('Error adding invoice:', error);
@@ -484,7 +622,13 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      setInvoices([...invoices, { id: data[0].id, createdAt: new Date(), ...invoice }]);
+      const newInvoice: Invoice = {
+        ...invoice,
+        id: data?.[0]?.id || '',
+        createdAt: new Date()
+      };
+
+      setInvoices([...invoices, newInvoice]);
       toast.success('Invoice added successfully!');
       handleTransactionsUpdate();
     } catch (error) {
@@ -506,12 +650,12 @@ const SupervisorSites: React.FC = () => {
   const calculateSiteFinancials = (siteId: string): BalanceSummary => {
     const siteExpenses = expenses.filter(expense => expense.siteId === siteId);
     const siteAdvances = advances.filter(advance => advance.siteId === siteId);
-    const siteFundsReceived = fundsReceived.filter(fund => fund.siteId === siteId);
+    const siteFunds = fundsReceived.filter(fund => fund.siteId === siteId);
     const siteInvoices = invoices.filter(invoice => invoice.siteId === siteId);
 
     const totalExpenditure = siteExpenses.reduce((sum, expense) => sum + expense.amount, 0);
     const totalAdvances = siteAdvances.reduce((sum, advance) => sum + advance.amount, 0);
-    const fundsReceivedTotal = siteFundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
+    const fundsReceivedTotal = siteFunds.reduce((sum, fund) => sum + fund.amount, 0);
     const invoicesPaid = siteInvoices.reduce((sum, invoice) => (invoice.paymentStatus === PaymentStatus.PAID ? sum + invoice.netAmount : sum), 0);
     const pendingInvoices = siteInvoices.reduce((sum, invoice) => (invoice.paymentStatus === PaymentStatus.PENDING ? sum + invoice.netAmount : sum), 0);
     const debitsToWorker = siteAdvances.reduce((sum, advance) => (advance.purpose === AdvancePurpose.OTHER ? sum + advance.amount : sum), 0);
@@ -643,6 +787,7 @@ const SupervisorSites: React.FC = () => {
               onCompleteSite={handleCompleteSite}
               balanceSummary={calculateSiteFinancials(selectedSiteId || '')}
               onUpdateTransactions={handleTransactionsUpdate}
+              onTransactionsUpdate={handleTransactionsUpdate}
             />
           </div>
         )
@@ -651,7 +796,7 @@ const SupervisorSites: React.FC = () => {
           <DataTable columns={columns} data={sites} />
         ) : (
           <Card className="w-full">
-            <CardContent>
+            <CardContent className="p-6">
               <p className="text-center text-muted-foreground">No sites found. Add a new site to get started.</p>
             </CardContent>
           </Card>

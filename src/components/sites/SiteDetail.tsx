@@ -140,7 +140,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         
       if (error) {
         console.error('Error marking site as complete:', error);
-        toast(`Failed to mark site as complete: ${error.message}`);
+        toast.error(`Failed to mark site as complete: ${error.message}`);
         return;
       }
       
@@ -150,7 +150,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       }
     } catch (error: any) {
       console.error('Error in handleMarkComplete:', error);
-      toast(`Failed to mark site as complete: ${error.message}`);
+      toast.error(`Failed to mark site as complete: ${error.message}`);
     } finally {
       setIsMarkingComplete(false);
     }

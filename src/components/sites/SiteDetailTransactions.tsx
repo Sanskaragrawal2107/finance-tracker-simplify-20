@@ -34,6 +34,7 @@ interface SiteDetailTransactionsProps {
   advances?: Advance[];
   fundsReceived?: FundsReceived[];
   onUpdateTransactions?: () => void;
+  onTransactionsUpdate?: () => Promise<void> | void;
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
@@ -49,6 +50,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   advances = [],
   fundsReceived = [],
   onUpdateTransactions,
+  onTransactionsUpdate,
 }) => {
   console.info('SiteDetailTransactions props:', { 
     siteId, 
@@ -108,8 +110,12 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           gstPercentage: item.gst_percentage || 0,
           grossAmount: item.gross_amount || 0,
           netAmount: item.net_amount || 0,
-          materialItems: item.material_items as MaterialItem[] || [],
-          bankDetails: item.bank_details as BankDetails,
+          materialItems: item.material_items ? (item.material_items as unknown as MaterialItem[]) : [],
+          bankDetails: item.bank_details ? (item.bank_details as unknown as BankDetails) : {
+            accountNumber: '',
+            bankName: '',
+            ifscCode: '',
+          },
           billUrl: item.bill_url,
           invoiceImageUrl: item.bill_url,
           paymentStatus: item.payment_status,
@@ -221,6 +227,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 
       if (onUpdateTransactions) {
         onUpdateTransactions();
+      }
+      if (onTransactionsUpdate) {
+        await onTransactionsUpdate();
       }
     } catch (error: any) {
       console.error(`Error deleting ${deleteType}:`, error);

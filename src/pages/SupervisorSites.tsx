@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
@@ -754,24 +754,17 @@ const SupervisorSites: React.FC = () => {
             site={selectedSite} 
             onBack={() => setSelectedSiteId(null)} 
             userRole={user?.role || UserRole.VIEWER}
-            expenses={[]}
-            advances={[]}
-            fundsReceived={[]}
-            invoices={[]}
+            expenses={siteExpenses}
+            advances={siteAdvances}
+            fundsReceived={siteFunds}
+            invoices={siteInvoices}
             onAddExpense={handleAddExpense}
             onAddAdvance={handleAddAdvance}
             onAddFunds={handleAddFunds}
             onAddInvoice={handleAddInvoice}
             onCompleteSite={handleCompleteSite}
-            balanceSummary={{
-              fundsReceived: 0,
-              totalExpenditure: 0,
-              totalAdvances: 0,
-              debitsToWorker: 0,
-              invoicesPaid: 0,
-              pendingInvoices: 0,
-              totalBalance: 0
-            }}
+            balanceSummary={calculateSiteFinancials(selectedSiteId || '')}
+            onTransactionsUpdate={handleTransactionsUpdate}
           />
         </div>
       ) : (
@@ -909,3 +902,15 @@ const SupervisorSites: React.FC = () => {
                     {userRole === UserRole.ADMIN 
                       ? "Create sites from the admin dashboard to start tracking expenses."
                       : "No sites have been assigned to you yet."}
+                  </p>
+                </div>
+              </CustomCard>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default SupervisorSites;

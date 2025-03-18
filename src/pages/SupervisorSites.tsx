@@ -6,7 +6,7 @@ import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Site, UserRole, BalanceSummary } from '@/lib/types';
+import { Site, UserRole } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { Badge } from '@/components/ui/badge';
@@ -289,29 +289,11 @@ const SupervisorSites: React.FC = () => {
 
   // If site detail view is open, show that instead
   if (showSiteDetail && selectedSite) {
-    // Fetch missing data for the site
-    const emptySummary: BalanceSummary = {
-      fundsReceived: 0,
-      totalExpenditure: 0, 
-      totalAdvances: 0,
-      debitsToWorker: 0,
-      invoicesPaid: 0,
-      pendingInvoices: 0,
-      totalBalance: 0
-    };
-
     return (
       <SiteDetail
         site={selectedSite}
-        expenses={[]}
-        advances={[]}
-        fundsReceived={[]}
-        invoices={[]}
-        supervisorInvoices={[]}
         onBack={handleCloseSiteDetail}
         userRole={user?.role || UserRole.VIEWER}
-        balanceSummary={emptySummary}
-        siteSupervisor={selectedSite.supervisorId ? { id: selectedSite.supervisorId, name: selectedSite.supervisor } : null}
       />
     );
   }

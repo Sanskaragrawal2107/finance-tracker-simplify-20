@@ -1,33 +1,28 @@
+import { UserRole } from '@/lib/types';
+import { Request, Response, NextFunction } from 'express';
 
-import { UserRole } from '../types';
-
-// Define minimal Express types to avoid dependency on express
-interface Request {
-  user?: {
-    role?: UserRole;
-    [key: string]: any;
-  };
-  [key: string]: any;
-}
-
-interface Response {
-  status: (code: number) => Response;
-  json: (data: any) => void;
-  [key: string]: any;
-}
-
-type NextFunction = () => void;
-
-export const checkRole = (allowedRoles: UserRole[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    if (!allowedRoles.includes(req.user.role as UserRole)) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    next();
-  };
+export const checkAdminRole = (req: Request, res: Response, next: NextFunction) => {
+  const userRole = req.user?.role;
+  
+  if (!userRole || userRole !== UserRole.ADMIN) {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'You do not have permission to perform this action. Admin access required.'
+    });
+  }
+  
+  next();
 };
+
+export const checkSupervisorOrAdminRole = (req: Request, res: Response, next: NextFunction) => {
+  const userRole = req.user?.role;
+  
+  if (!userRole || (userRole !== UserRole.ADMIN && userRole !== UserRole.SUPERVISOR)) {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'You do not have permission to perform this action. Supervisor or Admin access required.'
+    });
+  }
+  
+  next();
+}; 

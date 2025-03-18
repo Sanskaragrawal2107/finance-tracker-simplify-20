@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
@@ -28,8 +27,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { supabase, deleteTransaction, deleteAdvance, deleteFundsReceived } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+
 import { supervisors } from '@/data/supervisors';
 
 const initialExpenses: Expense[] = [];
@@ -241,7 +241,6 @@ const Expenses: React.FC = () => {
 
   const fetchSiteInvoices = async (siteId: string) => {
     try {
-      console.log('Fetching invoices for site ID:', siteId);
       const { data, error } = await supabase
         .from('site_invoices')
         .select('*')
@@ -250,76 +249,23 @@ const Expenses: React.FC = () => {
       if (error) throw error;
       
       if (data) {
-        console.log('Raw site_invoices data:', data);
-        
-        const transformedInvoices: Invoice[] = data.map(invoice => {
-          let materialItems: MaterialItem[] = [];
-          try {
-            if (invoice.material_items) {
-              if (typeof invoice.material_items === 'string') {
-                const parsedItems = JSON.parse(invoice.material_items);
-                materialItems = Array.isArray(parsedItems) ? 
-                  parsedItems.map(item => ensureMaterialItemStructure(item)) : [];
-              } else if (Array.isArray(invoice.material_items)) {
-                materialItems = invoice.material_items.map(item => ensureMaterialItemStructure(item));
-              } else if (typeof invoice.material_items === 'object') {
-                materialItems = [ensureMaterialItemStructure(invoice.material_items)];
-              }
-            }
-          } catch (e) {
-            console.error('Error parsing material items:', e);
-          }
-          
-          let bankDetails: BankDetails = {
-            bankName: '',
-            accountNumber: '',
-            ifscCode: ''
-          };
-          
-          try {
-            if (invoice.bank_details) {
-              if (typeof invoice.bank_details === 'string') {
-                bankDetails = JSON.parse(invoice.bank_details);
-              } else if (typeof invoice.bank_details === 'object' && invoice.bank_details !== null) {
-                const bd = invoice.bank_details as any;
-                bankDetails = {
-                  bankName: bd.bankName || '',
-                  accountNumber: bd.accountNumber || '',
-                  ifscCode: bd.ifscCode || '',
-                  email: bd.email,
-                  mobile: bd.mobile
-                };
-              }
-            }
-          } catch (e) {
-            console.error('Error parsing bank details:', e);
-          }
-          
-          return {
-            id: invoice.id,
-            siteId: invoice.site_id,
-            date: new Date(invoice.date),
-            partyId: invoice.party_id,
-            partyName: invoice.party_name,
-            material: invoice.material,
-            quantity: Number(invoice.quantity),
-            rate: Number(invoice.rate),
-            gstPercentage: Number(invoice.gst_percentage),
-            grossAmount: Number(invoice.gross_amount),
-            netAmount: Number(invoice.net_amount),
-            materialItems,
-            bankDetails,
-            billUrl: invoice.bill_url,
-            paymentStatus: invoice.payment_status as PaymentStatus,
-            createdBy: invoice.created_by || '',
-            createdAt: new Date(invoice.created_at),
-            approverType: invoice.approver_type as "ho" | "supervisor",
-            vendorName: invoice.party_name,  
-            invoiceNumber: invoice.id.slice(0, 8),
-            amount: Number(invoice.net_amount),
-            status: invoice.payment_status as PaymentStatus
-          };
-        });
+        const transformedInvoices: Invoice[] = data.map(invoice => ({
+          id: invoice.id,
+          siteId: invoice.site_id,
+          invoiceNumber: invoice.invoice_number,
+          date: new Date(invoice.date),
+          dueDate: invoice.due_date ? new Date(invoice.due_date) : undefined,
+          vendorName: invoice.vendor_name,
+          amount: Number(invoice.amount),
+          status: invoice.status as PaymentStatus,
+          paymentDate: invoice.payment_date ? new Date(invoice.payment_date) : undefined,
+          description: invoice.description || '',
+          category: invoice.category || '',
+          notes: invoice.notes || '',
+          createdAt: new Date(invoice.created_at),
+          materialItems: invoice.material_items ? JSON.parse(invoice.material_items) as MaterialItem[] : [],
+          bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details) as BankDetails : undefined,
+        }));
         
         setInvoices(transformedInvoices);
       } else {
@@ -330,17 +276,6 @@ const Expenses: React.FC = () => {
       toast.error('Failed to load invoices for this site');
       setInvoices([]);
     }
-  };
-
-  const ensureMaterialItemStructure = (item: any): MaterialItem => {
-    return {
-      id: item?.id || String(Date.now()),
-      material: item?.material || '',
-      quantity: typeof item?.quantity === 'number' ? item.quantity : null,
-      rate: typeof item?.rate === 'number' ? item.rate : null,
-      gstPercentage: typeof item?.gstPercentage === 'number' ? item.gstPercentage : null,
-      amount: typeof item?.amount === 'number' ? item.amount : null
-    };
   };
 
   const ensureDateObjects = (site: Site): Site => {
@@ -557,6 +492,7 @@ const Expenses: React.FC = () => {
         
         setFundsReceived(prevFunds => [fundWithId, ...prevFunds]);
         
+        // Update the site's funds directly
         const updatedFunds = (sites.find(site => site.id === selectedSiteId)?.funds || 0) + Number(fundWithId.amount);
         
         const { error: updateError } = await supabase
@@ -630,45 +566,6 @@ const Expenses: React.FC = () => {
     }
   };
 
-  const handleDeleteExpense = async (expenseId: string) => {
-    if (!user) return;
-    
-    try {
-      await deleteTransaction(expenseId, user.id);
-      setExpenses(prevExpenses => prevExpenses.filter(expense => expense.id !== expenseId));
-      toast.success('Expense deleted successfully');
-    } catch (error: any) {
-      console.error('Error deleting expense:', error);
-      toast.error(error.message || 'Failed to delete expense');
-    }
-  };
-
-  const handleDeleteAdvance = async (advanceId: string) => {
-    if (!user) return;
-    
-    try {
-      await deleteAdvance(advanceId, user.id);
-      setAdvances(prevAdvances => prevAdvances.filter(advance => advance.id !== advanceId));
-      toast.success('Advance deleted successfully');
-    } catch (error: any) {
-      console.error('Error deleting advance:', error);
-      toast.error(error.message || 'Failed to delete advance');
-    }
-  };
-
-  const handleDeleteFunds = async (fundsId: string) => {
-    if (!user) return;
-    
-    try {
-      await deleteFundsReceived(fundsId, user.id);
-      setFundsReceived(prevFunds => prevFunds.filter(fund => fund.id !== fundsId));
-      toast.success('Funds record deleted successfully');
-    } catch (error: any) {
-      console.error('Error deleting funds:', error);
-      toast.error(error.message || 'Failed to delete funds record');
-    }
-  };
-
   const filteredSites = sites.filter(site => {
     const matchesSearch = 
       site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -707,8 +604,13 @@ const Expenses: React.FC = () => {
       const site = sites.find(s => s.id === siteId);
       
       if (site) {
+        // Calculate total expenses
         const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+        
+        // Calculate total funds received
         const totalFunds = fundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
+        
+        // Calculate total advances (excluding debit to worker)
         const totalAdvances = advances.reduce((sum, advance) => {
           if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;
@@ -716,6 +618,7 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
+        // Calculate total debit to worker advances
         const totalDebitToWorker = advances.reduce((sum, advance) => {
           if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;
@@ -723,10 +626,12 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
+        // Calculate supervisor invoices (only those paid by supervisor)
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.paymentStatus === 'paid' && invoice.approverType === 'supervisor')
+          .filter(invoice => invoice.payment_by === 'supervisor')
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
+        // Calculate total balance
         const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;
         
         return {
@@ -735,7 +640,7 @@ const Expenses: React.FC = () => {
           totalAdvances,
           debitsToWorker: totalDebitToWorker,
           invoicesPaid: supervisorInvoiceTotal,
-          pendingInvoices: 0,
+          pendingInvoices: 0, // This will be implemented later
           totalBalance: totalBalance
         };
       }

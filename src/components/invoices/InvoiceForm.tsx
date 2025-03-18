@@ -315,8 +315,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         paymentStatus,
         createdBy: 'Current User',
         approverType: approverType,
-        siteId: siteId,
-        status: paymentStatus
+        siteId: siteId
       };
 
       // Save to Supabase

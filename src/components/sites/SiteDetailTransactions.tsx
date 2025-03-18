@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
@@ -148,6 +147,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     </div>
   );
 
+  const canEditDelete = userRole === UserRole.ADMIN;
+
   const renderAdvancesTab = () => (
     <div className="space-y-4">
       {localAdvances.length === 0 ? (
@@ -163,7 +164,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Purpose</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                {userRole !== UserRole.VIEWER && (
+                {canEditDelete && (
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
                 )}
               </tr>
@@ -205,7 +206,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                       <span className="ml-1 capitalize">{advance.status}</span>
                     </div>
                   </td>
-                  {userRole !== UserRole.VIEWER && (
+                  {canEditDelete && (
                     <td className="px-4 py-3 text-sm">
                       <button
                         className="text-primary hover:text-primary/80 transition-colors flex items-center"

@@ -112,3 +112,83 @@ export const fetchSiteInvoices = async (siteId: string) => {
     return [];
   }
 };
+
+// Function to check if user has admin role
+export const checkAdminRole = async (userId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+      
+    if (error) {
+      console.error('Error checking admin role:', error);
+      return false;
+    }
+    
+    return data?.role === 'admin';
+  } catch (error) {
+    console.error('Error checking admin role:', error);
+    return false;
+  }
+};
+
+// Function to check if user has supervisor or admin role
+export const checkSupervisorOrAdminRole = async (userId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+      
+    if (error) {
+      console.error('Error checking role:', error);
+      return false;
+    }
+    
+    return data?.role === 'admin' || data?.role === 'supervisor';
+  } catch (error) {
+    console.error('Error checking role:', error);
+    return false;
+  }
+};
+
+// Function to delete a transaction with role check
+export const deleteTransaction = async (transactionId: string, userId: string) => {
+  const isAdmin = await checkAdminRole(userId);
+  
+  if (!isAdmin) {
+    throw new Error('You do not have permission to delete transactions. Admin access required.');
+  }
+  
+  const { error } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('id', transactionId);
+    
+  if (error) {
+    console.error('Error deleting transaction:', error);
+    throw error;
+  }
+};
+
+// Function to update a transaction with role check
+export const updateTransaction = async (transactionId: string, updates: Database['public']['Tables']['expenses']['Update'], userId: string) => {
+  const isAdmin = await checkAdminRole(userId);
+  
+  if (!isAdmin) {
+    throw new Error('You do not have permission to update transactions. Admin access required.');
+  }
+  
+  const { error } = await supabase
+    .from('expenses')
+    .update(updates)
+    .eq('id', transactionId);
+    
+  if (error) {
+    console.error('Error updating transaction:', error);
+    throw error;
+  }
+};

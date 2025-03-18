@@ -1,21 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { Site, Expense, Advance, FundsReceived, Invoice, BalanceSummary, UserRole } from '@/lib/types';
+import { ArrowLeft, Calendar, MapPin, User, CheckCircle, IndianRupee, PlusCircle, BarChart } from 'lucide-react';
 import { format } from 'date-fns';
-import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
-import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus, UserRole } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import SiteDetailTransactions from './SiteDetailTransactions';
-import { useIsMobile } from '@/hooks/use-mobile';
-import BalanceCard from '../dashboard/BalanceCard';
-import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import BalanceCard from '@/components/dashboard/BalanceCard';
 
 interface SiteDetailProps {
   site: Site;
@@ -24,17 +28,16 @@ interface SiteDetailProps {
   fundsReceived?: FundsReceived[];
   invoices?: Invoice[];
   supervisorInvoices?: Invoice[];
-  balanceSummary?: BalanceSummary;
-  siteSupervisor?: { id: string; name: string } | null;
-  onBack?: () => void;
-  onAddExpense?: (expense: Partial<Expense>) => void;
-  onAddAdvance?: (advance: Partial<Advance>) => void;
-  onAddFunds?: (fund: Partial<FundsReceived>) => void;
-  onAddInvoice?: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
-  onCompleteSite?: (siteId: string, completionDate: Date) => void;
-  supervisor?: any;
-  isAdminView?: boolean;
+  onBack: () => void;
+  onAddExpense: (expense: Partial<Expense>) => void;
+  onAddAdvance: (advance: Partial<Advance>) => void;
+  onAddFunds: (fund: Partial<FundsReceived>) => void;
+  onAddInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
+  onCompleteSite: (siteId: string, completionDate: Date) => void;
+  balanceSummary: BalanceSummary;
+  siteSupervisor?: any;
   userRole: UserRole;
+  onUpdateTransactions?: () => void;
 }
 
 const DEBIT_ADVANCE_PURPOSES = [
@@ -50,17 +53,16 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   fundsReceived = [],
   invoices = [],
   supervisorInvoices = [],
-  balanceSummary,
-  siteSupervisor,
   onBack,
   onAddExpense,
   onAddAdvance,
   onAddFunds,
   onAddInvoice,
   onCompleteSite,
-  supervisor,
-  isAdminView,
-  userRole
+  balanceSummary,
+  siteSupervisor,
+  userRole,
+  onUpdateTransactions
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
@@ -169,7 +171,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
@@ -197,7 +199,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             className="text-green-600 border-green-200 hover:bg-green-50 w-full sm:w-auto mt-2 sm:mt-0" 
             onClick={() => setIsMarkingComplete(true)}
           >
-            <Check className="mr-2 h-4 w-4" />
+            <CheckCircle className="mr-2 h-4 w-4" />
             Mark as Complete
           </Button>
         )}
@@ -266,7 +268,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <Plus className="h-4 w-4" /> Add Expense
+            <PlusCircle className="h-4 w-4" /> Add Expense
           </Button>
           <Button 
             onClick={() => setIsAdvanceFormOpen(true)}
@@ -274,7 +276,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <Plus className="h-4 w-4" /> Add Advance
+            <PlusCircle className="h-4 w-4" /> Add Advance
           </Button>
           <Button 
             onClick={() => setIsFundsFormOpen(true)}
@@ -282,7 +284,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <Plus className="h-4 w-4" /> Add Funds From HO
+            <PlusCircle className="h-4 w-4" /> Add Funds From HO
           </Button>
           <Button 
             onClick={() => setIsInvoiceFormOpen(true)}
@@ -290,7 +292,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <Plus className="h-4 w-4" /> Add Invoice
+            <PlusCircle className="h-4 w-4" /> Add Invoice
           </Button>
         </div>
       )}
@@ -370,18 +372,19 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="transactions">
-          <SiteDetailTransactions 
+          <SiteDetailTransactions
             siteId={site.id}
-            userRole={userRole}
-            isAdminView={isAdminView}
             expensesCount={expenses.length}
             advancesCount={advances.length}
             fundsReceivedCount={fundsReceived.length}
+            userRole={userRole}
+            isAdminView={userRole === UserRole.ADMIN}
             site={site}
-            supervisor={supervisor}
+            supervisor={siteSupervisor}
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
+            onUpdateTransactions={onUpdateTransactions}
           />
         </TabsContent>
       </Tabs>

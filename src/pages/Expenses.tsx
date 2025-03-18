@@ -351,6 +351,8 @@ const Expenses: React.FC = () => {
           startDate: new Date(data.start_date),
           completionDate: data.completion_date ? new Date(data.completion_date) : undefined,
           supervisorId: data.supervisor_id,
+          supervisor: data.supervisor_id ? 
+            (supervisors.find(s => s.id === data.supervisor_id)?.name || 'Unknown') : 'Unassigned',
           createdAt: new Date(data.created_at),
           isCompleted: data.is_completed,
           funds: data.funds || 0
@@ -682,27 +684,16 @@ const Expenses: React.FC = () => {
       
       if (error) {
         console.error('Error creating site:', error);
-        toast({
-          title: 'Error creating site',
-          description: error.message,
-          variant: 'destructive'
-        });
+        toast.error('Error creating site: ' + error.message);
         return;
       }
       
-      toast({
-        title: 'Site created',
-        description: 'The site has been created successfully.'
-      });
-      setShowNewSiteForm(false);
+      toast.success('Site created successfully');
+      setIsSiteFormOpen(false);
       fetchSites();
     } catch (error) {
       console.error('Error in handleCreateSite:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create site. Please try again.',
-        variant: 'destructive'
-      });
+      toast.error('Failed to create site. Please try again.');
     }
   };
 

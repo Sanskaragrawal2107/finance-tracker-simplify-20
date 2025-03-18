@@ -413,7 +413,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           isOpen={isFundsFormOpen}
           onClose={() => setIsFundsFormOpen(false)}
           onSubmit={handleFundsSubmit}
-          siteId={site.id}
         />
       )}
       

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -40,6 +39,7 @@ interface FundsReceivedFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (funds: Partial<FundsReceived>) => void;
+  siteId?: string;
 }
 
 const formSchema = z.object({
@@ -58,7 +58,7 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, onSubmit }) => {
+const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -75,6 +75,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
       amount: values.amount,
       reference: values.reference,
       method: values.method,
+      siteId: siteId,
     };
 
     onSubmit(newFunds);

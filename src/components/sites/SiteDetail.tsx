@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
 import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus, UserRole } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +13,11 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import BalanceCard from '../dashboard/BalanceCard';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+// Import the form components
+import ExpenseForm from '@/components/expenses/ExpenseForm';
+import AdvanceForm from '@/components/advances/AdvanceForm';
+import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
+import InvoiceForm from '@/components/invoices/InvoiceForm';
 
 interface SiteDetailProps {
   site: Site;
@@ -61,6 +67,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
   const isMobile = useIsMobile();
+  
+  // Form states
+  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
+  const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
+  const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
+  const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
 
   const defaultBalanceSummary: BalanceSummary = {
     fundsReceived: 0,
@@ -108,6 +120,54 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     } finally {
       setIsMarkingComplete(false);
     }
+  };
+
+  // Handle expense submission
+  const handleExpenseSubmit = (expense: Partial<Expense>) => {
+    if (onAddExpense) {
+      const expenseWithSiteId = {
+        ...expense,
+        siteId: site.id
+      };
+      onAddExpense(expenseWithSiteId);
+    }
+    setIsExpenseFormOpen(false);
+  };
+
+  // Handle advance submission
+  const handleAdvanceSubmit = (advance: Partial<Advance>) => {
+    if (onAddAdvance) {
+      const advanceWithSiteId = {
+        ...advance,
+        siteId: site.id
+      };
+      onAddAdvance(advanceWithSiteId);
+    }
+    setIsAdvanceFormOpen(false);
+  };
+
+  // Handle funds received submission
+  const handleFundsSubmit = (funds: Partial<FundsReceived>) => {
+    if (onAddFunds) {
+      const fundsWithSiteId = {
+        ...funds,
+        siteId: site.id
+      };
+      onAddFunds(fundsWithSiteId);
+    }
+    setIsFundsFormOpen(false);
+  };
+
+  // Handle invoice submission
+  const handleInvoiceSubmit = (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
+    if (onAddInvoice) {
+      const invoiceWithSiteId = {
+        ...invoice,
+        siteId: site.id
+      };
+      onAddInvoice(invoiceWithSiteId);
+    }
+    setIsInvoiceFormOpen(false);
   };
 
   return (
@@ -200,6 +260,44 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         <BalanceCard balanceData={siteSummary} siteId={site.id} />
       </div>
 
+      {/* Action Buttons */}
+      {userRole !== UserRole.VIEWER && !site.isCompleted && (
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            onClick={() => setIsExpenseFormOpen(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <Plus className="h-4 w-4" /> Add Expense
+          </Button>
+          <Button 
+            onClick={() => setIsAdvanceFormOpen(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <Plus className="h-4 w-4" /> Add Advance
+          </Button>
+          <Button 
+            onClick={() => setIsFundsFormOpen(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <Plus className="h-4 w-4" /> Add Funds From HO
+          </Button>
+          <Button 
+            onClick={() => setIsInvoiceFormOpen(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <Plus className="h-4 w-4" /> Add Invoice
+          </Button>
+        </div>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className={`grid grid-cols-2 ${isMobile ? 'w-full' : 'max-w-md'} mb-4`}>
           <TabsTrigger value="summary">Summary</TabsTrigger>
@@ -290,6 +388,43 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           />
         </TabsContent>
       </Tabs>
+
+      {/* Forms */}
+      {isExpenseFormOpen && (
+        <ExpenseForm
+          isOpen={isExpenseFormOpen}
+          onClose={() => setIsExpenseFormOpen(false)}
+          onSubmit={handleExpenseSubmit}
+          siteId={site.id}
+        />
+      )}
+      
+      {isAdvanceFormOpen && (
+        <AdvanceForm
+          isOpen={isAdvanceFormOpen}
+          onClose={() => setIsAdvanceFormOpen(false)}
+          onSubmit={handleAdvanceSubmit}
+          siteId={site.id}
+        />
+      )}
+      
+      {isFundsFormOpen && (
+        <FundsReceivedForm
+          isOpen={isFundsFormOpen}
+          onClose={() => setIsFundsFormOpen(false)}
+          onSubmit={handleFundsSubmit}
+          siteId={site.id}
+        />
+      )}
+      
+      {isInvoiceFormOpen && (
+        <InvoiceForm
+          isOpen={isInvoiceFormOpen}
+          onClose={() => setIsInvoiceFormOpen(false)}
+          onSubmit={handleInvoiceSubmit}
+          siteId={site.id}
+        />
+      )}
     </div>
   );
 };

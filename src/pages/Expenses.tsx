@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
@@ -664,6 +663,57 @@ const Expenses: React.FC = () => {
   const siteSupervisor = selectedSite && selectedSite.supervisorId ? 
     supervisors.find(s => s.id === selectedSite.supervisorId) : null;
 
+  const handleCreateSite = async (newSite) => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase.from('sites').insert([
+        {
+          name: newSite.name,
+          job_name: newSite.jobName,
+          pos_no: newSite.posNo,
+          location: newSite.location,
+          start_date: newSite.startDate?.toISOString(),
+          completion_date: newSite.completionDate?.toISOString(),
+          supervisor_id: newSite.supervisorId || user.id,
+          created_by: user.id,
+          is_completed: false
+        }
+      ]);
+      
+      if (error) {
+        console.error('Error creating site:', error);
+        toast({
+          title: 'Error creating site',
+          description: error.message,
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      toast({
+        title: 'Site created',
+        description: 'The site has been created successfully.'
+      });
+      setShowNewSiteForm(false);
+      fetchSites();
+    } catch (error) {
+      console.error('Error in handleCreateSite:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create site. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleViewSite = (siteId) => {
+    setSelectedSiteId(siteId);
+  };
+
+  const handleCloseSiteDetail = () => {
+    setSelectedSiteId(null);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
       {isLoading ? (
@@ -836,7 +886,7 @@ const Expenses: React.FC = () => {
       <SiteForm
         isOpen={isSiteFormOpen}
         onClose={() => setIsSiteFormOpen(false)}
-        onSubmit={handleAddSite}
+        onSubmit={handleCreateSite}
         supervisorId={userRole === UserRole.ADMIN && selectedSupervisorId 
           ? selectedSupervisorId 
           : user?.id}

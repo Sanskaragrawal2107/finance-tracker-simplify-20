@@ -256,11 +256,13 @@ const Expenses: React.FC = () => {
           try {
             if (invoice.material_items) {
               if (typeof invoice.material_items === 'string') {
-                materialItems = JSON.parse(invoice.material_items);
+                const parsedItems = JSON.parse(invoice.material_items);
+                materialItems = Array.isArray(parsedItems) ? 
+                  parsedItems.map(item => ensureMaterialItemStructure(item)) : [];
               } else if (Array.isArray(invoice.material_items)) {
-                materialItems = invoice.material_items;
+                materialItems = invoice.material_items.map(item => ensureMaterialItemStructure(item));
               } else if (typeof invoice.material_items === 'object') {
-                materialItems = [invoice.material_items];
+                materialItems = [ensureMaterialItemStructure(invoice.material_items)];
               }
             }
           } catch (e) {
@@ -278,7 +280,13 @@ const Expenses: React.FC = () => {
               if (typeof invoice.bank_details === 'string') {
                 bankDetails = JSON.parse(invoice.bank_details);
               } else if (typeof invoice.bank_details === 'object') {
-                bankDetails = invoice.bank_details as any;
+                bankDetails = {
+                  bankName: invoice.bank_details.bankName || '',
+                  accountNumber: invoice.bank_details.accountNumber || '',
+                  ifscCode: invoice.bank_details.ifscCode || '',
+                  email: invoice.bank_details.email,
+                  mobile: invoice.bank_details.mobile
+                };
               }
             }
           } catch (e) {
@@ -322,12 +330,23 @@ const Expenses: React.FC = () => {
     }
   };
 
+  const ensureMaterialItemStructure = (item: any): MaterialItem => {
+    return {
+      id: item.id || String(Date.now()),
+      material: item.material || '',
+      quantity: typeof item.quantity === 'number' ? item.quantity : null,
+      rate: typeof item.rate === 'number' ? item.rate : null,
+      gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
+      amount: typeof item.amount === 'number' ? item.amount : null
+    };
+  };
+
   const ensureDateObjects = (site: Site): Site => {
     return {
       ...site,
       startDate: site.startDate instanceof Date ? site.startDate : new Date(site.startDate),
       completionDate: site.completionDate ? 
-        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completionDate)) 
+        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completion_date)) 
         : undefined
     };
   };

@@ -10,6 +10,7 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Fix type instantiation by specifying the type parameter explicitly
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 // Function to calculate total paid invoices for a site
@@ -62,11 +63,13 @@ export const fetchSiteInvoices = async (siteId: string) => {
           try {
             // Handle case where it might be a string or already parsed JSON
             if (typeof invoice.material_items === 'string') {
-              materialItems = JSON.parse(invoice.material_items);
+              const parsedItems = JSON.parse(invoice.material_items);
+              materialItems = Array.isArray(parsedItems) ? 
+                parsedItems.map(item => ensureMaterialItemProperties(item)) : [];
             } else if (Array.isArray(invoice.material_items)) {
-              materialItems = invoice.material_items;
+              materialItems = invoice.material_items.map(item => ensureMaterialItemProperties(item));
             } else if (typeof invoice.material_items === 'object') {
-              materialItems = [invoice.material_items];
+              materialItems = [ensureMaterialItemProperties(invoice.material_items)];
             }
           } catch (e) {
             console.error('Error parsing material items:', e, invoice.material_items);
@@ -86,7 +89,13 @@ export const fetchSiteInvoices = async (siteId: string) => {
             if (typeof invoice.bank_details === 'string') {
               bankDetails = JSON.parse(invoice.bank_details);
             } else if (typeof invoice.bank_details === 'object') {
-              bankDetails = invoice.bank_details as any;
+              bankDetails = {
+                bankName: invoice.bank_details.bankName || '',
+                accountNumber: invoice.bank_details.accountNumber || '',
+                ifscCode: invoice.bank_details.ifscCode || '',
+                email: invoice.bank_details.email,
+                mobile: invoice.bank_details.mobile
+              };
             }
           } catch (e) {
             console.error('Error parsing bank details:', e, invoice.bank_details);
@@ -107,15 +116,15 @@ export const fetchSiteInvoices = async (siteId: string) => {
           materialItems,
           bankDetails,
           billUrl: invoice.bill_url,
-          paymentStatus: invoice.payment_status,
-          createdBy: invoice.created_by,
+          paymentStatus: invoice.payment_status as PaymentStatus,
+          createdBy: invoice.created_by || '',
           createdAt: new Date(invoice.created_at),
-          approverType: invoice.approver_type,
+          approverType: invoice.approver_type as "ho" | "supervisor",
           siteId: invoice.site_id,
           vendorName: invoice.party_name,  
           invoiceNumber: invoice.id.slice(0, 8),
           amount: Number(invoice.net_amount),
-          status: invoice.payment_status || 'pending'
+          status: invoice.payment_status as PaymentStatus
         };
       } catch (error) {
         console.error('Error processing invoice:', error, invoice);
@@ -150,6 +159,18 @@ export const fetchSiteInvoices = async (siteId: string) => {
     return [];
   }
 };
+
+// Helper function to ensure a JSON object has all MaterialItem properties
+function ensureMaterialItemProperties(item: any): MaterialItem {
+  return {
+    id: item.id || String(Date.now()),
+    material: item.material || '',
+    quantity: typeof item.quantity === 'number' ? item.quantity : null,
+    rate: typeof item.rate === 'number' ? item.rate : null,
+    gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
+    amount: typeof item.amount === 'number' ? item.amount : null
+  };
+}
 
 // Function to check if user has admin role
 export const checkAdminRole = async (userId: string): Promise<boolean> => {

@@ -132,10 +132,8 @@ const Expenses: React.FC = () => {
 
   useEffect(() => {
     if (selectedSiteId) {
-      fetchSiteExpenses(selectedSiteId);
-      fetchSiteAdvances(selectedSiteId);
-      fetchSiteFundsReceived(selectedSiteId);
-      fetchSiteInvoices(selectedSiteId);
+      console.log('Selected site changed, fetching all data for site:', selectedSiteId);
+      refreshSiteData(selectedSiteId);
     }
   }, [selectedSiteId]);
 
@@ -286,30 +284,31 @@ const Expenses: React.FC = () => {
           return {
             id: invoice.id,
             date: new Date(invoice.date),
-            partyId: invoice.party_id,
-            partyName: invoice.party_name,
-            vendorName: invoice.vendor_name || invoice.party_name,
-            invoiceNumber: invoice.invoice_number,
-            material: invoice.material,
-            quantity: Number(invoice.quantity),
-            rate: Number(invoice.rate),
-            gstPercentage: Number(invoice.gst_percentage),
-            grossAmount: Number(invoice.gross_amount),
-            netAmount: Number(invoice.net_amount),
-            amount: Number(invoice.net_amount),
+            partyId: invoice.party_id || '',
+            partyName: invoice.party_name || '',
+            vendorName: invoice.party_name || '',
+            invoiceNumber: invoice.id.slice(0, 8), // Generate invoice number from ID if not available
+            material: invoice.material || '',
+            quantity: Number(invoice.quantity) || 0,
+            rate: Number(invoice.rate) || 0,
+            gstPercentage: Number(invoice.gst_percentage) || 0,
+            grossAmount: Number(invoice.gross_amount) || 0,
+            netAmount: Number(invoice.net_amount) || 0,
+            amount: Number(invoice.net_amount) || 0,
             materialItems,
             bankDetails,
-            billUrl: invoice.bill_url,
-            paymentStatus: invoice.payment_status,
-            status: invoice.payment_status,
-            createdBy: invoice.created_by,
+            billUrl: invoice.bill_url || '',
+            paymentStatus: invoice.payment_status || 'pending',
+            status: invoice.payment_status || 'pending',
+            createdBy: invoice.created_by || '',
             createdAt: new Date(invoice.created_at),
-            approverType: invoice.approver_type,
+            approverType: invoice.approver_type || '',
             siteId: invoice.site_id
           };
         });
         
         setInvoices(transformedInvoices);
+        console.log('Fetched invoices:', transformedInvoices);
       } else {
         setInvoices([]);
       }
@@ -407,8 +406,13 @@ const Expenses: React.FC = () => {
 
   const handleAddExpense = async (newExpense: Partial<Expense>) => {
     try {
+      if (!newExpense.siteId || !selectedSiteId) {
+        toast.error("No site selected for expense");
+        return;
+      }
+
       const expenseData = {
-        site_id: newExpense.siteId,
+        site_id: selectedSiteId,
         date: newExpense.date instanceof Date ? newExpense.date.toISOString() : new Date().toISOString(),
         description: newExpense.description || '',
         category: newExpense.category,
@@ -440,6 +444,8 @@ const Expenses: React.FC = () => {
         
         setExpenses(prevExpenses => [expenseWithId, ...prevExpenses]);
         toast.success("Expense added successfully");
+        // Re-fetch expenses to ensure the list is up-to-date
+        fetchSiteExpenses(selectedSiteId);
       }
     } catch (error: any) {
       console.error('Error adding expense:', error);
@@ -491,6 +497,8 @@ const Expenses: React.FC = () => {
         
         setAdvances(prevAdvances => [advanceWithId, ...prevAdvances]);
         toast.success("Advance added successfully");
+        // Re-fetch advances to ensure the list is up-to-date
+        fetchSiteAdvances(selectedSiteId);
       }
     } catch (error: any) {
       console.error('Error adding advance:', error);
@@ -510,7 +518,8 @@ const Expenses: React.FC = () => {
         date: newFund.date instanceof Date ? newFund.date.toISOString() : new Date().toISOString(),
         amount: newFund.amount,
         reference: newFund.reference || null,
-        method: newFund.method || null
+        method: newFund.method || null,
+        created_by: user?.id
       };
       
       const { data, error } = await supabase
@@ -556,6 +565,7 @@ const Expenses: React.FC = () => {
         
         toast.success("Funds received recorded successfully");
         
+        // Re-fetch data to ensure everything is up-to-date
         fetchSites();
         fetchSiteFundsReceived(selectedSiteId);
       }
@@ -741,11 +751,43 @@ const Expenses: React.FC = () => {
   };
 
   const handleViewSite = (siteId) => {
+    console.log('Viewing site:', siteId);
     setSelectedSiteId(siteId);
   };
 
   const handleCloseSiteDetail = () => {
     setSelectedSiteId(null);
+  };
+
+  const refreshSiteData = async (siteId: string) => {
+    if (!siteId) return;
+    
+    console.log('Refreshing all data for site:', siteId);
+    
+    try {
+      await Promise.all([
+        fetchSiteExpenses(siteId),
+        fetchSiteAdvances(siteId),
+        fetchSiteFundsReceived(siteId),
+        fetchSiteInvoices(siteId)
+      ]);
+      
+      console.log('All site data refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing site data:', error);
+      toast.error('There was a problem loading some site data');
+    }
+  };
+
+  const handleEntrySuccess = (entryType) => {
+    console.log(`Entry success for ${entryType}, refreshing data for site:`, selectedSiteId);
+    if (selectedSiteId) {
+      if (entryType === 'expense') fetchSiteExpenses(selectedSiteId);
+      else if (entryType === 'advance') fetchSiteAdvances(selectedSiteId);
+      else if (entryType === 'funds') fetchSiteFundsReceived(selectedSiteId);
+      else if (entryType === 'invoice') fetchSiteInvoices(selectedSiteId);
+      else if (entryType === 'transactions') refreshSiteData(selectedSiteId);
+    }
   };
 
   return (
@@ -877,12 +919,7 @@ const Expenses: React.FC = () => {
           isAdminView={userRole === UserRole.ADMIN}
           onBack={() => setSelectedSiteId(null)}
           onEditSuccess={fetchSites}
-          onEntrySuccess={(entryType) => {
-            if (entryType === 'expense') fetchSiteExpenses(selectedSiteId);
-            else if (entryType === 'advance') fetchSiteAdvances(selectedSiteId);
-            else if (entryType === 'funds') fetchSiteFundsReceived(selectedSiteId);
-            else if (entryType === 'invoice') fetchSiteInvoices(selectedSiteId);
-          }}
+          onEntrySuccess={handleEntrySuccess}
         />
       ) : (
         <div className="overflow-y-auto flex-1 pr-2">

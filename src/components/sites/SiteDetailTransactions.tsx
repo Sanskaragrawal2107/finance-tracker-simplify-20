@@ -92,9 +92,19 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 
   // Update local state when props change
   useEffect(() => {
+    console.log('Expenses prop updated with', expenses.length, 'items');
     setLocalExpenses(expenses);
+  }, [expenses]);
+
+  useEffect(() => {
+    console.log('Advances prop updated with', advances.length, 'items');
+    setLocalAdvances(advances);
+  }, [advances]);
+
+  useEffect(() => {
+    console.log('FundsReceived prop updated with', fundsReceived.length, 'items');
     setLocalFundsReceived(fundsReceived);
-  }, [expenses, fundsReceived]);
+  }, [fundsReceived]);
 
   useEffect(() => {
     const loadInvoices = async () => {
@@ -109,7 +119,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       try {
         console.log('Fetching invoices for site:', siteId);
         const invoicesData = await fetchSiteInvoices(siteId);
-        console.log('Invoices data:', invoicesData);
+        console.log('Invoices data received:', invoicesData.length, 'items');
         setInvoices(invoicesData as Invoice[]);
       } catch (error) {
         console.error('Error loading invoices:', error);

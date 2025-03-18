@@ -51,6 +51,7 @@ export const fetchSiteInvoices = async (siteId: string) => {
     }
 
     console.log('Raw invoice data from DB:', data);
+    console.log('Number of invoices found:', data?.length || 0);
     
     // Transform the data to match the expected Invoice format
     return data.map(invoice => {
@@ -140,7 +141,11 @@ export const fetchSiteInvoices = async (siteId: string) => {
           createdBy: invoice.created_by || '',
           createdAt: new Date(invoice.created_at || new Date()),
           siteId: invoice.site_id || '',
-          status: invoice.payment_status || 'pending'
+          status: invoice.payment_status || 'pending',
+          vendorName: invoice.party_name || '',
+          invoiceNumber: invoice.id.slice(0, 8),
+          amount: Number(invoice.net_amount) || 0,
+          approverType: invoice.approver_type || ''
         };
       }
     });

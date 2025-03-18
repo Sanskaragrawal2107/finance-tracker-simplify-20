@@ -35,6 +35,8 @@ interface SiteDetailProps {
   supervisor?: any;
   isAdminView?: boolean;
   userRole: UserRole;
+  onEditSuccess?: () => void;
+  onEntrySuccess?: (entryType: string) => void;
 }
 
 const DEBIT_ADVANCE_PURPOSES = [
@@ -60,7 +62,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   onCompleteSite,
   supervisor,
   isAdminView,
-  userRole
+  userRole,
+  onEditSuccess,
+  onEntrySuccess
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
@@ -138,34 +142,58 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 
   const handleExpenseSubmit = (expense: Partial<Expense>) => {
     if (onAddExpense) {
-      onAddExpense(expense);
+      const expenseWithSiteId = {
+        ...expense,
+        siteId: site.id
+      };
+      onAddExpense(expenseWithSiteId);
     }
     setIsExpenseFormOpen(false);
+    if (onEntrySuccess) {
+      onEntrySuccess('expense');
+    }
   };
 
   const handleAdvanceSubmit = (advance: Partial<Advance>) => {
     if (onAddAdvance) {
-      onAddAdvance(advance);
+      const advanceWithSiteId = {
+        ...advance,
+        siteId: site.id
+      };
+      onAddAdvance(advanceWithSiteId);
     }
     setIsAdvanceFormOpen(false);
+    if (onEntrySuccess) {
+      onEntrySuccess('advance');
+    }
   };
 
   const handleFundsSubmit = (funds: Partial<FundsReceived>) => {
     if (onAddFunds) {
-      const fundsWithSiteId = funds.siteId ? funds : {
+      const fundsWithSiteId = {
         ...funds,
         siteId: site.id
       };
       onAddFunds(fundsWithSiteId);
     }
     setIsFundsFormOpen(false);
+    if (onEntrySuccess) {
+      onEntrySuccess('funds');
+    }
   };
 
   const handleInvoiceSubmit = (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
     if (onAddInvoice) {
-      onAddInvoice(invoice);
+      const invoiceWithSiteId = {
+        ...invoice,
+        siteId: site.id
+      };
+      onAddInvoice(invoiceWithSiteId);
     }
     setIsInvoiceFormOpen(false);
+    if (onEntrySuccess) {
+      onEntrySuccess('invoice');
+    }
   };
 
   return (
@@ -382,7 +410,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
-            onTransactionsUpdate={onCompleteSite ? () => {} : undefined}
+            onTransactionsUpdate={onEntrySuccess ? () => onEntrySuccess('transactions') : undefined}
           />
         </TabsContent>
       </Tabs>

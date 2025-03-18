@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, addDays } from 'date-fns';
@@ -98,6 +99,9 @@ import {
   PaymentStatus,
   RecipientType,
   BalanceSummary,
+  MaterialItem,
+  BankDetails,
+  Json
 } from '@/lib/types';
 import PageTitle from '@/components/common/PageTitle';
 import SiteDetail from '@/components/sites/SiteDetail';
@@ -234,8 +238,12 @@ const SupervisorSites: React.FC = () => {
         .from('sites')
         .insert([
           {
-            ...newSite,
+            name: newSite.name,
+            job_name: newSite.jobName,
+            pos_no: newSite.posNo,
+            location: newSite.location,
             start_date: format(newSite.startDate, 'yyyy-MM-dd'),
+            supervisor_id: user?.id
           },
         ]);
 
@@ -245,7 +253,15 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      setSites([...sites, { id: data[0].id, createdAt: new Date(), isCompleted: false, ...newSite }]);
+      const newSiteData = data?.[0] || { id: '', created_at: new Date().toISOString() };
+      
+      setSites([...sites, { 
+        id: newSiteData.id, 
+        createdAt: new Date(newSiteData.created_at), 
+        isCompleted: false, 
+        ...newSite 
+      }]);
+      
       setIsAddingSite(false);
       setNewSite({
         name: '',
@@ -456,11 +472,10 @@ const SupervisorSites: React.FC = () => {
       const expenseData = {
         date: format(new Date(expense.date as Date), 'yyyy-MM-dd'),
         site_id: selectedSiteId,
-        supervisor_id: user?.id,
-        created_by: user?.id,
         category: expense.category,
         description: expense.description,
-        amount: expense.amount
+        amount: expense.amount,
+        created_by: user?.id
       };
 
       const { data, error } = await supabase
@@ -593,6 +608,11 @@ const SupervisorSites: React.FC = () => {
   const handleAddInvoice = async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
     setIsSubmitting(true);
     try {
+      // Convert BankDetails to Json compatible format
+      const bankDetailsJson = invoice.bankDetails as unknown as Json;
+      // Convert MaterialItems to Json compatible format
+      const materialItemsJson = invoice.materialItems ? invoice.materialItems as unknown as Json : null;
+      
       const invoiceData = {
         date: format(new Date(invoice.date), 'yyyy-MM-dd'),
         site_id: selectedSiteId,
@@ -605,8 +625,8 @@ const SupervisorSites: React.FC = () => {
         gst_percentage: invoice.gstPercentage,
         gross_amount: invoice.grossAmount,
         net_amount: invoice.netAmount,
-        bank_details: invoice.bankDetails,
-        material_items: invoice.materialItems,
+        bank_details: bankDetailsJson,
+        material_items: materialItemsJson,
         payment_status: invoice.paymentStatus,
         bill_url: invoice.billUrl,
         approver_type: invoice.approverType
@@ -622,9 +642,11 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
+      const newInvoiceId = data?.[0]?.id || '';
+      
       const newInvoice: Invoice = {
         ...invoice,
-        id: data?.[0]?.id || '',
+        id: newInvoiceId,
         createdAt: new Date()
       };
 
@@ -793,7 +815,11 @@ const SupervisorSites: React.FC = () => {
         )
       ) : (
         sites.length > 0 ? (
-          <DataTable columns={columns} data={sites} />
+          <DataTable 
+            columns={columns} 
+            data={sites} 
+            onView={(site) => setSelectedSiteId(site.id)}
+          />
         ) : (
           <Card className="w-full">
             <CardContent className="p-6">

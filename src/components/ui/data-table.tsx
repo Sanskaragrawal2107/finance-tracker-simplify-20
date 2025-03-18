@@ -9,6 +9,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Eye, Edit, Trash } from "lucide-react";
 
 interface DataTableProps<TData, TValue> {
   columns: {
@@ -18,12 +20,18 @@ interface DataTableProps<TData, TValue> {
   }[];
   data: TData[];
   searchKey?: string;
+  onView?: (row: TData) => void;
+  onEdit?: (row: TData) => void;
+  onDelete?: (row: TData) => void;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   searchKey,
+  onView,
+  onEdit,
+  onDelete,
 }: DataTableProps<TData, TValue>) {
   const [searchValue, setSearchValue] = React.useState("");
 
@@ -80,7 +88,21 @@ export function DataTable<TData, TValue>({
                   ))}
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {/* Action buttons will be provided by the parent */}
+                      {onView && (
+                        <Button variant="ghost" size="icon" onClick={() => onView(row)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {onEdit && (
+                        <Button variant="ghost" size="icon" onClick={() => onEdit(row)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {onDelete && (
+                        <Button variant="ghost" size="icon" onClick={() => onDelete(row)}>
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

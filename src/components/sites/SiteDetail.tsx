@@ -382,6 +382,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
+            onTransactionsUpdate={onCompleteSite ? () => {} : undefined}
           />
         </TabsContent>
       </Tabs>

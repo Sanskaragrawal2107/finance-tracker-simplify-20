@@ -38,6 +38,7 @@ export const calculatePaidInvoicesTotalForSite = async (siteId: string): Promise
 // Function to fetch site invoices
 export const fetchSiteInvoices = async (siteId: string) => {
   try {
+    console.log('Fetching invoices for site ID:', siteId);
     const { data, error } = await supabase
       .from('site_invoices')
       .select('*')
@@ -48,64 +49,100 @@ export const fetchSiteInvoices = async (siteId: string) => {
       console.error('Error fetching site invoices:', error);
       throw error;
     }
+
+    console.log('Raw invoice data from DB:', data);
     
     // Transform the data to match the expected Invoice format
     return data.map(invoice => {
-      // Parse material_items as MaterialItem[]
-      let materialItems: MaterialItem[] = [];
-      if (invoice.material_items) {
-        try {
-          // Handle case where it might be a string or already parsed JSON
-          if (typeof invoice.material_items === 'string') {
-            materialItems = JSON.parse(invoice.material_items);
-          } else if (Array.isArray(invoice.material_items)) {
-            materialItems = invoice.material_items as unknown as MaterialItem[];
+      try {
+        // Parse material_items as MaterialItem[]
+        let materialItems: any[] = [];
+        if (invoice.material_items) {
+          try {
+            // Handle case where it might be a string or already parsed JSON
+            if (typeof invoice.material_items === 'string') {
+              materialItems = JSON.parse(invoice.material_items);
+            } else if (Array.isArray(invoice.material_items)) {
+              materialItems = invoice.material_items;
+            } else if (typeof invoice.material_items === 'object') {
+              materialItems = [invoice.material_items];
+            }
+          } catch (e) {
+            console.error('Error parsing material items:', e, invoice.material_items);
           }
-        } catch (e) {
-          console.error('Error parsing material items:', e);
         }
-      }
 
-      // Parse bank_details as BankDetails
-      let bankDetails: BankDetails = {
-        bankName: '',
-        accountNumber: '',
-        ifscCode: ''
-      };
-      
-      if (invoice.bank_details) {
-        try {
-          // Handle case where it might be a string or already parsed JSON
-          if (typeof invoice.bank_details === 'string') {
-            bankDetails = JSON.parse(invoice.bank_details);
-          } else if (typeof invoice.bank_details === 'object') {
-            bankDetails = invoice.bank_details as unknown as BankDetails;
+        // Parse bank_details as BankDetails
+        let bankDetails: any = {
+          bankName: '',
+          accountNumber: '',
+          ifscCode: ''
+        };
+        
+        if (invoice.bank_details) {
+          try {
+            // Handle case where it might be a string or already parsed JSON
+            if (typeof invoice.bank_details === 'string') {
+              bankDetails = JSON.parse(invoice.bank_details);
+            } else if (typeof invoice.bank_details === 'object') {
+              bankDetails = invoice.bank_details;
+            }
+          } catch (e) {
+            console.error('Error parsing bank details:', e, invoice.bank_details);
           }
-        } catch (e) {
-          console.error('Error parsing bank details:', e);
         }
-      }
 
-      return {
-        id: invoice.id,
-        date: new Date(invoice.date),
-        partyId: invoice.party_id,
-        partyName: invoice.party_name,
-        material: invoice.material,
-        quantity: Number(invoice.quantity),
-        rate: Number(invoice.rate),
-        gstPercentage: Number(invoice.gst_percentage),
-        grossAmount: Number(invoice.gross_amount),
-        netAmount: Number(invoice.net_amount),
-        materialItems,
-        bankDetails,
-        billUrl: invoice.bill_url,
-        paymentStatus: invoice.payment_status,
-        createdBy: invoice.created_by,
-        createdAt: new Date(invoice.created_at),
-        approverType: invoice.approver_type,
-        siteId: invoice.site_id
-      };
+        return {
+          id: invoice.id,
+          date: new Date(invoice.date),
+          partyId: invoice.party_id,
+          partyName: invoice.party_name,
+          material: invoice.material,
+          quantity: Number(invoice.quantity),
+          rate: Number(invoice.rate),
+          gstPercentage: Number(invoice.gst_percentage),
+          grossAmount: Number(invoice.gross_amount),
+          netAmount: Number(invoice.net_amount),
+          materialItems,
+          bankDetails,
+          billUrl: invoice.bill_url,
+          paymentStatus: invoice.payment_status,
+          createdBy: invoice.created_by,
+          createdAt: new Date(invoice.created_at),
+          approverType: invoice.approver_type,
+          siteId: invoice.site_id,
+          vendorName: invoice.party_name,  
+          invoiceNumber: invoice.id.slice(0, 8),
+          amount: Number(invoice.net_amount),
+          status: invoice.payment_status
+        };
+      } catch (error) {
+        console.error('Error processing invoice:', error, invoice);
+        // Return a minimal valid invoice object if parsing fails
+        return {
+          id: invoice.id,
+          date: new Date(invoice.date || new Date()),
+          partyId: invoice.party_id || '',
+          partyName: invoice.party_name || '',
+          material: invoice.material || '',
+          quantity: Number(invoice.quantity) || 0,
+          rate: Number(invoice.rate) || 0,
+          gstPercentage: Number(invoice.gst_percentage) || 0,
+          grossAmount: Number(invoice.gross_amount) || 0,
+          netAmount: Number(invoice.net_amount) || 0,
+          materialItems: [],
+          bankDetails: {
+            bankName: '',
+            accountNumber: '',
+            ifscCode: ''
+          },
+          paymentStatus: invoice.payment_status || 'pending',
+          createdBy: invoice.created_by || '',
+          createdAt: new Date(invoice.created_at || new Date()),
+          siteId: invoice.site_id || '',
+          status: invoice.payment_status || 'pending'
+        };
+      }
     });
   } catch (error) {
     console.error('Error processing site invoices:', error);

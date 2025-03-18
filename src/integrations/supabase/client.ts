@@ -115,7 +115,9 @@ export const fetchSiteInvoices = async (siteId: string) => {
           vendorName: invoice.party_name,  
           invoiceNumber: invoice.id.slice(0, 8),
           amount: Number(invoice.net_amount),
-          status: invoice.payment_status
+          status: invoice.payment_status,
+          payment_by: invoice.payment_by || 'supervisor',
+          paymentBy: invoice.payment_by || 'supervisor'
         };
       } catch (error) {
         console.error('Error processing invoice:', error, invoice);
@@ -145,7 +147,9 @@ export const fetchSiteInvoices = async (siteId: string) => {
           vendorName: invoice.party_name || '',
           invoiceNumber: invoice.id.slice(0, 8),
           amount: Number(invoice.net_amount) || 0,
-          approverType: invoice.approver_type || ''
+          approverType: invoice.approver_type || '',
+          payment_by: invoice.payment_by || 'supervisor',
+          paymentBy: invoice.payment_by || 'supervisor'
         };
       }
     });

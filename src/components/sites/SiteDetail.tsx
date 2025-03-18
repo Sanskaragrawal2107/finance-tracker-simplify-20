@@ -83,11 +83,28 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 
   const siteSummary = balanceSummary || defaultBalanceSummary;
 
+  // Calculate total advances excluding debit to worker advances
+  const totalAdvances = advances.reduce((sum, advance) => {
+    if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
+      return sum + (Number(advance.amount) || 0);
+    }
+    return sum;
+  }, 0);
+
+  // Calculate total debit to worker advances
+  const totalDebitToWorker = advances.reduce((sum, advance) => {
+    if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
+      return sum + (Number(advance.amount) || 0);
+    }
+    return sum;
+  }, 0);
+
   const totalExpenses = siteSummary.totalExpenditure;
-  const totalAdvances = siteSummary.totalAdvances || 0;
-  const totalDebitToWorker = siteSummary.debitsToWorker || 0;
   const totalFundsReceived = siteSummary.fundsReceived;
   const totalInvoices = siteSummary.invoicesPaid || 0;
+
+  // Calculate current balance
+  const currentBalance = totalFundsReceived - totalExpenses - totalAdvances - totalInvoices;
 
   const handleMarkComplete = async () => {
     try {
@@ -312,8 +329,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                 <div className="pt-2 border-t">
                   <div className="flex justify-between items-center font-medium">
                     <span>Current Balance</span>
-                    <span className={siteSummary.totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ₹{siteSummary.totalBalance.toLocaleString()}
+                    <span className={currentBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      ₹{currentBalance.toLocaleString()}
                     </span>
                   </div>
                 </div>

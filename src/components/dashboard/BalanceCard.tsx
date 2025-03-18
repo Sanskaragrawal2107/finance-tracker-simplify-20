@@ -101,7 +101,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
         </div>
         
         <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Debits TO worker:</p>
+          <p className="text-sm opacity-80 uppercase">Debit to Worker:</p>
           <p className="text-lg font-semibold">₹{safeBalanceData.debitsToWorker.toLocaleString()}</p>
         </div>
         
@@ -113,7 +113,9 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
         <div className="pt-3 border-t border-white/20">
           <div className="flex justify-between items-center">
             <p className="text-sm opacity-80 uppercase">Current Balance:</p>
-            <p className="text-xl font-bold">₹{safeBalanceData.totalBalance.toLocaleString()}</p>
+            <p className={`text-lg font-semibold ${safeBalanceData.totalBalance >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+              ₹{safeBalanceData.totalBalance.toLocaleString()}
+            </p>
           </div>
         </div>
       </div>

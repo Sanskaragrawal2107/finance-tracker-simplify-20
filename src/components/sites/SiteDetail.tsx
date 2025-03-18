@@ -126,32 +126,16 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const currentBalance = totalFundsReceived - totalExpenses - totalAdvances - totalInvoices;
 
   const handleMarkComplete = async () => {
+    if (!completionDate) return;
+    
     try {
-      const completionDate = new Date();
-      
-      const { error } = await supabase
-        .from('sites')
-        .update({
-          is_completed: true,
-          completion_date: completionDate.toISOString()
-        })
-        .eq('id', site.id);
-        
-      if (error) {
-        console.error('Error marking site as complete:', error);
-        toast.error('Failed to mark site as complete: ' + error.message);
-        return;
-      }
-      
-      toast.success('Site marked as complete successfully');
-      if (onCompleteSite) {
-        onCompleteSite(site.id, completionDate);
-      }
-    } catch (error: any) {
-      console.error('Error in handleMarkComplete:', error);
-      toast.error('Failed to mark site as complete: ' + error.message);
-    } finally {
+      await onCompleteSite(site.id, completionDate);
       setIsMarkingComplete(false);
+      setCompletionDate(null);
+      toast.success('Site marked as complete successfully');
+    } catch (error) {
+      console.error('Error marking site as complete:', error);
+      toast.error('Failed to mark site as complete');
     }
   };
 
@@ -259,6 +243,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     }
   };
 
+  const isAdmin = userRole === UserRole.ADMIN;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -281,7 +267,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           )}
         </div>
         
-        {!site.isCompleted && (
+        {!site.isCompleted && isAdmin && (
           <Button 
             className="text-green-600 border-green-200 hover:bg-green-50 w-full sm:w-auto mt-2 sm:mt-0" 
             onClick={() => setIsMarkingComplete(true)}
@@ -290,89 +276,22 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             Mark as Complete
           </Button>
         )}
-
-        {isMarkingComplete && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle>Mark Site as Complete?</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p>Are you sure you want to mark this site as complete? This action cannot be undone.</p>
-                <div className="flex justify-end gap-2">
-                  <Button onClick={() => setIsMarkingComplete(false)}>Cancel</Button>
-                  <Button onClick={handleMarkComplete}>Confirm</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <CustomCard className="md:col-span-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Job Name</h3>
-              <p className="text-lg font-semibold mt-1">{site.jobName}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">PO Number</h3>
-              <p className="text-lg font-semibold mt-1">{site.posNo}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Start Date</h3>
-              <p className="text-lg font-semibold mt-1">{format(site.startDate, 'dd/MM/yyyy')}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">
-                {site.isCompleted ? 'Completion Date' : 'Est. Completion'}
-              </h3>
-              <p className="text-lg font-semibold mt-1">
-                {site.completionDate ? format(site.completionDate, 'dd/MM/yyyy') : 'Not specified'}
-              </p>
-            </div>
-            {siteSupervisor && (
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Supervisor</h3>
-                <p className="text-lg font-semibold mt-1 flex items-center">
-                  <User className="h-4 w-4 mr-1 text-muted-foreground" />
-                  {siteSupervisor.name}
-                </p>
+      {isMarkingComplete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Mark Site as Complete?</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p>Are you sure you want to mark this site as complete? This action cannot be undone.</p>
+              <div className="flex justify-end gap-2">
+                <Button onClick={() => setIsMarkingComplete(false)}>Cancel</Button>
+                <Button onClick={handleMarkComplete}>Confirm</Button>
               </div>
-            )}
-          </div>
-        </CustomCard>
-
-        <BalanceCard balanceData={balance} siteId={site.id} />
-      </div>
-
-      {userRole !== UserRole.VIEWER && !site.isCompleted && (
-        <div className="flex flex-wrap gap-2">
-          <Button 
-            onClick={() => setIsExpenseFormOpen(true)}
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Expense
-          </Button>
-          <Button 
-            onClick={() => setIsAdvanceFormOpen(true)}
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Advance
-          </Button>
-          <Button 
-            onClick={() => setIsFundsFormOpen(true)}
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Funds From HO
-          </Button>
-          <Button 
-            onClick={() => setIsInvoiceFormOpen(true)}
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Invoice
-          </Button>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -460,10 +379,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           <SiteDetailTransactions 
             siteId={site.id}
             userRole={userRole}
-            expensesCount={expenses.length}
-            advancesCount={advances.length}
-            fundsReceivedCount={fundsReceived.length}
+            isAdminView={isAdmin}
             site={site}
+            supervisor={siteSupervisor}
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
@@ -476,37 +394,37 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 
       {isExpenseFormOpen && (
         <ExpenseForm
+          siteId={site.id}
           isOpen={isExpenseFormOpen}
           onClose={() => setIsExpenseFormOpen(false)}
           onSubmit={handleExpenseSubmit}
-          siteId={site.id}
         />
       )}
       
       {isAdvanceFormOpen && (
         <AdvanceForm
+          siteId={site.id}
           isOpen={isAdvanceFormOpen}
           onClose={() => setIsAdvanceFormOpen(false)}
           onSubmit={handleAdvanceSubmit}
-          siteId={site.id}
         />
       )}
       
       {isFundsFormOpen && (
         <FundsReceivedForm
+          siteId={site.id}
           isOpen={isFundsFormOpen}
           onClose={() => setIsFundsFormOpen(false)}
           onSubmit={handleFundsSubmit}
-          siteId={site.id}
         />
       )}
       
       {isInvoiceFormOpen && (
         <InvoiceForm
+          siteId={site.id}
           isOpen={isInvoiceFormOpen}
           onClose={() => setIsInvoiceFormOpen(false)}
           onSubmit={handleInvoiceSubmit}
-          siteId={site.id}
         />
       )}
     </div>

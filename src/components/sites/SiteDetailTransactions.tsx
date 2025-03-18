@@ -68,10 +68,12 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     invoices: false,
   });
 
-  // Ensure advances are not duplicated by setting them only once on initial render
+  // Update local state when props change
   useEffect(() => {
+    setLocalExpenses(expenses);
     setLocalAdvances(advances);
-  }, []);
+    setLocalFundsReceived(fundsReceived);
+  }, [expenses, advances, fundsReceived]);
 
   useEffect(() => {
     const loadInvoices = async () => {
@@ -84,6 +86,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         setInvoices(invoicesData as Invoice[]);
       } catch (error) {
         console.error('Error loading invoices:', error);
+        toast.error('Failed to load invoices');
       } finally {
         setIsLoading(prev => ({ ...prev, invoices: false }));
       }
@@ -426,15 +429,15 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           </TabsTrigger>
           <TabsTrigger value="expenses" className="text-sm">
             Expenses
-            {expensesCount > 0 && <span className="ml-1 text-xs">({expensesCount})</span>}
+            {localExpenses.length > 0 && <span className="ml-1 text-xs">({localExpenses.length})</span>}
           </TabsTrigger>
           <TabsTrigger value="advances" className="text-sm">
             Advances
-            {advancesCount > 0 && <span className="ml-1 text-xs">({advancesCount})</span>}
+            {localAdvances.length > 0 && <span className="ml-1 text-xs">({localAdvances.length})</span>}
           </TabsTrigger>
           <TabsTrigger value="funds" className="text-sm">
             Funds Received
-            {fundsReceivedCount > 0 && <span className="ml-1 text-xs">({fundsReceivedCount})</span>}
+            {localFundsReceived.length > 0 && <span className="ml-1 text-xs">({localFundsReceived.length})</span>}
           </TabsTrigger>
         </TabsList>
         

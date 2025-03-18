@@ -1,40 +1,27 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem, Site, RecipientType } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchSiteInvoices } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee, Edit, Trash, AlertTriangle } from 'lucide-react';
+import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
-export interface SiteDetailTransactionsProps {
+interface SiteDetailTransactionsProps {
   siteId: string;
-  expensesCount: number;
-  advancesCount: number;
-  fundsReceivedCount: number;
+  expensesCount?: number;
+  advancesCount?: number;
+  fundsReceivedCount?: number;
   userRole: UserRole;
-  isAdminView: boolean;
-  site: Site;
+  isAdminView?: boolean;
+  site?: Site;
   supervisor?: any;
-  expenses: Expense[];
-  advances: Advance[];
-  fundsReceived: FundsReceived[];
-  onUpdateTransactions: () => void;
-  onTransactionsUpdate: () => void | Promise<void>;
+  expenses?: Expense[];
+  advances?: Advance[];
+  fundsReceived?: FundsReceived[];
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
@@ -49,8 +36,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   expenses = [],
   advances = [],
   fundsReceived = [],
-  onUpdateTransactions,
-  onTransactionsUpdate,
 }) => {
   console.info('SiteDetailTransactions props:', { 
     siteId, 
@@ -75,12 +60,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     fundsReceived: false,
     invoices: false,
   });
-  const [deletingAdvanceId, setDeletingAdvanceId] = useState<string | null>(null);
-  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
-  const [deletingFundId, setDeletingFundId] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deleteType, setDeleteType] = useState<'expense' | 'advance' | 'fund' | null>(null);
 
+  // Ensure advances are not duplicated by setting them only once on initial render
   useEffect(() => {
     setLocalAdvances(advances);
   }, []);
@@ -92,40 +73,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       setIsLoading(prev => ({ ...prev, invoices: true }));
       
       try {
-        const { data, error } = await supabase
-          .from('site_invoices')
-          .select('*')
-          .eq('site_id', siteId);
-        
-        if (error) throw error;
-        
-        const invoicesData = data?.map(item => ({
-          id: item.id,
-          date: new Date(item.date),
-          partyId: item.party_id,
-          partyName: item.party_name,
-          material: item.material,
-          quantity: item.quantity || 0,
-          rate: item.rate || 0,
-          gstPercentage: item.gst_percentage || 0,
-          grossAmount: item.gross_amount || 0,
-          netAmount: item.net_amount || 0,
-          materialItems: item.material_items ? (item.material_items as unknown as MaterialItem[]) : [],
-          bankDetails: item.bank_details ? (item.bank_details as unknown as BankDetails) : {
-            accountNumber: '',
-            bankName: '',
-            ifscCode: '',
-          },
-          billUrl: item.bill_url,
-          invoiceImageUrl: item.bill_url,
-          paymentStatus: item.payment_status,
-          createdBy: item.created_by || '',
-          createdAt: new Date(item.created_at),
-          approverType: item.approver_type as "ho" | "supervisor" || undefined,
-          siteId: item.site_id
-        })) as Invoice[];
-        
-        setInvoices(invoicesData || []);
+        const invoicesData = await fetchSiteInvoices(siteId);
+        setInvoices(invoicesData as Invoice[]);
       } catch (error) {
         console.error('Error loading invoices:', error);
       } finally {
@@ -183,66 +132,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     setSelectedInvoice(null);
   };
 
-  const handleDeleteClick = (id: string, type: 'expense' | 'advance' | 'fund') => {
-    if (type === 'advance') {
-      setDeletingAdvanceId(id);
-    } else if (type === 'expense') {
-      setDeletingExpenseId(id);
-    } else if (type === 'fund') {
-      setDeletingFundId(id);
-    }
-    setDeleteType(type);
-    setIsDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    try {
-      if (deleteType === 'advance' && deletingAdvanceId) {
-        await supabase
-          .from('advances')
-          .delete()
-          .eq('id', deletingAdvanceId);
-        
-        setLocalAdvances(prev => prev.filter(adv => adv.id !== deletingAdvanceId));
-        toast.success("Advance deleted successfully");
-      } 
-      else if (deleteType === 'expense' && deletingExpenseId) {
-        await supabase
-          .from('expenses')
-          .delete()
-          .eq('id', deletingExpenseId);
-        
-        setLocalExpenses(prev => prev.filter(exp => exp.id !== deletingExpenseId));
-        toast.success("Expense deleted successfully");
-      }
-      else if (deleteType === 'fund' && deletingFundId) {
-        await supabase
-          .from('funds_received')
-          .delete()
-          .eq('id', deletingFundId);
-        
-        setLocalFundsReceived(prev => prev.filter(fund => fund.id !== deletingFundId));
-        toast.success("Fund record deleted successfully");
-      }
-
-      if (onUpdateTransactions) {
-        onUpdateTransactions();
-      }
-      if (onTransactionsUpdate) {
-        await onTransactionsUpdate();
-      }
-    } catch (error: any) {
-      console.error(`Error deleting ${deleteType}:`, error);
-      toast.error(`Failed to delete ${deleteType}: ${error.message}`);
-    } finally {
-      setIsDeleteDialogOpen(false);
-      setDeletingAdvanceId(null);
-      setDeletingExpenseId(null);
-      setDeletingFundId(null);
-      setDeleteType(null);
-    }
-  };
-
   const renderExpensesTab = () => (
     <div className="space-y-4">
       {localExpenses.length === 0 ? (
@@ -251,16 +140,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {localExpenses.map((expense) => (
             <Card key={expense.id} className="p-4">
-              <div className="flex justify-between">
-                <p>Expense: {expense.description}</p>
-                {userRole === UserRole.ADMIN && (
-                  <div className="flex space-x-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(expense.id, 'expense')}>
-                      <Trash className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
-                )}
-              </div>
+              <p>Expense: {expense.description}</p>
             </Card>
           ))}
         </div>
@@ -283,7 +163,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Purpose</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                {userRole !== UserRole.VIEWER && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -323,24 +205,15 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                       <span className="ml-1 capitalize">{advance.status}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div className="flex space-x-2">
+                  {userRole !== UserRole.VIEWER && (
+                    <td className="px-4 py-3 text-sm">
                       <button
                         className="text-primary hover:text-primary/80 transition-colors flex items-center"
                       >
                         View <ArrowUpRight className="h-3 w-3 ml-1" />
                       </button>
-                      
-                      {userRole === UserRole.ADMIN && (
-                        <button
-                          onClick={() => handleDeleteClick(advance.id, 'advance')}
-                          className="text-red-500 hover:text-red-700 transition-colors flex items-center"
-                        >
-                          Delete <Trash className="h-3 w-3 ml-1" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -355,47 +228,12 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       {localFundsReceived.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No funds received for this site.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
-                {userRole === UserRole.ADMIN && (
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {localFundsReceived.map((fund) => (
-                <tr key={fund.id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {format(new Date(fund.date), 'dd MMM yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      <IndianRupee className="h-3 w-3 mr-1" />
-                      {fund.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">{fund.reference || '-'}</td>
-                  <td className="px-4 py-3 text-sm">{fund.method || '-'}</td>
-                  {userRole === UserRole.ADMIN && (
-                    <td className="px-4 py-3 text-sm">
-                      <button
-                        onClick={() => handleDeleteClick(fund.id, 'fund')}
-                        className="text-red-500 hover:text-red-700 transition-colors flex items-center"
-                      >
-                        Delete <Trash className="h-3 w-3 ml-1" />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {localFundsReceived.map((fund) => (
+            <Card key={fund.id} className="p-4">
+              <p>Fund: ₹{fund.amount}</p>
+            </Card>
+          ))}
         </div>
       )}
     </div>
@@ -436,22 +274,12 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => openInvoiceDetails(invoice)}
-                        className="text-primary hover:text-primary/80 transition-colors flex items-center"
-                      >
-                        View <ArrowUpRight className="h-3 w-3 ml-1" />
-                      </button>
-                      
-                      {userRole === UserRole.ADMIN && (
-                        <button
-                          className="text-red-500 hover:text-red-700 transition-colors flex items-center"
-                        >
-                          Delete <Trash className="h-3 w-3 ml-1" />
-                        </button>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => openInvoiceDetails(invoice)}
+                      className="text-primary hover:text-primary/80 transition-colors flex items-center"
+                    >
+                      View <ArrowUpRight className="h-3 w-3 ml-1" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -497,29 +325,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         <TabsContent value="advances">{renderAdvancesTab()}</TabsContent>
         <TabsContent value="funds">{renderFundsReceivedTab()}</TabsContent>
       </Tabs>
-
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center">
-              <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />
-              Confirm Deletion
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this {deleteType}? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDeleteConfirm}
-              className="bg-red-500 hover:bg-red-600 text-white"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </CustomCard>
   );
 };

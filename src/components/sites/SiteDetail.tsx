@@ -1,41 +1,21 @@
-import React, { useState } from 'react';
-import { Site, Expense, Advance, FundsReceived, Invoice, BalanceSummary, UserRole } from '@/lib/types';
-import { ArrowLeft, Calendar, MapPin, User, CheckCircle, IndianRupee, PlusCircle, BarChart } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
+import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus, UserRole } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import PageTitle from '@/components/common/PageTitle';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import CustomCard from '@/components/ui/CustomCard';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import SiteDetailTransactions from './SiteDetailTransactions';
+import { useIsMobile } from '@/hooks/use-mobile';
+import BalanceCard from '../dashboard/BalanceCard';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogHeader,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Calendar as CalendarPicker } from '@/components/ui/calendar';
-import BalanceCard from '@/components/dashboard/BalanceCard';
-import { AdvancePurpose, RecipientType } from '@/lib/types';
-import { useMobile } from '@/hooks/use-mobile';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { 
-  Card, 
-  CardHeader, 
-  CardTitle, 
-  CardContent 
-} from '@/components/ui/card';
-import { 
-  Tabs, 
-  TabsList, 
-  TabsTrigger, 
-  TabsContent 
-} from '@/components/ui/tabs';
 
 interface SiteDetailProps {
   site: Site;
@@ -44,17 +24,17 @@ interface SiteDetailProps {
   fundsReceived?: FundsReceived[];
   invoices?: Invoice[];
   supervisorInvoices?: Invoice[];
-  onBack: () => void;
-  onAddExpense: (expense: Partial<Expense>) => void;
-  onAddAdvance: (advance: Partial<Advance>) => void;
-  onAddFunds: (fund: Partial<FundsReceived>) => void;
-  onAddInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
-  onCompleteSite: (siteId: string, completionDate: Date) => void;
-  balanceSummary: BalanceSummary;
-  siteSupervisor?: any;
+  balanceSummary?: BalanceSummary;
+  siteSupervisor?: { id: string; name: string } | null;
+  onBack?: () => void;
+  onAddExpense?: (expense: Partial<Expense>) => void;
+  onAddAdvance?: (advance: Partial<Advance>) => void;
+  onAddFunds?: (fund: Partial<FundsReceived>) => void;
+  onAddInvoice?: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
+  onCompleteSite?: (siteId: string, completionDate: Date) => void;
+  supervisor?: any;
+  isAdminView?: boolean;
   userRole: UserRole;
-  onUpdateTransactions?: () => void;
-  onTransactionsUpdate?: () => Promise<void> | void;
 }
 
 const DEBIT_ADVANCE_PURPOSES = [
@@ -70,21 +50,21 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   fundsReceived = [],
   invoices = [],
   supervisorInvoices = [],
+  balanceSummary,
+  siteSupervisor,
   onBack,
   onAddExpense,
   onAddAdvance,
   onAddFunds,
   onAddInvoice,
   onCompleteSite,
-  balanceSummary,
-  siteSupervisor,
-  userRole,
-  onUpdateTransactions,
-  onTransactionsUpdate
+  supervisor,
+  isAdminView,
+  userRole
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
-  const isMobile = useMobile();
+  const isMobile = useIsMobile();
   
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
@@ -140,7 +120,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         
       if (error) {
         console.error('Error marking site as complete:', error);
-        toast.error(`Failed to mark site as complete: ${error.message}`);
+        toast.error('Failed to mark site as complete: ' + error.message);
         return;
       }
       
@@ -150,7 +130,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       }
     } catch (error: any) {
       console.error('Error in handleMarkComplete:', error);
-      toast.error(`Failed to mark site as complete: ${error.message}`);
+      toast.error('Failed to mark site as complete: ' + error.message);
     } finally {
       setIsMarkingComplete(false);
     }
@@ -189,7 +169,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
@@ -217,7 +197,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             className="text-green-600 border-green-200 hover:bg-green-50 w-full sm:w-auto mt-2 sm:mt-0" 
             onClick={() => setIsMarkingComplete(true)}
           >
-            <CheckCircle className="mr-2 h-4 w-4" />
+            <Check className="mr-2 h-4 w-4" />
             Mark as Complete
           </Button>
         )}
@@ -286,7 +266,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <PlusCircle className="h-4 w-4" /> Add Expense
+            <Plus className="h-4 w-4" /> Add Expense
           </Button>
           <Button 
             onClick={() => setIsAdvanceFormOpen(true)}
@@ -294,7 +274,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <PlusCircle className="h-4 w-4" /> Add Advance
+            <Plus className="h-4 w-4" /> Add Advance
           </Button>
           <Button 
             onClick={() => setIsFundsFormOpen(true)}
@@ -302,7 +282,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <PlusCircle className="h-4 w-4" /> Add Funds From HO
+            <Plus className="h-4 w-4" /> Add Funds From HO
           </Button>
           <Button 
             onClick={() => setIsInvoiceFormOpen(true)}
@@ -310,7 +290,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             size="sm"
             className="flex items-center gap-1"
           >
-            <PlusCircle className="h-4 w-4" /> Add Invoice
+            <Plus className="h-4 w-4" /> Add Invoice
           </Button>
         </div>
       )}
@@ -390,20 +370,18 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="transactions">
-          <SiteDetailTransactions
+          <SiteDetailTransactions 
             siteId={site.id}
+            userRole={userRole}
+            isAdminView={isAdminView}
             expensesCount={expenses.length}
             advancesCount={advances.length}
             fundsReceivedCount={fundsReceived.length}
-            userRole={userRole}
-            isAdminView={userRole === UserRole.ADMIN}
             site={site}
-            supervisor={siteSupervisor}
+            supervisor={supervisor}
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
-            onUpdateTransactions={onUpdateTransactions}
-            onTransactionsUpdate={onTransactionsUpdate}
           />
         </TabsContent>
       </Tabs>

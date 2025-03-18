@@ -630,9 +630,9 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
-        // Calculate supervisor invoices (only those with approverType 'supervisor')
+        // Calculate supervisor invoices (only those paid by supervisor)
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.approverType === 'supervisor')
+          .filter(invoice => invoice.payment_by === 'supervisor')
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
         // Calculate total balance
@@ -710,18 +710,6 @@ const Expenses: React.FC = () => {
     setSelectedSiteId(null);
   };
 
-  const handleTransactionsUpdate = async () => {
-    if (selectedSiteId) {
-      await fetchSiteExpenses(selectedSiteId);
-      await fetchSiteAdvances(selectedSiteId);
-      await fetchSiteFundsReceived(selectedSiteId);
-      await fetchSiteInvoices(selectedSiteId);
-      
-      // Refetch sites to update balances
-      fetchSites();
-    }
-  };
-
   return (
     <div className="space-y-6 animate-fade-in max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
       {isLoading ? (
@@ -746,7 +734,6 @@ const Expenses: React.FC = () => {
             balanceSummary={calculateSiteFinancials(selectedSite.id)}
             siteSupervisor={siteSupervisor}
             userRole={user?.role || UserRole.VIEWER}
-            onUpdateTransactions={handleTransactionsUpdate}
           />
         </div>
       ) : (

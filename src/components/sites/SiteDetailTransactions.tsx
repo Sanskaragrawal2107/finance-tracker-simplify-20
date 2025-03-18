@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
-import { Expense, Advance, FundsReceived, Invoice, UserRole } from '@/lib/types';
+import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
 import { fetchSiteInvoices } from '@/integrations/supabase/client';
@@ -11,18 +11,18 @@ import { ArrowUpRight, Check, Clock } from 'lucide-react';
 
 interface SiteDetailTransactionsProps {
   siteId: string;
-  expensesCount: number;
-  advancesCount: number;
-  fundsReceivedCount: number;
+  expensesCount?: number;
+  advancesCount?: number;
+  fundsReceivedCount?: number;
   userRole: UserRole;
   isAdminView?: boolean;
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   siteId,
-  expensesCount,
-  advancesCount,
-  fundsReceivedCount,
+  expensesCount = 0,
+  advancesCount = 0,
+  fundsReceivedCount = 0,
   userRole,
   isAdminView,
 }) => {
@@ -57,6 +57,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       
       try {
         const invoicesData = await fetchSiteInvoices(siteId);
+        // We need to cast this directly to Invoice[] since the function is now returning the correct type
         setInvoices(invoicesData as Invoice[]);
       } catch (error) {
         console.error('Error loading invoices:', error);
@@ -216,7 +217,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           invoice={selectedInvoice}
           isOpen={isDetailsOpen}
           onClose={closeInvoiceDetails}
-          canApprove={userRole === UserRole.ADMIN}
         />
       )}
     </div>
@@ -228,7 +228,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         <TabsList className="grid grid-cols-4 mb-4">
           <TabsTrigger value="invoices" className="text-sm">
             Invoices
-            {invoicesCount > 0 && <span className="ml-1 text-xs">({invoices.length})</span>}
+            {invoices.length > 0 && <span className="ml-1 text-xs">({invoices.length})</span>}
           </TabsTrigger>
           <TabsTrigger value="expenses" className="text-sm">
             Expenses

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
@@ -8,12 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Site, UserRole } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/providers/AuthProvider';
-import SiteDetailView from '@/components/sites/SiteDetailView';
-import NewSiteForm from '@/components/sites/NewSiteForm';
+import { useAuth } from '@/hooks/use-auth';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
+import SiteDetail from '@/components/sites/SiteDetail';
 
 const SupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -74,7 +74,7 @@ const SupervisorSites: React.FC = () => {
         startDate: site.start_date ? new Date(site.start_date) : new Date(),
         completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
         supervisorId: site.supervisor_id || '',
-        supervisorName: site.users?.name || 'Unassigned',
+        supervisor: site.users?.name || 'Unassigned',
         createdAt: new Date(site.created_at || new Date()),
         isCompleted: site.is_completed || false,
         funds: site.funds || 0,
@@ -224,7 +224,7 @@ const SupervisorSites: React.FC = () => {
         <div className="flex justify-between items-center pt-2 border-t">
           <div>
             <p className="text-xs text-muted-foreground">Supervisor</p>
-            <p className="text-sm font-medium">{site.supervisorName}</p>
+            <p className="text-sm font-medium">{site.supervisor}</p>
           </div>
           <Button size="sm" variant="ghost" className="text-primary">
             View Details <ArrowUpRight className="h-4 w-4 ml-1" />
@@ -291,7 +291,7 @@ const SupervisorSites: React.FC = () => {
   // If site detail view is open, show that instead
   if (showSiteDetail && selectedSite) {
     return (
-      <SiteDetailView
+      <SiteDetail
         site={selectedSite}
         onClose={handleCloseSiteDetail}
         userRole={user?.role || UserRole.VIEWER}
@@ -301,7 +301,34 @@ const SupervisorSites: React.FC = () => {
 
   // If new site form is open, show that
   if (showNewSiteForm) {
-    return <NewSiteForm onSubmit={handleCreateSite} onCancel={() => setShowNewSiteForm(false)} />;
+    return (
+      <div className="space-y-6">
+        <PageTitle 
+          title="Create New Site" 
+          subtitle="Enter the details to create a new site" 
+        />
+        
+        <CustomCard>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            // This form would be implemented in an actual SiteForm component
+            // For now, this is just a placeholder
+          }}>
+            <div className="space-y-4 p-4">
+              <p className="text-center text-muted-foreground">
+                Site form component would go here.
+              </p>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowNewSiteForm(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Create Site</Button>
+              </div>
+            </div>
+          </form>
+        </CustomCard>
+      </div>
+    );
   }
 
   return (

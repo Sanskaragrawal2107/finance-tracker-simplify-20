@@ -4,15 +4,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -26,12 +24,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -39,31 +31,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import SearchableDropdown from './SearchableDropdown';
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { Expense, ExpenseCategory } from "@/lib/types";
-import { Textarea } from "@/components/ui/textarea";
+import { EXPENSE_CATEGORIES } from '@/lib/constants';
 
 interface ExpenseFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (expense: Partial<Expense>) => void;
   siteId?: string;
-  defaultExpense?: Partial<Expense>;
 }
 
 const formSchema = z.object({
   date: z.date({
     required_error: "Date is required",
   }),
-  description: z.string().min(2, {
-    message: "Description must be at least 2 characters.",
+  purpose: z.string().min(3, {
+    message: "Purpose description must be at least 3 characters",
   }),
   category: z.string({
     required_error: "Category is required",
   }),
-  amount: z.coerce.number({
+  amount: z.number({
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }).positive({
@@ -73,167 +70,229 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-const ExpenseForm: React.FC<ExpenseFormProps> = ({ 
-  isOpen, 
-  onClose, 
-  onSubmit, 
-  siteId,
-  defaultExpense 
-}) => {
-  const [otherCategory, setOtherCategory] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+interface ExpenseItem {
+  id: string;
+  date: Date;
+  purpose: string;
+  category: string;
+  amount: number;
+}
+
+const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   
-  // Set default values, using provided expense data if available
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      date: defaultExpense?.date || new Date(),
-      description: defaultExpense?.description || '',
-      category: defaultExpense?.category || '',
-      amount: defaultExpense?.amount || undefined,
+      date: new Date(),
+      purpose: "",
+      category: "",
+      amount: undefined,
     },
   });
 
-  const selectedCategory = form.watch('category');
-  const isOtherSelected = selectedCategory === 'other';
+  React.useEffect(() => {
+    form.setValue("date", selectedDate);
+  }, [selectedDate, form]);
 
-  const handleSubmit = async (values: FormValues) => {
-    // Prevent multiple submissions
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  const analyzePurpose = async (purposeText: string) => {
+    if (!purposeText || purposeText.length < 3) return;
     
+    setIsAnalyzing(true);
     try {
-      // Use the "Other" category value if selected
-      const finalCategory = isOtherSelected ? otherCategory : values.category;
+      const apiKey = "AIzaSyDwqj1YcFKVzpLc_4ZyC_s9YAMCONx57RI";
+      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent";
       
-      if (isOtherSelected && !otherCategory) {
-        form.setError('category', { 
-          type: 'manual', 
-          message: 'Please specify the other category' 
-        });
-        setIsSubmitting(false);
-        return;
+      const prompt = `
+Given this expense description: "${purposeText}"
+Classify it into exactly ONE of these categories:
+- STAFF TRAVELLING CHARGES
+- STATIONARY & PRINTING
+- DIESEL & FUEL CHARGES
+- LABOUR TRAVELLING EXP.
+- LOADGING & BOARDING FOR STAFF
+- FOOD CHARGES FOR LABOUR
+- SITE EXPENSES
+- ROOM RENT FOR LABOUR
+
+Return ONLY the category name, with no additional text or explanation.
+`;
+
+      const response = await fetch(`${url}?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            topP: 0.8,
+            topK: 40,
+            maxOutputTokens: 50,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("API response error:", response.status, response.statusText);
+        throw new Error("API request failed");
       }
+
+      const data = await response.json();
+      console.log("Gemini API response:", data);
       
-      if (!siteId) {
-        throw new Error("Site ID is required");
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        const categoryText = data.candidates[0].content.parts[0].text.trim();
+        console.log("Detected category text:", categoryText);
+        
+        const matchedCategory = EXPENSE_CATEGORIES.find(cat => 
+          categoryText.includes(cat)
+        );
+        
+        if (matchedCategory) {
+          console.log("Setting category to:", matchedCategory);
+          form.setValue("category", matchedCategory);
+          toast.success(`Category detected: ${matchedCategory}`);
+        } else {
+          console.log("No matching category found in:", categoryText);
+          toast.warning("Could not determine category");
+        }
       }
-      
-      // Prepare expense data for database (snake_case)
-      const expenseData = {
-        site_id: siteId,
-        date: values.date.toISOString(),
-        description: values.description,
-        category: finalCategory,
-        amount: values.amount,
-        created_by: "system", // This should ideally be the current user's ID
+    } catch (error) {
+      console.error("Error analyzing purpose:", error);
+      console.log("Continuing without category detection");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const addExpenseToList = (values: FormValues) => {
+    const newExpense: ExpenseItem = {
+      id: Date.now().toString(),
+      date: values.date,
+      purpose: values.purpose,
+      category: values.category,
+      amount: values.amount,
+    };
+    
+    console.log("Adding expense to list:", newExpense);
+    setExpenses([...expenses, newExpense]);
+    
+    form.reset({
+      date: selectedDate,
+      purpose: "",
+      category: "",
+      amount: undefined,
+    });
+    
+    toast.success("Expense added to the list");
+  };
+  
+  const removeExpense = (id: string) => {
+    setExpenses(expenses.filter(expense => expense.id !== id));
+    toast.info("Expense removed");
+  };
+
+  const submitAllExpenses = () => {
+    console.log("Submitting all expenses:", expenses);
+    expenses.forEach(expense => {
+      const newExpense: Partial<Expense> = {
+        date: expense.date,
+        description: expense.purpose,
+        category: expense.category as unknown as ExpenseCategory,
+        amount: expense.amount,
+        status: "pending" as any,
+        createdAt: new Date(),
       };
       
-      console.log("Submitting expense:", expenseData);
+      onSubmit(newExpense);
+    });
+    
+    setExpenses([]);
+    form.reset();
+    onClose();
+    
+    if (expenses.length > 0) {
+      toast.success(`${expenses.length} expenses submitted successfully`);
+    }
+  };
 
-      // If we're updating an existing expense
-      if (defaultExpense?.id) {
-        const { data, error } = await supabase
-          .from('expenses')
-          .update(expenseData)
-          .eq('id', defaultExpense.id)
-          .select()
-          .single();
-          
-        if (error) {
-          console.error("Error updating expense:", error);
-          throw error;
-        }
-        
-        // Convert to camelCase for application
-        const updatedExpense: Partial<Expense> = {
-          id: data.id,
-          siteId: data.site_id,
-          date: new Date(data.date),
-          description: data.description,
-          category: data.category,
-          amount: data.amount,
-          createdBy: data.created_by,
-          createdAt: new Date(data.created_at),
-          supervisorId: "system", // This should ideally be set correctly
-        };
-        
-        onSubmit(updatedExpense);
-        toast.success("Expense updated successfully");
-      } 
-      // Creating a new expense
-      else {
-        const { data, error } = await supabase
-          .from('expenses')
-          .insert(expenseData)
-          .select()
-          .single();
-          
-        if (error) {
-          console.error("Error inserting expense:", error);
-          throw error;
-        }
-        
-        // Convert to camelCase for application
-        const newExpense: Partial<Expense> = {
-          id: data.id,
-          siteId: data.site_id,
-          date: new Date(data.date),
-          description: data.description,
-          category: data.category,
-          amount: data.amount,
-          createdBy: data.created_by,
-          createdAt: new Date(data.created_at),
-          supervisorId: "system", // This should ideally be set correctly
-        };
-        
-        onSubmit(newExpense);
-        toast.success("Expense added successfully");
-      }
-      
-      // Reset form and close dialog
-      form.reset();
-      onClose();
-    } catch (error) {
-      console.error('Error submitting expense:', error);
-      toast.error('Failed to save expense');
-    } finally {
-      setIsSubmitting(false);
+  const handleSingleSubmit = (values: FormValues) => {
+    const newExpense: Partial<Expense> = {
+      date: values.date,
+      description: values.purpose,
+      category: values.category as unknown as ExpenseCategory,
+      amount: values.amount,
+      status: "pending" as any,
+      createdAt: new Date(),
+    };
+
+    onSubmit(newExpense);
+    form.reset();
+    setExpenses([]);
+    onClose();
+    toast.success("Expense submitted successfully");
+  };
+
+  const handlePurposeBlur = () => {
+    const purposeValue = form.getValues("purpose");
+    if (purposeValue && purposeValue.length >= 3) {
+      analyzePurpose(purposeValue);
+    }
+  };
+
+  const handleDateChange = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(date);
+      form.setValue("date", date);
+      setDatePickerOpen(false); // Close the datepicker after selection
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{defaultExpense?.id ? 'EDIT' : 'ADD'} EXPENSE</DialogTitle>
+          <DialogTitle>New Expense</DialogTitle>
           <DialogDescription>
-            Enter the details for the expense.
+            Enter the details for the new expense. Add multiple expenses before submitting.
           </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(addExpenseToList)} className="space-y-4">
             <FormField
               control={form.control}
               name="date"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>DATE</FormLabel>
-                  <Popover>
+                  <FormLabel>Date</FormLabel>
+                  <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
                           variant={"outline"}
                           className={cn(
-                            "w-full pl-3 text-left font-normal uppercase",
+                            "w-full pl-3 text-left font-normal",
                             !field.value && "text-muted-foreground"
                           )}
                         >
                           {field.value ? (
-                            format(field.value, "PPP").toUpperCase()
+                            format(field.value, "PPP")
                           ) : (
-                            <span>SELECT A DATE</span>
+                            <span>Select a date</span>
                           )}
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
@@ -243,7 +302,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={handleDateChange}
                         initialFocus
                         className="pointer-events-auto"
                       />
@@ -256,14 +315,16 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
             <FormField
               control={form.control}
-              name="description"
+              name="purpose"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>DESCRIPTION</FormLabel>
+                  <FormLabel>Purpose</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder="Enter expense description"
-                      {...field}
+                    <Textarea 
+                      placeholder="Describe the purpose of this expense..." 
+                      className="resize-none" 
+                      {...field} 
+                      onBlur={handlePurposeBlur}
                     />
                   </FormControl>
                   <FormMessage />
@@ -276,10 +337,16 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
               name="category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>CATEGORY</FormLabel>
+                  <FormLabel className="flex items-center">
+                    Category
+                    {isAnalyzing && (
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value}
+                    defaultValue=""
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -287,22 +354,13 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {Object.values(ExpenseCategory).map((category) => (
+                      {EXPENSE_CATEGORIES.map((category) => (
                         <SelectItem key={category} value={category}>
-                          {category.replace(/_/g, ' ')}
+                          {category}
                         </SelectItem>
                       ))}
-                      <SelectItem value="other">OTHER</SelectItem>
                     </SelectContent>
                   </Select>
-                  {isOtherSelected && (
-                    <Input
-                      className="mt-2"
-                      placeholder="Specify category"
-                      value={otherCategory}
-                      onChange={(e) => setOtherCategory(e.target.value)}
-                    />
-                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -313,7 +371,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
               name="amount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>AMOUNT (₹)</FormLabel>
+                  <FormLabel>Amount (₹)</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -330,26 +388,74 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
               )}
             />
 
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
-                CANCEL
+            <div className="flex justify-end pt-2">
+              <Button type="submit" variant="secondary">
+                <Plus className="h-4 w-4 mr-2" />
+                Add to List
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {defaultExpense?.id ? 'UPDATING...' : 'SUBMITTING...'}
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {defaultExpense?.id ? 'UPDATE' : 'SUBMIT'}
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
+            </div>
           </form>
         </Form>
+
+        {expenses.length > 0 && (
+          <div className="mt-6 space-y-4">
+            <h3 className="text-sm font-medium">Expenses List ({expenses.length})</h3>
+            <div className="border rounded-md overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="p-2 text-left">Date</th>
+                    <th className="p-2 text-left">Purpose</th>
+                    <th className="p-2 text-right">Amount</th>
+                    <th className="p-2 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenses.map((expense) => (
+                    <tr key={expense.id} className="border-t">
+                      <td className="p-2">{format(expense.date, 'MMM dd')}</td>
+                      <td className="p-2">{expense.purpose}</td>
+                      <td className="p-2 text-right">₹{expense.amount}</td>
+                      <td className="p-2 text-center">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8" 
+                          onClick={() => removeExpense(expense.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="pt-4 flex flex-col gap-2 sm:flex-row">
+          <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
+            Cancel
+          </Button>
+          {expenses.length > 0 ? (
+            <Button 
+              type="button" 
+              onClick={submitAllExpenses} 
+              className="w-full sm:w-auto"
+            >
+              Submit All Expenses
+            </Button>
+          ) : (
+            <Button 
+              type="button" 
+              onClick={form.handleSubmit(handleSingleSubmit)} 
+              className="w-full sm:w-auto"
+            >
+              Submit Expense
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

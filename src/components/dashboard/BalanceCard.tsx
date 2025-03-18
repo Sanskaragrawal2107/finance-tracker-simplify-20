@@ -1,7 +1,7 @@
 import React from 'react';
 import { BalanceSummary } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
-import { RefreshCw } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface BalanceCardProps {

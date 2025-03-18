@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, Loader2 } from "lucide-react";
+import { CalendarIcon, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -78,41 +78,12 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
     setIsSubmitting(true);
     
     try {
-      if (!siteId) {
-        throw new Error("Site ID is required");
-      }
-      
-      // Create the database entry object with snake_case keys for Supabase
-      const fundsData = {
-        site_id: siteId,
-        date: values.date.toISOString(),
-        amount: values.amount,
-        reference: values.reference || null,
-        method: values.method || null,
-      };
-
-      console.log("Submitting funds received:", fundsData);
-      
-      const { data, error } = await supabase
-        .from('funds_received')
-        .insert(fundsData)
-        .select()
-        .single();
-        
-      if (error) {
-        console.error("Error inserting funds received:", error);
-        throw error;
-      }
-
-      // Convert the data from snake_case to camelCase for the application
       const newFunds: Partial<FundsReceived> = {
-        id: data.id,
-        date: new Date(data.date),
-        amount: data.amount,
-        reference: data.reference,
-        method: data.method,
-        siteId: data.site_id,
-        createdAt: new Date(data.created_at),
+        date: values.date,
+        amount: values.amount,
+        reference: values.reference,
+        method: values.method,
+        siteId: siteId,
       };
 
       onSubmit(newFunds);
@@ -251,17 +222,8 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
                 CANCEL
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    SUBMITTING...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    SUBMIT
-                  </>
-                )}
+                <Plus className="h-4 w-4 mr-2" />
+                SUBMIT
               </Button>
             </DialogFooter>
           </form>

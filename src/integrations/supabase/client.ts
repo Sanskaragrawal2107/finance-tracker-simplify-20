@@ -156,7 +156,7 @@ export const checkSupervisorOrAdminRole = async (userId: string): Promise<boolea
 };
 
 // Function to delete a transaction with role check
-export const deleteTransaction = async (transactionId: string, userId: string) => {
+export const deleteTransaction = async (transactionId: string, userId: string, table: string) => {
   const isAdmin = await checkAdminRole(userId);
   
   if (!isAdmin) {
@@ -164,18 +164,20 @@ export const deleteTransaction = async (transactionId: string, userId: string) =
   }
   
   const { error } = await supabase
-    .from('expenses')
+    .from(table)
     .delete()
     .eq('id', transactionId);
     
   if (error) {
-    console.error('Error deleting transaction:', error);
+    console.error(`Error deleting transaction from ${table}:`, error);
     throw error;
   }
+  
+  return { success: true, message: 'Transaction deleted successfully' };
 };
 
 // Function to update a transaction with role check
-export const updateTransaction = async (transactionId: string, updates: Database['public']['Tables']['expenses']['Update'], userId: string) => {
+export const updateTransaction = async (transactionId: string, updates: any, userId: string, table: string) => {
   const isAdmin = await checkAdminRole(userId);
   
   if (!isAdmin) {
@@ -183,12 +185,54 @@ export const updateTransaction = async (transactionId: string, updates: Database
   }
   
   const { error } = await supabase
-    .from('expenses')
+    .from(table)
     .update(updates)
     .eq('id', transactionId);
     
   if (error) {
-    console.error('Error updating transaction:', error);
+    console.error(`Error updating transaction in ${table}:`, error);
     throw error;
   }
+  
+  return { success: true, message: 'Transaction updated successfully' };
+};
+
+// Function to delete an expense
+export const deleteExpense = async (expenseId: string, userId: string) => {
+  return deleteTransaction(expenseId, userId, 'expenses');
+};
+
+// Function to update an expense
+export const updateExpense = async (expenseId: string, updates: any, userId: string) => {
+  return updateTransaction(expenseId, updates, userId, 'expenses');
+};
+
+// Function to delete an advance
+export const deleteAdvance = async (advanceId: string, userId: string) => {
+  return deleteTransaction(advanceId, userId, 'advances');
+};
+
+// Function to update an advance
+export const updateAdvance = async (advanceId: string, updates: any, userId: string) => {
+  return updateTransaction(advanceId, updates, userId, 'advances');
+};
+
+// Function to delete a funds received record
+export const deleteFundsReceived = async (fundsReceivedId: string, userId: string) => {
+  return deleteTransaction(fundsReceivedId, userId, 'funds_received');
+};
+
+// Function to update a funds received record
+export const updateFundsReceived = async (fundsReceivedId: string, updates: any, userId: string) => {
+  return updateTransaction(fundsReceivedId, updates, userId, 'funds_received');
+};
+
+// Function to delete an invoice
+export const deleteInvoice = async (invoiceId: string, userId: string) => {
+  return deleteTransaction(invoiceId, userId, 'site_invoices');
+};
+
+// Function to update an invoice
+export const updateInvoice = async (invoiceId: string, updates: any, userId: string) => {
+  return updateTransaction(invoiceId, updates, userId, 'site_invoices');
 };

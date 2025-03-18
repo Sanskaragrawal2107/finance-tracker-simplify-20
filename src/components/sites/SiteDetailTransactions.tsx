@@ -4,10 +4,28 @@ import { Card } from '@/components/ui/card';
 import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem, Site, RecipientType } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
-import { fetchSiteInvoices } from '@/integrations/supabase/client';
+import { 
+  fetchSiteInvoices, 
+  deleteExpense, 
+  deleteAdvance, 
+  deleteFundsReceived, 
+  deleteInvoice 
+} from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee } from 'lucide-react';
+import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from 'sonner';
+import { useAuth } from '@/hooks/use-auth';
 
 interface SiteDetailTransactionsProps {
   siteId: string;
@@ -59,6 +77,10 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     fundsReceived: false,
     invoices: false,
   });
+
+  const { user } = useAuth();
+  const [selectedItemToDelete, setSelectedItemToDelete] = useState<{id: string, type: 'expense' | 'advance' | 'funds' | 'invoice'} | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Ensure advances are not duplicated by setting them only once on initial render
   useEffect(() => {
@@ -131,17 +153,136 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     setSelectedInvoice(null);
   };
 
+  const handleDelete = async () => {
+    if (!selectedItemToDelete || !user?.id) return;
+    
+    try {
+      setIsLoading(prev => ({ ...prev, [selectedItemToDelete.type + 's']: true }));
+      
+      let result;
+      
+      switch (selectedItemToDelete.type) {
+        case 'expense':
+          result = await deleteExpense(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalExpenses(prevExpenses => 
+              prevExpenses.filter(expense => expense.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+        case 'advance':
+          result = await deleteAdvance(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalAdvances(prevAdvances => 
+              prevAdvances.filter(advance => advance.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+        case 'funds':
+          result = await deleteFundsReceived(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalFundsReceived(prevFunds => 
+              prevFunds.filter(fund => fund.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+        case 'invoice':
+          result = await deleteInvoice(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setInvoices(prevInvoices => 
+              prevInvoices.filter(invoice => invoice.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+      }
+      
+      toast.success('Transaction deleted successfully');
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete transaction');
+    } finally {
+      setIsLoading(prev => ({ ...prev, [selectedItemToDelete.type + 's']: false }));
+      setIsDeleteDialogOpen(false);
+      setSelectedItemToDelete(null);
+    }
+  };
+
+  const confirmDelete = (id: string, type: 'expense' | 'advance' | 'funds' | 'invoice') => {
+    setSelectedItemToDelete({ id, type });
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleEdit = (id: string, type: 'expense' | 'advance' | 'funds' | 'invoice') => {
+    // Navigation to edit forms will be handled by the parent component
+    // For now, just log the action
+    console.log(`Edit ${type} with ID: ${id}`);
+    toast.info(`Edit functionality for ${type} will be implemented soon`);
+  };
+
   const renderExpensesTab = () => (
     <div className="space-y-4">
-      {localExpenses.length === 0 ? (
+      {isLoading.expenses ? (
+        <p className="text-center text-muted-foreground py-8">Loading expenses...</p>
+      ) : localExpenses.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses found for this site.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {localExpenses.map((expense) => (
-            <Card key={expense.id} className="p-4">
-              <p>Expense: {expense.description}</p>
-            </Card>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Description</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Category</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {localExpenses.map((expense) => (
+                <tr key={expense.id} className="border-b hover:bg-muted/50 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    {format(new Date(expense.date), 'dd MMM yyyy')}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    {expense.description}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
+                      {expense.category}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      <IndianRupee className="h-3 w-3 mr-1" />
+                      {expense.amount.toLocaleString()}
+                    </div>
+                  </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(expense.id, 'expense')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(expense.id, 'expense')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -151,7 +292,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 
   const renderAdvancesTab = () => (
     <div className="space-y-4">
-      {localAdvances.length === 0 ? (
+      {isLoading.advances ? (
+        <p className="text-center text-muted-foreground py-8">Loading advances...</p>
+      ) : localAdvances.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No advances found for this site.</p>
       ) : (
         <div className="overflow-x-auto">
@@ -208,11 +351,22 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                   </td>
                   {canEditDelete && (
                     <td className="px-4 py-3 text-sm">
-                      <button
-                        className="text-primary hover:text-primary/80 transition-colors flex items-center"
-                      >
-                        View <ArrowUpRight className="h-3 w-3 ml-1" />
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(advance.id, 'advance')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(advance.id, 'advance')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -226,15 +380,68 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 
   const renderFundsReceivedTab = () => (
     <div className="space-y-4">
-      {localFundsReceived.length === 0 ? (
+      {isLoading.fundsReceived ? (
+        <p className="text-center text-muted-foreground py-8">Loading funds received...</p>
+      ) : localFundsReceived.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No funds received for this site.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {localFundsReceived.map((fund) => (
-            <Card key={fund.id} className="p-4">
-              <p>Fund: ₹{fund.amount}</p>
-            </Card>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {localFundsReceived.map((fund) => (
+                <tr key={fund.id} className="border-b hover:bg-muted/50 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    {format(new Date(fund.date), 'dd MMM yyyy')}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    {fund.reference || 'N/A'}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
+                      {fund.method || 'Bank Transfer'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      <IndianRupee className="h-3 w-3 mr-1" />
+                      {fund.amount.toLocaleString()}
+                    </div>
+                  </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(fund.id, 'funds')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(fund.id, 'funds')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -271,18 +478,18 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                     {invoice.invoiceNumber || '-'}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {invoice.vendorName}
+                    {invoice.vendorName || invoice.partyName}
                   </td>
                   <td className="px-4 py-3 text-sm font-medium">
                     <div className="flex items-center">
                       <IndianRupee className="h-3 w-3 mr-1" />
-                      {invoice.amount.toLocaleString()}
+                      {(invoice.amount || invoice.netAmount).toLocaleString()}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status)}`}>
-                      {getStatusIcon(invoice.status)}
-                      <span className="ml-1 capitalize">{invoice.status}</span>
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status || invoice.paymentStatus)}`}>
+                      {getStatusIcon(invoice.status || invoice.paymentStatus)}
+                      <span className="ml-1 capitalize">{invoice.status || invoice.paymentStatus}</span>
                     </div>
                   </td>
                   {canEditDelete && (
@@ -294,10 +501,18 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                         >
                           View <ArrowUpRight className="h-3 w-3 ml-1" />
                         </button>
-                        <button className="text-blue-600 hover:text-blue-800">
+                        <button 
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(invoice.id, 'invoice')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
                           Edit
                         </button>
-                        <button className="text-red-600 hover:text-red-800">
+                        <button 
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(invoice.id, 'invoice')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
                           Delete
                         </button>
                       </div>
@@ -309,45 +524,70 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           </table>
         </div>
       )}
-      
-      {isDetailsOpen && selectedInvoice && (
+    </div>
+  );
+
+  return (
+    <>
+      <CustomCard className="mb-6">
+        <Tabs defaultValue="expenses">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="expenses">
+              Expenses {localExpenses.length > 0 && `(${localExpenses.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="advances">
+              Advances {localAdvances.length > 0 && `(${localAdvances.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="fundsReceived">
+              Funds Received {localFundsReceived.length > 0 && `(${localFundsReceived.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="invoices">
+              Invoices {invoices.length > 0 && `(${invoices.length})`}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="expenses" className="pt-4">
+            {renderExpensesTab()}
+          </TabsContent>
+          <TabsContent value="advances" className="pt-4">
+            {renderAdvancesTab()}
+          </TabsContent>
+          <TabsContent value="fundsReceived" className="pt-4">
+            {renderFundsReceivedTab()}
+          </TabsContent>
+          <TabsContent value="invoices" className="pt-4">
+            {renderInvoicesTab()}
+          </TabsContent>
+        </Tabs>
+      </CustomCard>
+
+      {selectedInvoice && (
         <InvoiceDetails
           invoice={selectedInvoice}
           isOpen={isDetailsOpen}
           onClose={closeInvoiceDetails}
         />
       )}
-    </div>
-  );
 
-  return (
-    <CustomCard className="mt-6">
-      <Tabs defaultValue="invoices">
-        <TabsList className="grid grid-cols-4 mb-4">
-          <TabsTrigger value="invoices" className="text-sm">
-            Invoices
-            {invoices.length > 0 && <span className="ml-1 text-xs">({invoices.length})</span>}
-          </TabsTrigger>
-          <TabsTrigger value="expenses" className="text-sm">
-            Expenses
-            {expensesCount > 0 && <span className="ml-1 text-xs">({expensesCount})</span>}
-          </TabsTrigger>
-          <TabsTrigger value="advances" className="text-sm">
-            Advances
-            {advancesCount > 0 && <span className="ml-1 text-xs">({advancesCount})</span>}
-          </TabsTrigger>
-          <TabsTrigger value="funds" className="text-sm">
-            Funds Received
-            {fundsReceivedCount > 0 && <span className="ml-1 text-xs">({fundsReceivedCount})</span>}
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="invoices">{renderInvoicesTab()}</TabsContent>
-        <TabsContent value="expenses">{renderExpensesTab()}</TabsContent>
-        <TabsContent value="advances">{renderAdvancesTab()}</TabsContent>
-        <TabsContent value="funds">{renderFundsReceivedTab()}</TabsContent>
-      </Tabs>
-    </CustomCard>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
+              Confirm Deletion
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this {selectedItemToDelete?.type}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-500 text-white hover:bg-red-600">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

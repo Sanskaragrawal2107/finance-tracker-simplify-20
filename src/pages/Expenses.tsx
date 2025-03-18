@@ -249,23 +249,65 @@ const Expenses: React.FC = () => {
       if (error) throw error;
       
       if (data) {
-        const transformedInvoices: Invoice[] = data.map(invoice => ({
-          id: invoice.id,
-          siteId: invoice.site_id,
-          invoiceNumber: invoice.invoice_number,
-          date: new Date(invoice.date),
-          dueDate: invoice.due_date ? new Date(invoice.due_date) : undefined,
-          vendorName: invoice.vendor_name,
-          amount: Number(invoice.amount),
-          status: invoice.status as PaymentStatus,
-          paymentDate: invoice.payment_date ? new Date(invoice.payment_date) : undefined,
-          description: invoice.description || '',
-          category: invoice.category || '',
-          notes: invoice.notes || '',
-          createdAt: new Date(invoice.created_at),
-          materialItems: invoice.material_items ? JSON.parse(invoice.material_items) as MaterialItem[] : [],
-          bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details) as BankDetails : undefined,
-        }));
+        const transformedInvoices: Invoice[] = data.map(invoice => {
+          // Parse material_items as MaterialItem[]
+          let materialItems: MaterialItem[] = [];
+          if (invoice.material_items) {
+            try {
+              if (typeof invoice.material_items === 'string') {
+                materialItems = JSON.parse(invoice.material_items);
+              } else if (Array.isArray(invoice.material_items)) {
+                materialItems = invoice.material_items as unknown as MaterialItem[];
+              }
+            } catch (e) {
+              console.error('Error parsing material items:', e);
+            }
+          }
+
+          // Parse bank_details as BankDetails
+          let bankDetails: BankDetails = {
+            bankName: '',
+            accountNumber: '',
+            ifscCode: ''
+          };
+          
+          if (invoice.bank_details) {
+            try {
+              if (typeof invoice.bank_details === 'string') {
+                bankDetails = JSON.parse(invoice.bank_details);
+              } else if (typeof invoice.bank_details === 'object') {
+                bankDetails = invoice.bank_details as unknown as BankDetails;
+              }
+            } catch (e) {
+              console.error('Error parsing bank details:', e);
+            }
+          }
+
+          return {
+            id: invoice.id,
+            date: new Date(invoice.date),
+            partyId: invoice.party_id,
+            partyName: invoice.party_name,
+            vendorName: invoice.vendor_name || invoice.party_name,
+            invoiceNumber: invoice.invoice_number,
+            material: invoice.material,
+            quantity: Number(invoice.quantity),
+            rate: Number(invoice.rate),
+            gstPercentage: Number(invoice.gst_percentage),
+            grossAmount: Number(invoice.gross_amount),
+            netAmount: Number(invoice.net_amount),
+            amount: Number(invoice.net_amount),
+            materialItems,
+            bankDetails,
+            billUrl: invoice.bill_url,
+            paymentStatus: invoice.payment_status,
+            status: invoice.payment_status,
+            createdBy: invoice.created_by,
+            createdAt: new Date(invoice.created_at),
+            approverType: invoice.approver_type,
+            siteId: invoice.site_id
+          };
+        });
         
         setInvoices(transformedInvoices);
       } else {
@@ -707,172 +749,162 @@ const Expenses: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
-      {isLoading ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        </div>
-      ) : selectedSite ? (
-        <div className="overflow-y-auto flex-1 pr-2">
-          <SiteDetail 
-            site={selectedSite}
-            expenses={siteExpenses}
-            advances={siteAdvances}
-            fundsReceived={siteFunds}
-            invoices={allSiteInvoices}
-            supervisorInvoices={supervisorInvoices}
-            onBack={() => setSelectedSiteId(null)}
-            onAddExpense={handleAddExpense}
-            onAddAdvance={handleAddAdvance}
-            onAddFunds={handleAddFunds}
-            onAddInvoice={handleAddInvoice}
-            onCompleteSite={handleCompleteSite}
-            balanceSummary={calculateSiteFinancials(selectedSite.id)}
-            siteSupervisor={siteSupervisor}
-            userRole={user?.role || UserRole.VIEWER}
-          />
-        </div>
-      ) : (
-        <>
-          <PageTitle 
-            title="Sites & Expenses" 
-            subtitle={userRole === UserRole.ADMIN 
-              ? "Manage construction sites and track expenses across supervisors"
-              : "Manage construction sites and track expenses"}
-            className="mb-4"
-          />
-          
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-4 w-full md:w-auto">
-              <div className="relative max-w-md w-full">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-                <input 
-                  type="text" 
-                  placeholder="Search sites..." 
-                  className="py-2 pl-10 pr-4 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              
-              {userRole === UserRole.ADMIN && (
-                <div className="w-full md:w-64">
-                  <Select 
-                    value={selectedSupervisorId || ''} 
-                    onValueChange={(value) => setSelectedSupervisorId(value || null)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="All Supervisors" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All Supervisors</SelectItem>
-                      {supervisors.map((supervisor) => (
-                        <SelectItem key={supervisor.id} value={supervisor.id}>
-                          {supervisor.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              
-              {userRole === UserRole.ADMIN && (
-                <div className="w-full md:w-64">
-                  <Select 
-                    value={filterStatus} 
-                    onValueChange={(value: 'all' | 'active' | 'completed') => setFilterStatus(value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <CheckSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="All Sites" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Sites</SelectItem>
-                      <SelectItem value="active">Active Sites</SelectItem>
-                      <SelectItem value="completed">Completed Sites</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex flex-wrap gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-10">
-                    <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-                    Filter
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80">
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Filter Sites</h4>
-                    <div className="space-y-2">
-                      <h5 className="text-sm font-medium">Status</h5>
-                      <div className="flex flex-col space-y-2">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="filter-all" 
-                            checked={filterStatus === 'all'}
-                            onCheckedChange={() => setFilterStatus('all')}
-                          />
-                          <Label htmlFor="filter-all">All Sites</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="filter-active" 
-                            checked={filterStatus === 'active'}
-                            onCheckedChange={() => setFilterStatus('active')}
-                          />
-                          <Label htmlFor="filter-active">Active Sites</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="filter-completed" 
-                            checked={filterStatus === 'completed'}
-                            onCheckedChange={() => setFilterStatus('completed')}
-                          />
-                          <Label htmlFor="filter-completed">Completed Sites</Label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
+    <div className="container py-6 space-y-6 max-w-7xl">
+      <PageTitle
+        title="Sites & Expenses"
+        description="Manage your construction sites and expenses"
+      />
+      
+      {/* Filter and Search Controls */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+        <div className="flex flex-col md:flex-row md:items-center gap-4 w-full md:w-auto">
+          <div className="relative max-w-md w-full">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+            <input 
+              type="text" 
+              placeholder="Search sites..." 
+              className="py-2 pl-10 pr-4 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
           
-          {userRole === UserRole.ADMIN && selectedSupervisorId && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-md flex items-center">
-              <Users className="h-5 w-5 mr-2 text-blue-500" />
-              <span className="font-medium">
-                Viewing sites for: {getSelectedSupervisorName()}
-              </span>
+          {userRole === UserRole.ADMIN && (
+            <div className="w-full md:w-64">
+              <Select 
+                value={selectedSupervisorId || ''} 
+                onValueChange={(value) => setSelectedSupervisorId(value || null)}
+              >
+                <SelectTrigger className="w-full">
+                  <User className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="All Supervisors" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Supervisors</SelectItem>
+                  {supervisors.map((supervisor) => (
+                    <SelectItem key={supervisor.id} value={supervisor.id}>
+                      {supervisor.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
           
-          <div className="overflow-y-auto flex-1 pr-2">
-            {sites.length > 0 ? (
-              <SitesList 
-                sites={filteredSites}
-                onSelectSite={(siteId) => setSelectedSiteId(siteId)}
-              />
-            ) : (
-              <CustomCard>
-                <div className="p-12 text-center">
-                  <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <h3 className="text-lg font-medium mb-2">No Sites Added Yet</h3>
-                  <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                    {userRole === UserRole.ADMIN 
-                      ? "Create sites from the admin dashboard to start tracking expenses."
-                      : "No sites have been assigned to you yet."}
-                  </p>
+          {userRole === UserRole.ADMIN && (
+            <div className="w-full md:w-64">
+              <Select 
+                value={filterStatus} 
+                onValueChange={(value: 'all' | 'active' | 'completed') => setFilterStatus(value)}
+              >
+                <SelectTrigger className="w-full">
+                  <CheckSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="All Sites" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sites</SelectItem>
+                  <SelectItem value="active">Active Sites</SelectItem>
+                  <SelectItem value="completed">Completed Sites</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+        
+        <div className="flex flex-wrap gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-10">
+                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                Filter
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="space-y-4">
+                <h4 className="font-medium">Filter Sites</h4>
+                <div className="space-y-2">
+                  <h5 className="text-sm font-medium">Status</h5>
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="filter-all" 
+                        checked={filterStatus === 'all'}
+                        onCheckedChange={() => setFilterStatus('all')}
+                      />
+                      <Label htmlFor="filter-all">All Sites</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="filter-active" 
+                        checked={filterStatus === 'active'}
+                        onCheckedChange={() => setFilterStatus('active')}
+                      />
+                      <Label htmlFor="filter-active">Active Sites</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="filter-completed" 
+                        checked={filterStatus === 'completed'}
+                        onCheckedChange={() => setFilterStatus('completed')}
+                      />
+                      <Label htmlFor="filter-completed">Completed Sites</Label>
+                    </div>
+                  </div>
                 </div>
-              </CustomCard>
-            )}
-          </div>
-        </>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+      
+      {userRole === UserRole.ADMIN && selectedSupervisorId && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-md flex items-center">
+          <Users className="h-5 w-5 mr-2 text-blue-500" />
+          <span className="font-medium">
+            Viewing sites for: {getSelectedSupervisorName()}
+          </span>
+        </div>
+      )}
+      
+      {selectedSiteId ? (
+        <SiteDetail
+          site={sites.find(site => site.id === selectedSiteId) || null}
+          expenses={expenses}
+          advances={advances}
+          fundsReceived={fundsReceived}
+          invoices={invoices}
+          userRole={userRole as UserRole}
+          isAdminView={userRole === UserRole.ADMIN}
+          onBack={() => setSelectedSiteId(null)}
+          onEditSuccess={fetchSites}
+          onEntrySuccess={(entryType) => {
+            if (entryType === 'expense') fetchSiteExpenses(selectedSiteId);
+            else if (entryType === 'advance') fetchSiteAdvances(selectedSiteId);
+            else if (entryType === 'funds') fetchSiteFundsReceived(selectedSiteId);
+            else if (entryType === 'invoice') fetchSiteInvoices(selectedSiteId);
+          }}
+        />
+      ) : (
+        <div className="overflow-y-auto flex-1 pr-2">
+          {sites.length > 0 ? (
+            <SitesList 
+              sites={filteredSites}
+              onSelectSite={(siteId) => setSelectedSiteId(siteId)}
+            />
+          ) : (
+            <CustomCard>
+              <div className="p-12 text-center">
+                <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="text-lg font-medium mb-2">No Sites Added Yet</h3>
+                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  {userRole === UserRole.ADMIN 
+                    ? "Create sites from the admin dashboard to start tracking expenses."
+                    : "No sites have been assigned to you yet."}
+                </p>
+              </div>
+            </CustomCard>
+          )}
+        </div>
       )}
 
       <SiteForm

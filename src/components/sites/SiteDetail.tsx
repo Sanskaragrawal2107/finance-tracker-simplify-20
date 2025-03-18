@@ -370,13 +370,13 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         </TabsContent>
         
         <TabsContent value="transactions">
-          <SiteDetailTransactions 
+          <SiteDetailTransactions
             siteId={site.id}
-            userRole={userRole}
-            isAdminView={isAdminView}
             expensesCount={expenses.length}
             advancesCount={advances.length}
             fundsReceivedCount={fundsReceived.length}
+            userRole={userRole}
+            isAdminView={isAdminView}
             site={site}
             supervisor={supervisor}
             expenses={expenses}

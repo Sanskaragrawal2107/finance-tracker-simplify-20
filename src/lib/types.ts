@@ -1,3 +1,4 @@
+
 // User related types
 export enum UserRole {
   ADMIN = "admin",
@@ -168,7 +169,6 @@ export interface Invoice {
   createdBy: string;
   createdAt: Date;
   approverType?: "ho" | "supervisor";
-  payment_by?: "ho" | "supervisor";
   siteId?: string; // Reference to the site
   vendorName?: string;  // Added for compatibility
   invoiceNumber?: string; // Added for compatibility

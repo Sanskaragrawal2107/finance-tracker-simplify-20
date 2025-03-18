@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
@@ -6,10 +7,8 @@ import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
 import { fetchSiteInvoices } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 
 interface SiteDetailTransactionsProps {
   siteId: string;
@@ -23,9 +22,6 @@ interface SiteDetailTransactionsProps {
   expenses?: Expense[];
   advances?: Advance[];
   fundsReceived?: FundsReceived[];
-  onDeleteExpense?: (expenseId: string) => Promise<void>;
-  onDeleteAdvance?: (advanceId: string) => Promise<void>;
-  onDeleteFund?: (fundId: string) => Promise<void>;
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
@@ -40,9 +36,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   expenses = [],
   advances = [],
   fundsReceived = [],
-  onDeleteExpense,
-  onDeleteAdvance,
-  onDeleteFund,
 }) => {
   console.info('SiteDetailTransactions props:', { 
     siteId, 
@@ -68,12 +61,10 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     invoices: false,
   });
 
-  // Update local state when props change
+  // Ensure advances are not duplicated by setting them only once on initial render
   useEffect(() => {
-    setLocalExpenses(expenses);
     setLocalAdvances(advances);
-    setLocalFundsReceived(fundsReceived);
-  }, [expenses, advances, fundsReceived]);
+  }, []);
 
   useEffect(() => {
     const loadInvoices = async () => {
@@ -86,7 +77,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         setInvoices(invoicesData as Invoice[]);
       } catch (error) {
         console.error('Error loading invoices:', error);
-        toast.error('Failed to load invoices');
       } finally {
         setIsLoading(prev => ({ ...prev, invoices: false }));
       }
@@ -142,92 +132,17 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     setSelectedInvoice(null);
   };
 
-  const handleDeleteExpense = async (expenseId: string) => {
-    if (!onDeleteExpense) return;
-    try {
-      await onDeleteExpense(expenseId);
-      setLocalExpenses(prev => prev.filter(expense => expense.id !== expenseId));
-      toast.success('Expense deleted successfully');
-    } catch (error) {
-      console.error('Error deleting expense:', error);
-      toast.error('Failed to delete expense');
-    }
-  };
-
-  const handleDeleteAdvance = async (advanceId: string) => {
-    if (!onDeleteAdvance) return;
-    try {
-      await onDeleteAdvance(advanceId);
-      setLocalAdvances(prev => prev.filter(advance => advance.id !== advanceId));
-      toast.success('Advance deleted successfully');
-    } catch (error) {
-      console.error('Error deleting advance:', error);
-      toast.error('Failed to delete advance');
-    }
-  };
-
-  const handleDeleteFund = async (fundId: string) => {
-    if (!onDeleteFund) return;
-    try {
-      await onDeleteFund(fundId);
-      setLocalFundsReceived(prev => prev.filter(fund => fund.id !== fundId));
-      toast.success('Fund deleted successfully');
-    } catch (error) {
-      console.error('Error deleting fund:', error);
-      toast.error('Failed to delete fund');
-    }
-  };
-
   const renderExpensesTab = () => (
     <div className="space-y-4">
       {localExpenses.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses found for this site.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Description</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Category</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                {isAdminView && (
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {localExpenses.map((expense) => (
-                <tr key={expense.id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {format(new Date(expense.date), 'dd MMM yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-sm">{expense.description}</td>
-                  <td className="px-4 py-3 text-sm">
-                    <Badge className="bg-gray-100 text-gray-800">
-                      {expense.category}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      <IndianRupee className="h-3 w-3 mr-1" />
-                      {expense.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  {isAdminView && (
-                    <td className="px-4 py-3 text-sm">
-                      <Button
-                        onClick={() => handleDeleteExpense(expense.id)}
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {localExpenses.map((expense) => (
+            <Card key={expense.id} className="p-4">
+              <p>Expense: {expense.description}</p>
+            </Card>
+          ))}
         </div>
       )}
     </div>
@@ -248,7 +163,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Purpose</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                {isAdminView && (
+                {userRole !== UserRole.VIEWER && (
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
                 )}
               </tr>
@@ -266,7 +181,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <Badge className="bg-gray-100 text-gray-800">
+                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
                       {advance.recipientType}
                     </Badge>
                   </td>
@@ -290,14 +205,13 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                       <span className="ml-1 capitalize">{advance.status}</span>
                     </div>
                   </td>
-                  {isAdminView && (
+                  {userRole !== UserRole.VIEWER && (
                     <td className="px-4 py-3 text-sm">
-                      <Button
-                        onClick={() => handleDeleteAdvance(advance.id)}
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                      <button
+                        className="text-primary hover:text-primary/80 transition-colors flex items-center"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        View <ArrowUpRight className="h-3 w-3 ml-1" />
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -314,47 +228,12 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       {localFundsReceived.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No funds received for this site.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
-                {isAdminView && (
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {localFundsReceived.map((fund) => (
-                <tr key={fund.id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    {format(new Date(fund.date), 'dd MMM yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <div className="flex items-center">
-                      <IndianRupee className="h-3 w-3 mr-1" />
-                      {fund.amount.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">{fund.reference || '-'}</td>
-                  <td className="px-4 py-3 text-sm">{fund.method || '-'}</td>
-                  {isAdminView && (
-                    <td className="px-4 py-3 text-sm">
-                      <Button
-                        onClick={() => handleDeleteFund(fund.id)}
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {localFundsReceived.map((fund) => (
+            <Card key={fund.id} className="p-4">
+              <p>Fund: ₹{fund.amount}</p>
+            </Card>
+          ))}
         </div>
       )}
     </div>
@@ -429,15 +308,15 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           </TabsTrigger>
           <TabsTrigger value="expenses" className="text-sm">
             Expenses
-            {localExpenses.length > 0 && <span className="ml-1 text-xs">({localExpenses.length})</span>}
+            {expensesCount > 0 && <span className="ml-1 text-xs">({expensesCount})</span>}
           </TabsTrigger>
           <TabsTrigger value="advances" className="text-sm">
             Advances
-            {localAdvances.length > 0 && <span className="ml-1 text-xs">({localAdvances.length})</span>}
+            {advancesCount > 0 && <span className="ml-1 text-xs">({advancesCount})</span>}
           </TabsTrigger>
           <TabsTrigger value="funds" className="text-sm">
             Funds Received
-            {localFundsReceived.length > 0 && <span className="ml-1 text-xs">({localFundsReceived.length})</span>}
+            {fundsReceivedCount > 0 && <span className="ml-1 text-xs">({fundsReceivedCount})</span>}
           </TabsTrigger>
         </TabsList>
         

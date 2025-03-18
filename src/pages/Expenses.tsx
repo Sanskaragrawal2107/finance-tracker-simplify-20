@@ -239,8 +239,12 @@ const Expenses: React.FC = () => {
 
   const fetchSiteInvoices = async (siteId: string) => {
     try {
+      setInvoices([]);
+      return;
+      
+      /* This code will be enabled once the invoices table has the correct structure
       const { data, error } = await supabase
-        .from('site_invoices')
+        .from('invoices')
         .select('*')
         .eq('site_id', siteId);
       
@@ -254,23 +258,23 @@ const Expenses: React.FC = () => {
           partyId: invoice.party_id,
           partyName: invoice.party_name,
           material: invoice.material,
-          quantity: invoice.quantity || 0,
-          rate: invoice.rate || 0,
-          gstPercentage: invoice.gst_percentage || 0,
-          grossAmount: invoice.gross_amount || 0,
-          netAmount: invoice.net_amount || 0,
+          quantity: invoice.quantity,
+          rate: invoice.rate,
+          gstPercentage: invoice.gst_percentage,
+          grossAmount: invoice.gross_amount,
+          netAmount: invoice.net_amount,
           paymentStatus: invoice.payment_status as PaymentStatus,
           bankDetails: invoice.bank_details,
           createdBy: invoice.created_by,
           createdAt: new Date(invoice.created_at),
           approverType: invoice.approver_type,
-          payment_by: invoice.payment_by
         }));
         
         setInvoices(transformedInvoices);
       } else {
         setInvoices([]);
       }
+      */
     } catch (error) {
       console.error('Error fetching invoices:', error);
       toast.error('Failed to load invoices for this site');
@@ -628,10 +632,7 @@ const Expenses: React.FC = () => {
         
         // Calculate supervisor invoices (only those paid by supervisor)
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => 
-            invoice.payment_by === 'supervisor' && 
-            invoice.paymentStatus === PaymentStatus.PAID
-          )
+          .filter(invoice => invoice.payment_by === 'supervisor')
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
         // Calculate total balance

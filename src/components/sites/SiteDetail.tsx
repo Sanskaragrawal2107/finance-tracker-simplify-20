@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Site, Expense, Advance, FundsReceived, Invoice, BalanceSummary, UserRole } from '@/lib/types';
 import { ArrowLeft, Calendar, MapPin, User, CheckCircle, IndianRupee, PlusCircle, BarChart } from 'lucide-react';
@@ -24,7 +23,7 @@ import BalanceCard from '@/components/dashboard/BalanceCard';
 import { AdvancePurpose, RecipientType } from '@/lib/types';
 import { useMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { 
   Card, 
   CardHeader, 
@@ -55,6 +54,7 @@ interface SiteDetailProps {
   siteSupervisor?: any;
   userRole: UserRole;
   onUpdateTransactions?: () => void;
+  onTransactionsUpdate?: () => Promise<void> | void;
 }
 
 const DEBIT_ADVANCE_PURPOSES = [
@@ -79,7 +79,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   balanceSummary,
   siteSupervisor,
   userRole,
-  onUpdateTransactions
+  onUpdateTransactions,
+  onTransactionsUpdate
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
@@ -139,7 +140,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         
       if (error) {
         console.error('Error marking site as complete:', error);
-        toast.error('Failed to mark site as complete: ' + error.message);
+        toast(`Failed to mark site as complete: ${error.message}`);
         return;
       }
       
@@ -149,7 +150,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       }
     } catch (error: any) {
       console.error('Error in handleMarkComplete:', error);
-      toast.error('Failed to mark site as complete: ' + error.message);
+      toast(`Failed to mark site as complete: ${error.message}`);
     } finally {
       setIsMarkingComplete(false);
     }
@@ -402,6 +403,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             advances={advances}
             fundsReceived={fundsReceived}
             onUpdateTransactions={onUpdateTransactions}
+            onTransactionsUpdate={onTransactionsUpdate}
           />
         </TabsContent>
       </Tabs>

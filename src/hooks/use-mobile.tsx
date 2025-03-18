@@ -23,4 +23,7 @@ export const useMobile = (): boolean => {
   return isMobile;
 };
 
+// Add this alias for backward compatibility
+export const useIsMobile = useMobile;
+
 export default useMobile;

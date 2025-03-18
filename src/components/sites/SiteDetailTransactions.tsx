@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem, Site, RecipientType } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
-import { fetchSiteInvoices } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee, Edit, Trash, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { supabase } from '@/integrations/supabase/client';
 
 interface SiteDetailTransactionsProps {
   siteId: string;
@@ -81,7 +79,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteType, setDeleteType] = useState<'expense' | 'advance' | 'fund' | null>(null);
 
-  // Ensure advances are not duplicated by setting them only once on initial render
   useEffect(() => {
     setLocalAdvances(advances);
   }, []);
@@ -93,8 +90,36 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       setIsLoading(prev => ({ ...prev, invoices: true }));
       
       try {
-        const invoicesData = await fetchSiteInvoices(siteId);
-        setInvoices(invoicesData as Invoice[]);
+        const { data, error } = await supabase
+          .from('site_invoices')
+          .select('*')
+          .eq('site_id', siteId);
+        
+        if (error) throw error;
+        
+        const invoicesData = data?.map(item => ({
+          id: item.id,
+          date: new Date(item.date),
+          partyId: item.party_id,
+          partyName: item.party_name,
+          material: item.material,
+          quantity: item.quantity || 0,
+          rate: item.rate || 0,
+          gstPercentage: item.gst_percentage || 0,
+          grossAmount: item.gross_amount || 0,
+          netAmount: item.net_amount || 0,
+          materialItems: item.material_items as MaterialItem[] || [],
+          bankDetails: item.bank_details as BankDetails,
+          billUrl: item.bill_url,
+          invoiceImageUrl: item.bill_url,
+          paymentStatus: item.payment_status,
+          createdBy: item.created_by || '',
+          createdAt: new Date(item.created_at),
+          approverType: item.approver_type as "ho" | "supervisor" || undefined,
+          siteId: item.site_id
+        })) as Invoice[];
+        
+        setInvoices(invoicesData || []);
       } catch (error) {
         console.error('Error loading invoices:', error);
       } finally {
@@ -194,7 +219,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         toast.success("Fund record deleted successfully");
       }
 
-      // Call the parent component's callback to update transaction data
       if (onUpdateTransactions) {
         onUpdateTransactions();
       }
@@ -465,7 +489,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         <TabsContent value="funds">{renderFundsReceivedTab()}</TabsContent>
       </Tabs>
 
-      {/* Confirmation Dialog for Delete */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -1,914 +1,856 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
-import PageTitle from '@/components/common/PageTitle';
-import CustomCard from '@/components/ui/CustomCard';
-import { Search, Filter, Building, User, Users, CheckSquare } from 'lucide-react';
-import { 
-  Expense, 
-  ExpenseCategory, 
-  ApprovalStatus, 
-  Site, 
-  Advance, 
-  FundsReceived, 
-  Invoice, 
-  UserRole, 
-  AdvancePurpose, 
-  RecipientType,
-  PaymentStatus
-} from '@/lib/types';
+import { useNavigate } from 'react-router-dom';
+import { format, addDays } from 'date-fns';
+import {
+  Calendar as CalendarIcon,
+  ArrowLeft,
+  PlusCircle,
+  Edit,
+  Trash,
+  Eye,
+  Download,
+  ChevronsUpDown,
+  AlertTriangle,
+} from 'lucide-react';
+import { DateRange } from 'react-day-picker';
+
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
-import SiteForm from '@/components/sites/SiteForm';
-import SitesList from '@/components/sites/SitesList';
-import SiteDetail from '@/components/sites/SiteDetail';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/integrations/supabase/client';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { DataTable } from '@/components/ui/data-table';
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from 'sonner';
+
 import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  Site,
+  Expense,
+  Advance,
+  FundsReceived,
+  Invoice,
+  UserRole,
+  ExpenseCategory,
+  AdvancePurpose,
+  ApprovalStatus,
+  PaymentStatus,
+  RecipientType,
+  BalanceSummary,
+} from '@/lib/types';
+import PageTitle from '@/components/common/PageTitle';
+import SiteDetail from '@/components/sites/SiteDetail';
 
-import { supervisors } from '@/data/supervisors';
+interface DataTableProps<TData, TValue> {
+  columns: any[];
+  data: TData[];
+  searchKey?: string;
+}
 
-const initialExpenses: Expense[] = [];
-const initialAdvances: Advance[] = [];
-const initialFunds: FundsReceived[] = [];
-const initialInvoices: Invoice[] = [];
-
-const DEBIT_ADVANCE_PURPOSES = [
-  AdvancePurpose.SAFETY_SHOES,
-  AdvancePurpose.TOOLS,
-  AdvancePurpose.OTHER
+const columns = [
+  {
+    accessorKey: 'name',
+    header: 'Name',
+  },
+  {
+    accessorKey: 'jobName',
+    header: 'Job Name',
+  },
+  {
+    accessorKey: 'posNo',
+    header: 'PO Number',
+  },
+  {
+    accessorKey: 'location',
+    header: 'Location',
+  },
+  {
+    accessorKey: 'startDate',
+    header: 'Start Date',
+    cell: ({ row }) => format(new Date(row.startDate), 'dd/MM/yyyy'),
+  },
+  {
+    accessorKey: 'completionDate',
+    header: 'Completion Date',
+    cell: ({ row }) => row.completionDate ? format(new Date(row.completionDate), 'dd/MM/yyyy') : 'N/A',
+  },
 ];
 
-const handleAddExpense = () => {
-  console.log("Add expense not implemented in SupervisorSites view");
-};
-
-const handleAddAdvance = () => {
-  console.log("Add advance not implemented in SupervisorSites view");
-};
-
-const handleAddFunds = () => {
-  console.log("Add funds not implemented in SupervisorSites view");
-};
-
-const handleAddInvoice = () => {
-  console.log("Add invoice not implemented in SupervisorSites view");
-};
-
-const handleCompleteSite = () => {
-  console.log("Complete site not implemented in SupervisorSites view");
-};
-
 const SupervisorSites: React.FC = () => {
-  const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [sites, setSites] = useState<Site[]>([]);
-  const [advances, setAdvances] = useState<Advance[]>(initialAdvances);
-  const [fundsReceived, setFundsReceived] = useState<FundsReceived[]>(initialFunds);
-  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
-  const [isSiteFormOpen, setIsSiteFormOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [advances, setAdvances] = useState<Advance[]>([]);
+  const [fundsReceived, setFundsReceived] = useState<FundsReceived[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
-  const [selectedSupervisorId, setSelectedSupervisorId] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'completed'>('all');
+  const [isAddingSite, setIsAddingSite] = useState(false);
+  const [newSite, setNewSite] = useState<Omit<Site, 'id' | 'createdAt' | 'isCompleted'>>({
+    name: '',
+    jobName: '',
+    posNo: '',
+    location: '',
+    startDate: new Date(),
+    supervisorId: user?.id || '',
+    supervisor: user?.name || '',
+  });
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [siteToDelete, setSiteToDelete] = useState<string | null>(null);
+  const [isEditingSite, setIsEditingSite] = useState(false);
+  const [siteToEdit, setSiteToEdit] = useState<Site | null>(null);
+  const [editedSite, setEditedSite] = useState<Partial<Site>>({});
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: new Date(new Date().getFullYear(), 0, 1),
+    to: new Date(),
+  });
+  const [isFilteringByDate, setIsFilteringByDate] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasFetchedData, setHasFetchedData] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [isEditLoading, setIsEditLoading] = useState(false);
 
-  const fetchSites = React.useCallback(async () => {
-    if (hasFetchedData && !selectedSiteId && !location.state) return;
-    
-    setIsLoading(true);
-    try {
-      let query = supabase.from('sites').select('*');
-      
-      if (user?.role === UserRole.SUPERVISOR) {
-        query = query.eq('supervisor_id', user.id);
-      } 
-      else if (selectedSupervisorId) {
-        query = query.eq('supervisor_id', selectedSupervisorId);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) {
-        throw error;
-      }
-      
-      if (data) {
-        const transformedSites: Site[] = data.map(site => ({
-          id: site.id,
-          name: site.name,
-          jobName: site.job_name,
-          posNo: site.pos_no,
-          location: site.location,
-          startDate: new Date(site.start_date),
-          completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
-          supervisorId: site.supervisor_id,
-          supervisor: site.supervisor_id ? 
-            (supervisors.find(s => s.id === site.supervisor_id)?.name || 'Unknown') : 'Unassigned',
-          createdAt: new Date(site.created_at),
-          isCompleted: site.is_completed,
-          funds: site.funds || 0,
-          totalFunds: site.total_funds || 0
-        }));
-        
-        setSites(transformedSites);
-        setHasFetchedData(true);
-      }
-    } catch (error) {
-      console.error('Error fetching sites:', error);
-      toast.error('Failed to load sites');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user, selectedSupervisorId, hasFetchedData, selectedSiteId, location.state]);
-
-  React.useEffect(() => {
-    if (user) {
-      setUserRole(user.role);
-      
-      if (user.role === UserRole.SUPERVISOR) {
-        setSelectedSupervisorId(user.id);
-      }
-    }
-    
-    const locationState = location.state as { supervisorId?: string, newSite?: boolean } | null;
-    if (locationState?.supervisorId && user?.role === UserRole.ADMIN) {
-      setSelectedSupervisorId(locationState.supervisorId);
-    }
-    
-    if (locationState?.newSite && user?.role === UserRole.ADMIN) {
-      setIsSiteFormOpen(true);
-    }
-    
-    fetchSites();
-  }, [location, user, fetchSites]);
-
-  React.useEffect(() => {
-    if (selectedSiteId) {
-      fetchSiteExpenses(selectedSiteId);
-      fetchSiteAdvances(selectedSiteId);
-      fetchSiteFundsReceived(selectedSiteId);
-      fetchSiteInvoices(selectedSiteId);
-    }
-  }, [selectedSiteId]);
-
-  const fetchSiteExpenses = async (siteId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('site_id', siteId);
-      
-      if (error) throw error;
-      
-      if (data) {
-        const transformedExpenses: Expense[] = data.map(expense => ({
-          id: expense.id,
-          siteId: expense.site_id,
-          date: new Date(expense.date),
-          description: expense.description || '',
-          category: expense.category as ExpenseCategory,
-          amount: Number(expense.amount),
-          status: ApprovalStatus.APPROVED,
-          createdAt: new Date(expense.created_at),
-          createdBy: expense.created_by || '',
-          supervisorId: user?.id || '',
-        }));
-        
-        setExpenses(transformedExpenses);
-      } else {
-        setExpenses([]);
-      }
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-      toast.error('Failed to load expenses for this site');
-      setExpenses([]);
-    }
-  };
-
-  const fetchSiteAdvances = async (siteId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('advances')
-        .select('*')
-        .eq('site_id', siteId);
-      
-      if (error) throw error;
-      
-      if (data) {
-        const transformedAdvances: Advance[] = data.map(advance => ({
-          id: advance.id,
-          siteId: advance.site_id,
-          date: new Date(advance.date),
-          recipientName: advance.recipient_name,
-          recipientType: advance.recipient_type as RecipientType,
-          purpose: advance.purpose as AdvancePurpose,
-          amount: Number(advance.amount),
-          remarks: advance.remarks || '',
-          status: advance.status as ApprovalStatus,
-          createdBy: advance.created_by || '',
-          createdAt: new Date(advance.created_at),
-        }));
-        
-        setAdvances(transformedAdvances);
-      } else {
-        setAdvances([]);
-      }
-    } catch (error) {
-      console.error('Error fetching advances:', error);
-      toast.error('Failed to load advances for this site');
-      setAdvances([]);
-    }
-  };
-
-  const fetchSiteFundsReceived = async (siteId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('funds_received')
-        .select('*')
-        .eq('site_id', siteId);
-      
-      if (error) throw error;
-      
-      if (data) {
-        const transformedFunds: FundsReceived[] = data.map(fund => ({
-          id: fund.id,
-          siteId: fund.site_id,
-          date: new Date(fund.date),
-          amount: Number(fund.amount),
-          reference: fund.reference || undefined,
-          method: fund.method || undefined,
-          createdAt: new Date(fund.created_at),
-        }));
-        
-        setFundsReceived(transformedFunds);
-      } else {
-        setFundsReceived([]);
-      }
-    } catch (error) {
-      console.error('Error fetching funds received:', error);
-      toast.error('Failed to load funds received for this site');
-      setFundsReceived([]);
-    }
-  };
-
-  const fetchSiteInvoices = async (siteId: string) => {
-    try {
-      setInvoices([]);
-      return;
-      
-      /* This code will be enabled once the invoices table has the correct structure
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*')
-        .eq('site_id', siteId);
-      
-      if (error) throw error;
-      
-      if (data) {
-        const transformedInvoices: Invoice[] = data.map(invoice => ({
-          id: invoice.id,
-          siteId: invoice.site_id,
-          date: new Date(invoice.date),
-          partyId: invoice.party_id,
-          partyName: invoice.party_name,
-          material: invoice.material,
-          quantity: invoice.quantity,
-          rate: invoice.rate,
-          gstPercentage: invoice.gst_percentage,
-          grossAmount: invoice.gross_amount,
-          netAmount: invoice.net_amount,
-          paymentStatus: invoice.payment_status as PaymentStatus,
-          bankDetails: invoice.bank_details,
-          createdBy: invoice.created_by,
-          createdAt: new Date(invoice.created_at),
-          approverType: invoice.approver_type,
-        }));
-        
-        setInvoices(transformedInvoices);
-      } else {
-        setInvoices([]);
-      }
-      */
-    } catch (error) {
-      console.error('Error fetching invoices:', error);
-      toast.error('Failed to load invoices for this site');
-      setInvoices([]);
-    }
-  };
-
-  const ensureDateObjects = (site: Site): Site => {
-    return {
-      ...site,
-      startDate: site.startDate instanceof Date ? site.startDate : new Date(site.startDate),
-      completionDate: site.completionDate ? 
-        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completionDate)) 
-        : undefined
-    };
-  };
-
-  const handleAddSite = async (newSite: Partial<Site>) => {
-    try {
-      const currentSupervisorId = userRole === UserRole.ADMIN && selectedSupervisorId 
-        ? selectedSupervisorId 
-        : user?.id;
-      
-      if (!currentSupervisorId) {
-        toast.error("No supervisor assigned");
-        return;
-      }
-      
-      const siteData = {
-        name: newSite.name,
-        job_name: newSite.jobName,
-        pos_no: newSite.posNo,
-        location: newSite.location || "",
-        start_date: newSite.startDate?.toISOString(),
-        completion_date: newSite.completionDate?.toISOString(),
-        supervisor_id: currentSupervisorId,
-        is_completed: false,
-        funds: 0
-      };
-      
-      const { data: existingSite, error: checkError } = await supabase
-        .from('sites')
-        .select('id')
-        .eq('name', siteData.name)
-        .maybeSingle();
-      
-      if (existingSite) {
-        toast.error(`Site with name "${siteData.name}" already exists`);
-        return;
-      }
-      
-      const { data, error } = await supabase
-        .from('sites')
-        .insert(siteData)
-        .select('*')
-        .single();
-      
-      if (error) {
-        if (error.code === '23505' && error.message.includes('sites_name_key')) {
-          toast.error(`Site with name "${siteData.name}" already exists`);
-        } else {
-          toast.error('Failed to create site: ' + error.message);
+  useEffect(() => {
+    const fetchSites = async () => {
+      setIsLoading(true);
+      try {
+        if (!user) {
+          console.error('User not found');
+          return;
         }
-        return;
-      }
-      
-      if (data) {
-        const newSiteData: Site = {
-          id: data.id,
-          name: data.name,
-          jobName: data.job_name,
-          posNo: data.pos_no,
-          location: data.location,
-          startDate: new Date(data.start_date),
-          completionDate: data.completion_date ? new Date(data.completion_date) : undefined,
-          supervisorId: data.supervisor_id,
-          supervisor: data.supervisor_id ? 
-            (supervisors.find(s => s.id === data.supervisor_id)?.name || 'Unknown') : 'Unassigned',
-          createdAt: new Date(data.created_at),
-          isCompleted: data.is_completed,
-          funds: data.funds || 0
-        };
-        
-        setSites(prevSites => [...prevSites, newSiteData]);
-        toast.success(`Site "${newSiteData.name}" created successfully`);
-      }
-    } catch (error: any) {
-      console.error('Error creating site:', error);
-      toast.error('Failed to create site: ' + error.message);
-    }
-  };
 
-  const handleAddExpense = async (newExpense: Partial<Expense>) => {
-    try {
-      const expenseData = {
-        site_id: newExpense.siteId,
-        date: newExpense.date instanceof Date ? newExpense.date.toISOString() : new Date().toISOString(),
-        description: newExpense.description || '',
-        category: newExpense.category,
-        amount: newExpense.amount,
-        created_by: user?.id
-      };
-      
-      const { data, error } = await supabase
-        .from('expenses')
-        .insert(expenseData)
-        .select('*')
-        .single();
-      
-      if (error) throw error;
-      
-      if (data) {
-        const expenseWithId: Expense = {
-          id: data.id,
-          siteId: data.site_id,
-          date: new Date(data.date),
-          description: data.description || '',
-          category: data.category as ExpenseCategory,
-          amount: Number(data.amount),
-          status: ApprovalStatus.APPROVED,
-          createdAt: new Date(data.created_at),
-          createdBy: data.created_by || '',
-          supervisorId: user?.id || '',
-        };
-        
-        setExpenses(prevExpenses => [expenseWithId, ...prevExpenses]);
-        toast.success("Expense added successfully");
-      }
-    } catch (error: any) {
-      console.error('Error adding expense:', error);
-      toast.error('Failed to add expense: ' + error.message);
-    }
-  };
-
-  const handleAddAdvance = async (newAdvance: Partial<Advance>) => {
-    try {
-      if (!newAdvance.siteId || !selectedSiteId) {
-        toast.error("No site selected for advance");
-        return;
-      }
-
-      const advanceData = {
-        site_id: selectedSiteId,
-        date: newAdvance.date instanceof Date ? newAdvance.date.toISOString() : new Date().toISOString(),
-        recipient_name: newAdvance.recipientName,
-        recipient_type: newAdvance.recipientType,
-        purpose: newAdvance.purpose,
-        amount: newAdvance.amount,
-        remarks: newAdvance.remarks || null,
-        status: ApprovalStatus.APPROVED,
-        created_by: user?.id
-      };
-      
-      const { data, error } = await supabase
-        .from('advances')
-        .insert(advanceData)
-        .select('*')
-        .single();
-      
-      if (error) throw error;
-      
-      if (data) {
-        const advanceWithId: Advance = {
-          id: data.id,
-          siteId: data.site_id,
-          date: new Date(data.date),
-          recipientName: data.recipient_name,
-          recipientType: data.recipient_type as RecipientType,
-          purpose: data.purpose as AdvancePurpose,
-          amount: Number(data.amount),
-          remarks: data.remarks || '',
-          status: data.status as ApprovalStatus,
-          createdBy: data.created_by || '',
-          createdAt: new Date(data.created_at),
-        };
-        
-        setAdvances(prevAdvances => [advanceWithId, ...prevAdvances]);
-        toast.success("Advance added successfully");
-      }
-    } catch (error: any) {
-      console.error('Error adding advance:', error);
-      toast.error('Failed to add advance: ' + error.message);
-    }
-  };
-
-  const handleAddFunds = async (newFund: Partial<FundsReceived>) => {
-    try {
-      if (!newFund.siteId || !selectedSiteId) {
-        toast.error("No site selected for funds received");
-        return;
-      }
-
-      const fundsData = {
-        site_id: selectedSiteId,
-        date: newFund.date instanceof Date ? newFund.date.toISOString() : new Date().toISOString(),
-        amount: newFund.amount,
-        reference: newFund.reference || null,
-        method: newFund.method || null
-      };
-      
-      const { data, error } = await supabase
-        .from('funds_received')
-        .insert(fundsData)
-        .select('*')
-        .single();
-      
-      if (error) throw error;
-      
-      if (data) {
-        const fundWithId: FundsReceived = {
-          id: data.id,
-          siteId: data.site_id,
-          date: new Date(data.date),
-          amount: Number(data.amount),
-          reference: data.reference || undefined,
-          method: data.method || undefined,
-          createdAt: new Date(data.created_at),
-        };
-        
-        setFundsReceived(prevFunds => [fundWithId, ...prevFunds]);
-        
-        // Update the site's funds directly
-        const updatedFunds = (sites.find(site => site.id === selectedSiteId)?.funds || 0) + Number(fundWithId.amount);
-        
-        const { error: updateError } = await supabase
+        let query = supabase
           .from('sites')
-          .update({ funds: updatedFunds })
-          .eq('id', selectedSiteId);
-          
-        if (updateError) {
-          console.error('Error updating site funds:', updateError);
-        } else {
-          setSites(prevSites =>
-            prevSites.map(site =>
-              site.id === selectedSiteId
-                ? { ...site, funds: updatedFunds }
-                : site
-            )
-          );
+          .select('*')
+          .eq('supervisor_id', user.id);
+
+        if (isFilteringByDate && dateRange?.from && dateRange?.to) {
+          query = query.gte('start_date', format(dateRange.from, 'yyyy-MM-dd'))
+            .lte('start_date', format(dateRange.to, 'yyyy-MM-dd'));
         }
-        
-        toast.success("Funds received recorded successfully");
-        
-        fetchSites();
-        fetchSiteFundsReceived(selectedSiteId);
+
+        const { data: sitesData, error: sitesError } = await query;
+
+        if (sitesError) {
+          console.error('Error fetching sites:', sitesError);
+          toast.error(`Error fetching sites: ${sitesError.message}`);
+          return;
+        }
+
+        if (sitesData) {
+          setSites(sitesData as Site[]);
+        }
+      } catch (error) {
+        console.error('Error fetching sites:', error);
+        toast.error(`Error fetching sites: ${error}`);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error: any) {
-      console.error('Error adding funds received:', error);
-      toast.error('Failed to add funds received: ' + error.message);
+    };
+
+    fetchSites();
+  }, [user, isFilteringByDate, dateRange]);
+
+  const handleAddSite = async () => {
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from('sites')
+        .insert([
+          {
+            ...newSite,
+            start_date: format(newSite.startDate, 'yyyy-MM-dd'),
+          },
+        ]);
+
+      if (error) {
+        console.error('Error adding site:', error);
+        toast.error(`Error adding site: ${error.message}`);
+        return;
+      }
+
+      setSites([...sites, { id: data[0].id, createdAt: new Date(), isCompleted: false, ...newSite }]);
+      setIsAddingSite(false);
+      setNewSite({
+        name: '',
+        jobName: '',
+        posNo: '',
+        location: '',
+        startDate: new Date(),
+        supervisorId: user?.id || '',
+        supervisor: user?.name || '',
+      });
+      toast.success('Site added successfully!');
+    } catch (error) {
+      console.error('Error adding site:', error);
+      toast.error(`Error adding site: ${error}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleAddInvoice = (newInvoice: Omit<Invoice, 'id' | 'createdAt'>) => {
-    console.log("Adding new invoice with data:", newInvoice);
-    
-    const invoiceWithId: Invoice = {
-      ...newInvoice,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-    };
-    
-    console.log("Created invoice with ID:", invoiceWithId.id);
-    console.log("Invoice image URL:", invoiceWithId.invoiceImageUrl);
-    
-    setInvoices(prevInvoices => [invoiceWithId, ...prevInvoices]);
-    toast.success("Invoice added successfully");
-  };
+  const handleDeleteSite = async () => {
+    if (!siteToDelete) return;
 
-  const handleCompleteSite = async (siteId: string, completionDate: Date) => {
+    setIsDeleteLoading(true);
     try {
       const { error } = await supabase
         .from('sites')
-        .update({ 
-          is_completed: true, 
-          completion_date: completionDate.toISOString() 
-        })
-        .eq('id', siteId);
-        
-      if (error) throw error;
-      
-      setSites(prevSites => 
-        prevSites.map(site => 
-          site.id === siteId 
-            ? { ...site, isCompleted: true, completionDate } 
-            : site
-        )
-      );
-      
-      toast.success("Site marked as completed");
-    } catch (error: any) {
-      console.error('Error completing site:', error);
-      toast.error('Failed to mark site as completed: ' + error.message);
+        .delete()
+        .eq('id', siteToDelete);
+
+      if (error) {
+        console.error('Error deleting site:', error);
+        toast.error(`Error deleting site: ${error.message}`);
+        return;
+      }
+
+      setSites(sites.filter(site => site.id !== siteToDelete));
+      setSiteToDelete(null);
+      setIsDeleteDialogOpen(false);
+      toast.success('Site deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting site:', error);
+      toast.error(`Error deleting site: ${error}`);
+    } finally {
+      setIsDeleteLoading(false);
     }
   };
 
-  const filteredSites = sites.filter(site => {
-    const matchesSearch = 
-      site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      site.jobName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      site.posNo.toLowerCase().includes(searchTerm.toLowerCase());
-      
-    const matchesSupervisor = selectedSupervisorId 
-      ? site.supervisorId === selectedSupervisorId 
-      : true;
-    
-    const matchesStatus = 
-      filterStatus === 'all' ? true :
-      filterStatus === 'active' ? !site.isCompleted :
-      filterStatus === 'completed' ? site.isCompleted : true;
-      
-    return matchesSearch && matchesSupervisor && matchesStatus;
-  });
+  const handleEditSite = async () => {
+    if (!siteToEdit) return;
 
-  const selectedSite = selectedSiteId 
-    ? ensureDateObjects(sites.find(site => site.id === selectedSiteId) as Site)
-    : null;
-    
+    setIsEditLoading(true);
+    try {
+      const { error } = await supabase
+        .from('sites')
+        .update(editedSite)
+        .eq('id', siteToEdit.id);
+
+      if (error) {
+        console.error('Error editing site:', error);
+        toast.error(`Error editing site: ${error.message}`);
+        return;
+      }
+
+      setSites(sites.map(site => site.id === siteToEdit.id ? { ...site, ...editedSite } : site));
+      setSiteToEdit(null);
+      setEditedSite({});
+      setIsEditingSite(false);
+      toast.success('Site updated successfully!');
+    } catch (error) {
+      console.error('Error editing site:', error);
+      toast.error(`Error editing site: ${error}`);
+    } finally {
+      setIsEditLoading(false);
+    }
+  };
+
+  const handleTransactionsUpdate = useCallback(async () => {
+    if (!selectedSiteId) return;
+
+    try {
+      const { data: expensesData, error: expensesError } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('site_id', selectedSiteId);
+
+      if (expensesError) {
+        console.error('Error fetching expenses:', expensesError);
+        toast.error(`Error fetching expenses: ${expensesError.message}`);
+        return;
+      }
+
+      const { data: advancesData, error: advancesError } = await supabase
+        .from('advances')
+        .select('*')
+        .eq('site_id', selectedSiteId);
+
+      if (advancesError) {
+        console.error('Error fetching advances:', advancesError);
+        toast.error(`Error fetching advances: ${advancesError.message}`);
+        return;
+      }
+
+      const { data: fundsData, error: fundsError } = await supabase
+        .from('funds_received')
+        .select('*')
+        .eq('site_id', selectedSiteId);
+
+      if (fundsError) {
+        console.error('Error fetching funds:', fundsError);
+        toast.error(`Error fetching funds: ${fundsError.message}`);
+        return;
+      }
+
+      const { data: invoicesData, error: invoicesError } = await supabase
+        .from('site_invoices')
+        .select('*')
+        .eq('site_id', selectedSiteId);
+
+      if (invoicesError) {
+        console.error('Error fetching invoices:', invoicesError);
+        toast.error(`Error fetching invoices: ${invoicesError.message}`);
+        return;
+      }
+
+      setExpenses(expensesData as Expense[]);
+      setAdvances(advancesData as Advance[]);
+      setFundsReceived(fundsData as FundsReceived[]);
+      setInvoices(invoicesData as Invoice[]);
+    } catch (error) {
+      console.error('Error updating transactions:', error);
+      toast.error(`Error updating transactions: ${error}`);
+    }
+  }, [selectedSiteId]);
+
+  useEffect(() => {
+    if (selectedSiteId) {
+      handleTransactionsUpdate();
+    }
+  }, [selectedSiteId, handleTransactionsUpdate]);
+
+  const handleAddExpense = async (expense: Partial<Expense>) => {
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert([
+          {
+            ...expense,
+            date: format(new Date(expense.date as Date), 'yyyy-MM-dd'),
+            site_id: selectedSiteId,
+            supervisor_id: user?.id,
+            created_by: user?.id,
+          },
+        ]);
+
+      if (error) {
+        console.error('Error adding expense:', error);
+        toast.error(`Error adding expense: ${error.message}`);
+        return;
+      }
+
+      setExpenses([...expenses, { id: data[0].id, createdAt: new Date(), createdBy: user?.id || '', status: ApprovalStatus.PENDING, supervisorId: user?.id || '', ...expense }]);
+      toast.success('Expense added successfully!');
+      handleTransactionsUpdate();
+    } catch (error) {
+      console.error('Error adding expense:', error);
+      toast.error(`Error adding expense: ${error}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddAdvance = async (advance: Partial<Advance>) => {
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from('advances')
+        .insert([
+          {
+            ...advance,
+            date: format(new Date(advance.date as Date), 'yyyy-MM-dd'),
+            site_id: selectedSiteId,
+            created_by: user?.id,
+          },
+        ]);
+
+      if (error) {
+        console.error('Error adding advance:', error);
+        toast.error(`Error adding advance: ${error.message}`);
+        return;
+      }
+
+      setAdvances([...advances, { id: data[0].id, createdAt: new Date(), createdBy: user?.id || '', status: ApprovalStatus.PENDING, ...advance }]);
+      toast.success('Advance added successfully!');
+      handleTransactionsUpdate();
+    } catch (error) {
+      console.error('Error adding advance:', error);
+      toast.error(`Error adding advance: ${error}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddFunds = async (fund: Partial<FundsReceived>) => {
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from('funds_received')
+        .insert([
+          {
+            ...fund,
+            date: format(new Date(fund.date as Date), 'yyyy-MM-dd'),
+            site_id: selectedSiteId,
+          },
+        ]);
+
+      if (error) {
+        console.error('Error adding funds:', error);
+        toast.error(`Error adding funds: ${error.message}`);
+        return;
+      }
+
+      setFundsReceived([...fundsReceived, { id: data[0].id, createdAt: new Date(), ...fund }]);
+      toast.success('Funds added successfully!');
+      handleTransactionsUpdate();
+    } catch (error) {
+      console.error('Error adding funds:', error);
+      toast.error(`Error adding funds: ${error}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddInvoice = async (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from('site_invoices')
+        .insert([
+          {
+            ...invoice,
+            date: format(new Date(invoice.date), 'yyyy-MM-dd'),
+            site_id: selectedSiteId,
+            created_by: user?.id,
+          },
+        ]);
+
+      if (error) {
+        console.error('Error adding invoice:', error);
+        toast.error(`Error adding invoice: ${error.message}`);
+        return;
+      }
+
+      setInvoices([...invoices, { id: data[0].id, createdAt: new Date(), ...invoice }]);
+      toast.success('Invoice added successfully!');
+      handleTransactionsUpdate();
+    } catch (error) {
+      console.error('Error adding invoice:', error);
+      toast.error(`Error adding invoice: ${error}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCompleteSite = async (siteId: string, completionDate: Date) => {
+    setSites(
+      sites.map((site) =>
+        site.id === siteId ? { ...site, isCompleted: true, completionDate: completionDate } : site
+      )
+    );
+  };
+
+  const calculateSiteFinancials = (siteId: string): BalanceSummary => {
+    const siteExpenses = expenses.filter(expense => expense.siteId === siteId);
+    const siteAdvances = advances.filter(advance => advance.siteId === siteId);
+    const siteFundsReceived = fundsReceived.filter(fund => fund.siteId === siteId);
+    const siteInvoices = invoices.filter(invoice => invoice.siteId === siteId);
+
+    const totalExpenditure = siteExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const totalAdvances = siteAdvances.reduce((sum, advance) => sum + advance.amount, 0);
+    const fundsReceivedTotal = siteFundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
+    const invoicesPaid = siteInvoices.reduce((sum, invoice) => (invoice.paymentStatus === PaymentStatus.PAID ? sum + invoice.netAmount : sum), 0);
+    const pendingInvoices = siteInvoices.reduce((sum, invoice) => (invoice.paymentStatus === PaymentStatus.PENDING ? sum + invoice.netAmount : sum), 0);
+    const debitsToWorker = siteAdvances.reduce((sum, advance) => (advance.purpose === AdvancePurpose.OTHER ? sum + advance.amount : sum), 0);
+
+    const totalBalance = fundsReceivedTotal - totalExpenditure - totalAdvances - invoicesPaid;
+
+    return {
+      fundsReceived: fundsReceivedTotal,
+      totalExpenditure,
+      totalAdvances,
+      debitsToWorker,
+      invoicesPaid,
+      pendingInvoices,
+      totalBalance,
+    };
+  };
+
+  const selectedSite = sites.find(site => site.id === selectedSiteId);
   const siteExpenses = expenses.filter(expense => expense.siteId === selectedSiteId);
   const siteAdvances = advances.filter(advance => advance.siteId === selectedSiteId);
   const siteFunds = fundsReceived.filter(fund => fund.siteId === selectedSiteId);
   const siteInvoices = invoices.filter(invoice => invoice.siteId === selectedSiteId);
-  
-  const allSiteInvoices = siteInvoices;
-  
-  const supervisorInvoices = siteInvoices.filter(invoice => 
-    invoice.approverType === "supervisor" || !invoice.approverType
+
+  const renderInvoiceContent = (invoice: Invoice) => (
+    <div className="flex flex-col space-y-1">
+      <div className="flex justify-between">
+        <span className="text-sm font-medium">{invoice.partyName}</span>
+        <Badge 
+          variant="outline" 
+          className={`text-xs ${
+            invoice.paymentStatus === 'paid' 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-orange-100 text-orange-600'
+          }`}
+        >
+          {invoice.paymentStatus}
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground">{invoice.material}</p>
+      <div className="flex justify-between text-sm">
+        <span>₹{invoice.netAmount?.toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">
+          {invoice.approverType === 'ho' ? 'HO Approval' : 'Supervisor Approval'}
+        </span>
+      </div>
+    </div>
   );
 
-  const calculateSiteFinancials = (siteId: string) => {
-    if (siteId) {
-      const site = sites.find(s => s.id === siteId);
-      
-      if (site) {
-        // Calculate total expenses
-        const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-        
-        // Calculate total funds received
-        const totalFunds = fundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
-        
-        // Calculate total advances (excluding debit to worker)
-        const totalAdvances = advances.reduce((sum, advance) => {
-          if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
-            return sum + advance.amount;
-          }
-          return sum;
-        }, 0);
-        
-        // Calculate total debit to worker advances
-        const totalDebitToWorker = advances.reduce((sum, advance) => {
-          if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
-            return sum + advance.amount;
-          }
-          return sum;
-        }, 0);
-        
-        // Calculate supervisor invoices (only those paid by supervisor)
-        const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.payment_by === 'supervisor')
-          .reduce((sum, invoice) => sum + invoice.netAmount, 0);
-        
-        // Calculate total balance
-        const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;
-        
-        return {
-          fundsReceived: totalFunds,
-          totalExpenditure: totalExpenses,
-          totalAdvances,
-          debitsToWorker: totalDebitToWorker,
-          invoicesPaid: supervisorInvoiceTotal,
-          pendingInvoices: 0, // This will be implemented later
-          totalBalance: totalBalance
-        };
-      }
-    }
-    
-    return {
-      fundsReceived: 0,
-      totalExpenditure: 0,
-      totalAdvances: 0,
-      debitsToWorker: 0,
-      invoicesPaid: 0,
-      pendingInvoices: 0,
-      totalBalance: 0
-    };
-  };
-
-  const getSelectedSupervisorName = () => {
-    if (!selectedSupervisorId) return null;
-    const supervisor = supervisors.find(s => s.id === selectedSupervisorId);
-    return supervisor ? supervisor.name : "Unknown Supervisor";
-  };
-
-  const siteSupervisor = selectedSite && selectedSite.supervisorId ? 
-    supervisors.find(s => s.id === selectedSite.supervisorId) : null;
-
-  const handleCreateSite = async (newSite) => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase.from('sites').insert([
-        {
-          name: newSite.name,
-          job_name: newSite.jobName,
-          pos_no: newSite.posNo,
-          location: newSite.location,
-          start_date: newSite.startDate?.toISOString(),
-          completion_date: newSite.completionDate?.toISOString(),
-          supervisor_id: newSite.supervisorId || user.id,
-          created_by: user.id,
-          is_completed: false
-        }
-      ]);
-      
-      if (error) {
-        console.error('Error creating site:', error);
-        toast.error('Error creating site: ' + error.message);
-        return;
-      }
-      
-      toast.success('Site created successfully');
-      setIsSiteFormOpen(false);
-      fetchSites();
-    } catch (error) {
-      console.error('Error in handleCreateSite:', error);
-      toast.error('Failed to create site. Please try again.');
-    }
-  };
-
-  const handleViewSite = (siteId) => {
-    setSelectedSiteId(siteId);
-  };
-
-  const handleCloseSiteDetail = () => {
-    setSelectedSiteId(null);
-  };
-
-  const handleTransactionsUpdate = async () => {
-    if (selectedSiteId) {
-      await fetchSiteExpenses(selectedSiteId);
-      await fetchSiteAdvances(selectedSiteId);
-      await fetchSiteFundsReceived(selectedSiteId);
-      await fetchSiteInvoices(selectedSiteId);
-      
-      // Refetch sites to update balances
-      fetchSites();
-    }
-  };
-
   return (
-    <div className="space-y-6 animate-fade-in max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
-      {isLoading ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        </div>
-      ) : selectedSite ? (
-        <div className="overflow-y-auto flex-1 pr-2">
-          <SiteDetail 
-            site={selectedSite} 
-            onBack={() => setSelectedSiteId(null)} 
-            userRole={user?.role || UserRole.VIEWER}
-            expenses={siteExpenses}
-            advances={siteAdvances}
-            fundsReceived={siteFunds}
-            invoices={siteInvoices}
-            onAddExpense={handleAddExpense}
-            onAddAdvance={handleAddAdvance}
-            onAddFunds={handleAddFunds}
-            onAddInvoice={handleAddInvoice}
-            onCompleteSite={handleCompleteSite}
-            balanceSummary={calculateSiteFinancials(selectedSiteId || '')}
-            onTransactionsUpdate={handleTransactionsUpdate}
-          />
-        </div>
-      ) : (
-        <>
-          <PageTitle 
-            title="Sites & Expenses" 
-            subtitle={userRole === UserRole.ADMIN 
-              ? "Manage construction sites and track expenses across supervisors"
-              : "Manage construction sites and track expenses"}
-            className="mb-4"
-          />
-          
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-4 w-full md:w-auto">
-              <div className="relative max-w-md w-full">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-                <input 
-                  type="text" 
-                  placeholder="Search sites..." 
-                  className="py-2 pl-10 pr-4 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              
-              {userRole === UserRole.ADMIN && (
-                <div className="w-full md:w-64">
-                  <Select 
-                    value={selectedSupervisorId || ''} 
-                    onValueChange={(value) => setSelectedSupervisorId(value || null)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="All Supervisors" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All Supervisors</SelectItem>
-                      {supervisors.map((supervisor) => (
-                        <SelectItem key={supervisor.id} value={supervisor.id}>
-                          {supervisor.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+    <div className="container mx-auto py-6">
+      <div className="flex justify-between items-center mb-4">
+        <PageTitle title="Sites" subtitle="Manage your construction sites" />
+        <Button onClick={() => setIsAddingSite(true)}>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Add Site
+        </Button>
+      </div>
+
+      <div className="mb-4 flex items-center space-x-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant={"outline"}
+              className={cn(
+                "justify-start text-left font-normal",
+                !dateRange?.from || !dateRange.to
+                  ? "text-muted-foreground"
+                  : undefined
               )}
-              
-              {userRole === UserRole.ADMIN && (
-                <div className="w-full md:w-64">
-                  <Select 
-                    value={filterStatus} 
-                    onValueChange={(value: 'all' | 'active' | 'completed') => setFilterStatus(value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <CheckSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="All Sites" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Sites</SelectItem>
-                      <SelectItem value="active">Active Sites</SelectItem>
-                      <SelectItem value="completed">Completed Sites</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {dateRange?.from && dateRange.to ? (
+                <>
+                  {format(dateRange.from, "dd/MM/yyyy")} -{" "}
+                  {format(dateRange.to, "dd/MM/yyyy")}
+                </>
+              ) : (
+                <span>Pick a date range</span>
               )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="center">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={setDateRange}
+              onMonthChange={() => { }}
+              numberOfMonths={2}
+            />
+            <div className="flex justify-end p-2">
+              <Button size="sm" variant="ghost" onClick={() => {
+                setDateRange({
+                  from: new Date(new Date().getFullYear(), 0, 1),
+                  to: new Date(),
+                });
+                setIsFilteringByDate(false);
+              }}>Reset</Button>
+              <Button size="sm" onClick={() => setIsFilteringByDate(true)}>Apply</Button>
             </div>
-            
-            <div className="flex flex-wrap gap-2">
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-4">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : selectedSiteId ? (
+        selectedSite && (
+          <div className="animate-fade-in">
+            <SiteDetail 
+              site={selectedSite} 
+              onBack={() => setSelectedSiteId(null)} 
+              userRole={user?.role || UserRole.VIEWER}
+              expenses={siteExpenses}
+              advances={siteAdvances}
+              fundsReceived={siteFunds}
+              invoices={siteInvoices}
+              onAddExpense={handleAddExpense}
+              onAddAdvance={handleAddAdvance}
+              onAddFunds={handleAddFunds}
+              onAddInvoice={handleAddInvoice}
+              onCompleteSite={handleCompleteSite}
+              balanceSummary={calculateSiteFinancials(selectedSiteId || '')}
+              onUpdateTransactions={handleTransactionsUpdate}
+            />
+          </div>
+        )
+      ) : (
+        sites.length > 0 ? (
+          <DataTable columns={columns} data={sites} />
+        ) : (
+          <Card className="w-full">
+            <CardContent>
+              <p className="text-center text-muted-foreground">No sites found. Add a new site to get started.</p>
+            </CardContent>
+          </Card>
+        )
+      )}
+
+      <Dialog open={isAddingSite} onOpenChange={setIsAddingSite}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Site</DialogTitle>
+            <DialogDescription>
+              Create a new construction site to manage expenses and track progress.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="name" className="text-right">
+                Name
+              </Label>
+              <Input
+                type="text"
+                id="name"
+                value={newSite.name}
+                onChange={(e) => setNewSite({ ...newSite, name: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="jobName" className="text-right">
+                Job Name
+              </Label>
+              <Input
+                type="text"
+                id="jobName"
+                value={newSite.jobName}
+                onChange={(e) => setNewSite({ ...newSite, jobName: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="posNo" className="text-right">
+                PO Number
+              </Label>
+              <Input
+                type="text"
+                id="posNo"
+                value={newSite.posNo}
+                onChange={(e) => setNewSite({ ...newSite, posNo: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="location" className="text-right">
+                Location
+              </Label>
+              <Input
+                type="text"
+                id="location"
+                value={newSite.location}
+                onChange={(e) => setNewSite({ ...newSite, location: e.target.value })}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="startDate" className="text-right">
+                Start Date
+              </Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-10">
-                    <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-                    Filter
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !newSite.startDate
+                        ? "text-muted-foreground"
+                        : undefined
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {newSite.startDate ? (
+                      format(newSite.startDate, "dd/MM/yyyy")
+                    ) : (
+                      <span>Pick a date</span>
+                    )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80">
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Filter Sites</h4>
-                    <div className="space-y-2">
-                      <h5 className="text-sm font-medium">Status</h5>
-                      <div className="flex flex-col space-y-2">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="filter-all" 
-                            checked={filterStatus === 'all'}
-                            onCheckedChange={() => setFilterStatus('all')}
-                          />
-                          <Label htmlFor="filter-all">All Sites</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="filter-active" 
-                            checked={filterStatus === 'active'}
-                            onCheckedChange={() => setFilterStatus('active')}
-                          />
-                          <Label htmlFor="filter-active">Active Sites</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="filter-completed" 
-                            checked={filterStatus === 'completed'}
-                            onCheckedChange={() => setFilterStatus('completed')}
-                          />
-                          <Label htmlFor="filter-completed">Completed Sites</Label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <PopoverContent className="w-auto p-0" align="center">
+                  <Calendar
+                    mode="single"
+                    selected={newSite.startDate}
+                    onSelect={(date) => setNewSite({ ...newSite, startDate: date || new Date() })}
+                    disabled={(date) =>
+                      date > new Date() || date < new Date("2020-01-01")
+                    }
+                    initialFocus
+                  />
                 </PopoverContent>
               </Popover>
             </div>
           </div>
-          
-          {userRole === UserRole.ADMIN && selectedSupervisorId && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-md flex items-center">
-              <Users className="h-5 w-5 mr-2 text-blue-500" />
-              <span className="font-medium">
-                Viewing sites for: {getSelectedSupervisorName()}
-              </span>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setIsAddingSite(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" onClick={handleAddSite} disabled={isSubmitting}>
+              {isSubmitting ? "Adding..." : "Add Site"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the site and all
+              associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteSite} disabled={isDeleteLoading}>
+              {isDeleteLoading ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={isEditingSite} onOpenChange={setIsEditingSite}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Site</DialogTitle>
+            <DialogDescription>
+              Make changes to the selected construction site.
+            </DialogDescription>
+          </DialogHeader>
+          {siteToEdit && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">
+                  Name
+                </Label>
+                <Input
+                  type="text"
+                  id="name"
+                  defaultValue={siteToEdit.name}
+                  onChange={(e) => setEditedSite({ ...editedSite, name: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="jobName" className="text-right">
+                  Job Name
+                </Label>
+                <Input
+                  type="text"
+                  id="jobName"
+                  defaultValue={siteToEdit.jobName}
+                  onChange={(e) => setEditedSite({ ...editedSite, jobName: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="posNo" className="text-right">
+                  PO Number
+                </Label>
+                <Input
+                  type="text"
+                  id="posNo"
+                  defaultValue={siteToEdit.posNo}
+                  onChange={(e) => setEditedSite({ ...editedSite, posNo: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="location" className="text-right">
+                  Location
+                </Label>
+                <Input
+                  type="text"
+                  id="location"
+                  defaultValue={siteToEdit.location}
+                  onChange={(e) => setEditedSite({ ...editedSite, location: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
             </div>
           )}
-          
-          <div className="overflow-y-auto flex-1 pr-2">
-            {sites.length > 0 ? (
-              <SitesList 
-                sites={filteredSites}
-                onSelectSite={(siteId) => setSelectedSiteId(siteId)}
-              />
-            ) : (
-              <CustomCard>
-                <div className="p-12 text-center">
-                  <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <h3 className="text-lg font-medium mb-2">No Sites Added Yet</h3>
-                  <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                    {userRole === UserRole.ADMIN 
-                      ? "Create sites from the admin dashboard to start tracking expenses."
-                      : "No sites have been assigned to you yet."}
-                  </p>
-                </div>
-              </CustomCard>
-            )}
-          </div>
-        </>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setIsEditingSite(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" onClick={handleEditSite} disabled={isEditLoading}>
+              {isEditLoading ? "Updating..." : "Update Site"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -604,55 +604,60 @@ const Expenses: React.FC = () => {
   );
 
   const calculateSiteFinancials = (siteId: string) => {
-    const siteFunds = fundsReceived.filter(fund => fund.siteId === siteId);
+    if (siteId) {
+      const site = sites.find(s => s.id === siteId);
+      
+      if (site) {
+        // Calculate total expenses
+        const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+        
+        // Calculate total funds received
+        const totalFunds = fundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
+        
+        // Calculate total advances (excluding debit to worker)
+        const totalAdvances = advances.reduce((sum, advance) => {
+          if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
+            return sum + advance.amount;
+          }
+          return sum;
+        }, 0);
+        
+        // Calculate total debit to worker advances
+        const totalDebitToWorker = advances.reduce((sum, advance) => {
+          if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
+            return sum + advance.amount;
+          }
+          return sum;
+        }, 0);
+        
+        // Calculate supervisor invoices (only those paid by supervisor)
+        const supervisorInvoiceTotal = invoices
+          .filter(invoice => invoice.payment_by === 'supervisor')
+          .reduce((sum, invoice) => sum + invoice.netAmount, 0);
+        
+        // Calculate total balance
+        const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;
+        
+        return {
+          fundsReceived: totalFunds,
+          totalExpenditure: totalExpenses,
+          totalAdvances,
+          debitsToWorker: totalDebitToWorker,
+          invoicesPaid: supervisorInvoiceTotal,
+          pendingInvoices: 0, // This will be implemented later
+          totalBalance: totalBalance
+        };
+      }
+    }
     
-    const siteExpenses = expenses.filter(expense => 
-      expense.siteId === siteId && expense.status === ApprovalStatus.APPROVED
-    );
-    
-    const siteAdvances = advances.filter(advance => 
-      advance.siteId === siteId && advance.status === ApprovalStatus.APPROVED
-    );
-    
-    const siteInvoices = invoices.filter(invoice => 
-      invoice.siteId === siteId && invoice.paymentStatus === PaymentStatus.PAID
-    );
-
-    const regularAdvances = siteAdvances.filter(advance => 
-      !DEBIT_ADVANCE_PURPOSES.includes(advance.purpose as AdvancePurpose)
-    );
-
-    const debitAdvances = siteAdvances.filter(advance => 
-      DEBIT_ADVANCE_PURPOSES.includes(advance.purpose as AdvancePurpose)
-    );
-
-    const supervisorInvoices = siteInvoices.filter(invoice => 
-      invoice.approverType === "supervisor" || !invoice.approverType
-    );
-
-    const totalFunds = siteFunds.reduce((sum, fund) => sum + fund.amount, 0);
-    const totalExpenses = siteExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const totalAdvances = siteAdvances.reduce((sum, advance) => sum + advance.amount, 0);
-    const totalRegularAdvances = regularAdvances.reduce((sum, advance) => sum + advance.amount, 0);
-    const totalDebitToWorker = debitAdvances.reduce((sum, advance) => sum + advance.amount, 0);
-    const supervisorInvoiceTotal = supervisorInvoices.reduce((sum, invoice) => sum + (invoice.netAmount || 0), 0);
-    const pendingInvoicesTotal = siteInvoices
-      .filter(invoice => invoice.paymentStatus === PaymentStatus.PENDING)
-      .reduce((sum, invoice) => sum + (invoice.netAmount || 0), 0);
-
-    // Updated balance calculation according to the requirement:
-    // current balance = Funds Received from HO - Total Expenses - Total Advances - Invoices paid
-    // (note: debits to worker are tracked separately but not subtracted from balance)
-    const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;
-
     return {
-      fundsReceived: totalFunds,
-      totalExpenditure: totalExpenses,
-      totalAdvances: totalAdvances,
-      debitsToWorker: totalDebitToWorker,
-      invoicesPaid: supervisorInvoiceTotal,
-      pendingInvoices: pendingInvoicesTotal,
-      totalBalance: totalBalance
+      fundsReceived: 0,
+      totalExpenditure: 0,
+      totalAdvances: 0,
+      debitsToWorker: 0,
+      invoicesPaid: 0,
+      pendingInvoices: 0,
+      totalBalance: 0
     };
   };
 

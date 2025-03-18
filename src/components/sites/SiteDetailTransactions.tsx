@@ -39,6 +39,7 @@ interface SiteDetailTransactionsProps {
   expenses?: Expense[];
   advances?: Advance[];
   fundsReceived?: FundsReceived[];
+  onTransactionsUpdate?: () => void;
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
@@ -53,6 +54,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   expenses = [],
   advances = [],
   fundsReceived = [],
+  onTransactionsUpdate
 }) => {
   console.info('SiteDetailTransactions props:', { 
     siteId, 
@@ -77,6 +79,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     fundsReceived: false,
     invoices: false,
   });
+  const [error, setError] = useState<string | null>(null);
 
   const { user } = useAuth();
   const [selectedItemToDelete, setSelectedItemToDelete] = useState<{id: string, type: 'expense' | 'advance' | 'funds' | 'invoice'} | null>(null);
@@ -85,19 +88,32 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   // Ensure advances are not duplicated by setting them only once on initial render
   useEffect(() => {
     setLocalAdvances(advances);
-  }, []);
+  }, [advances]);
+
+  // Update local state when props change
+  useEffect(() => {
+    setLocalExpenses(expenses);
+    setLocalFundsReceived(fundsReceived);
+  }, [expenses, fundsReceived]);
 
   useEffect(() => {
     const loadInvoices = async () => {
-      if (!siteId) return;
+      if (!siteId) {
+        console.error('No siteId provided to load invoices');
+        return;
+      }
       
       setIsLoading(prev => ({ ...prev, invoices: true }));
+      setError(null);
       
       try {
+        console.log('Fetching invoices for site:', siteId);
         const invoicesData = await fetchSiteInvoices(siteId);
+        console.log('Invoices data:', invoicesData);
         setInvoices(invoicesData as Invoice[]);
       } catch (error) {
         console.error('Error loading invoices:', error);
+        setError('Failed to load invoices. Please try again.');
       } finally {
         setIsLoading(prev => ({ ...prev, invoices: false }));
       }
@@ -223,6 +239,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     <div className="space-y-4">
       {isLoading.expenses ? (
         <p className="text-center text-muted-foreground py-8">Loading expenses...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
       ) : localExpenses.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses found for this site.</p>
       ) : (
@@ -294,6 +312,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     <div className="space-y-4">
       {isLoading.advances ? (
         <p className="text-center text-muted-foreground py-8">Loading advances...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
       ) : localAdvances.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No advances found for this site.</p>
       ) : (
@@ -382,6 +402,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     <div className="space-y-4">
       {isLoading.fundsReceived ? (
         <p className="text-center text-muted-foreground py-8">Loading funds received...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
       ) : localFundsReceived.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No funds received for this site.</p>
       ) : (
@@ -390,12 +412,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             <thead className="bg-muted/50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
-                {canEditDelete && (
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
-                )}
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
               </tr>
             </thead>
             <tbody>
@@ -405,39 +424,17 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                     {format(new Date(fund.date), 'dd MMM yyyy')}
                   </td>
                   <td className="px-4 py-3 text-sm font-medium">
-                    {fund.reference || 'N/A'}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
-                      {fund.method || 'Bank Transfer'}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
                     <div className="flex items-center">
                       <IndianRupee className="h-3 w-3 mr-1" />
                       {fund.amount.toLocaleString()}
                     </div>
                   </td>
-                  {canEditDelete && (
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex space-x-2">
-                        <button
-                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
-                          onClick={() => handleEdit(fund.id, 'funds')}
-                        >
-                          <Edit2 className="h-4 w-4 mr-1" />
-                          Edit
-                        </button>
-                        <button
-                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
-                          onClick={() => confirmDelete(fund.id, 'funds')}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-4 py-3 text-sm">
+                    {fund.method || 'N/A'}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {fund.reference || 'N/A'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -451,6 +448,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     <div className="space-y-4">
       {isLoading.invoices ? (
         <p className="text-center text-muted-foreground py-8">Loading invoices...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
       ) : invoices.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No invoices found for this site.</p>
       ) : (
@@ -483,7 +482,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                   <td className="px-4 py-3 text-sm font-medium">
                     <div className="flex items-center">
                       <IndianRupee className="h-3 w-3 mr-1" />
-                      {(invoice.amount || invoice.netAmount).toLocaleString()}
+                      {(invoice.amount || invoice.netAmount)?.toLocaleString() || '0'}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
@@ -592,4 +591,3 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 };
 
 export default SiteDetailTransactions;
-

@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User } from 'lucide-react';
-import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus } from '@/lib/types';
+import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus, UserRole } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,14 +16,14 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface SiteDetailProps {
   site: Site;
-  expenses: Expense[];
-  advances: Advance[];
-  fundsReceived: FundsReceived[];
-  invoices: Invoice[];
+  expenses?: Expense[];
+  advances?: Advance[];
+  fundsReceived?: FundsReceived[];
+  invoices?: Invoice[];
   supervisorInvoices?: Invoice[];
-  balanceSummary: BalanceSummary;
+  balanceSummary?: BalanceSummary;
   siteSupervisor?: { id: string; name: string } | null;
-  onBack: () => void;
+  onBack?: () => void;
   onAddExpense?: (expense: Partial<Expense>) => void;
   onAddAdvance?: (advance: Partial<Advance>) => void;
   onAddFunds?: (fund: Partial<FundsReceived>) => void;
@@ -30,6 +31,7 @@ interface SiteDetailProps {
   onCompleteSite?: (siteId: string, completionDate: Date) => void;
   supervisor?: any;
   isAdminView?: boolean;
+  userRole: UserRole;
 }
 
 // Define DEBIT_ADVANCE_PURPOSES here for consistency
@@ -41,10 +43,10 @@ const DEBIT_ADVANCE_PURPOSES = [
 
 const SiteDetail: React.FC<SiteDetailProps> = ({
   site,
-  expenses,
-  advances,
-  fundsReceived,
-  invoices,
+  expenses = [],
+  advances = [],
+  fundsReceived = [],
+  invoices = [],
   supervisorInvoices = [],
   balanceSummary,
   siteSupervisor,
@@ -55,18 +57,33 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   onAddInvoice,
   onCompleteSite,
   supervisor,
-  isAdminView
+  isAdminView,
+  userRole
 }) => {
   const [activeTab, setActiveTab] = useState('summary');
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
   const isMobile = useIsMobile();
 
+  // Create a default balanceSummary if none is provided
+  const defaultBalanceSummary: BalanceSummary = {
+    fundsReceived: 0,
+    totalExpenditure: 0,
+    totalAdvances: 0,
+    debitsToWorker: 0,
+    invoicesPaid: 0,
+    pendingInvoices: 0,
+    totalBalance: 0
+  };
+
+  // Use provided balanceSummary or default
+  const siteSummary = balanceSummary || defaultBalanceSummary;
+
   // Calculate these from the passed balanceSummary to ensure consistent calculation
-  const totalExpenses = balanceSummary.totalExpenditure;
-  const totalAdvances = balanceSummary.totalAdvances || 0;
-  const totalDebitToWorker = balanceSummary.debitsToWorker || 0;
-  const totalFundsReceived = balanceSummary.fundsReceived;
-  const totalInvoices = balanceSummary.invoicesPaid || 0;
+  const totalExpenses = siteSummary.totalExpenditure;
+  const totalAdvances = siteSummary.totalAdvances || 0;
+  const totalDebitToWorker = siteSummary.debitsToWorker || 0;
+  const totalFundsReceived = siteSummary.fundsReceived;
+  const totalInvoices = siteSummary.invoicesPaid || 0;
   
   const handleMarkComplete = async () => {
     try {
@@ -186,7 +203,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           </div>
         </CustomCard>
 
-        <BalanceCard balanceData={balanceSummary} siteId={site.id} />
+        <BalanceCard balanceData={siteSummary} siteId={site.id} />
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -223,8 +240,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                 <div className="pt-2 border-t">
                   <div className="flex justify-between items-center font-medium">
                     <span>Current Balance</span>
-                    <span className={balanceSummary.totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ₹{balanceSummary.totalBalance.toLocaleString()}
+                    <span className={siteSummary.totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      ₹{siteSummary.totalBalance.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -265,9 +282,14 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         
         <TabsContent value="transactions">
           <SiteDetailTransactions 
+            siteId={site.id}
+            userRole={userRole}
+            isAdminView={isAdminView}
+            expensesCount={expenses.length}
+            advancesCount={advances.length}
+            fundsReceivedCount={fundsReceived.length}
             site={site}
             supervisor={supervisor}
-            isAdminView={isAdminView}
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}

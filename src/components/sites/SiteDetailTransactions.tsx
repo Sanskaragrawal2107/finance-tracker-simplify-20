@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
-import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem } from '@/lib/types';
+import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem, Site } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
 import { fetchSiteInvoices } from '@/integrations/supabase/client';
@@ -16,6 +15,11 @@ interface SiteDetailTransactionsProps {
   fundsReceivedCount?: number;
   userRole: UserRole;
   isAdminView?: boolean;
+  site?: Site;
+  supervisor?: any;
+  expenses?: Expense[];
+  advances?: Advance[];
+  fundsReceived?: FundsReceived[];
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
@@ -25,6 +29,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   fundsReceivedCount = 0,
   userRole,
   isAdminView,
+  site,
+  supervisor,
+  expenses = [],
+  advances = [],
+  fundsReceived = [],
 }) => {
   console.info('SiteDetailTransactions props:', { 
     siteId, 
@@ -32,12 +41,14 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     advancesCount, 
     fundsReceivedCount, 
     userRole, 
-    isAdminView 
+    isAdminView,
+    site,
+    supervisor
   });
 
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [advances, setAdvances] = useState<Advance[]>([]);
-  const [fundsReceived, setFundsReceived] = useState<FundsReceived[]>([]);
+  const [localExpenses, setLocalExpenses] = useState<Expense[]>(expenses);
+  const [localAdvances, setLocalAdvances] = useState<Advance[]>(advances);
+  const [localFundsReceived, setLocalFundsReceived] = useState<FundsReceived[]>(fundsReceived);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -110,11 +121,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   // Function to render expenses tab content
   const renderExpensesTab = () => (
     <div className="space-y-4">
-      {expenses.length === 0 ? (
+      {localExpenses.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No expenses found for this site.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {expenses.map((expense) => (
+          {localExpenses.map((expense) => (
             <Card key={expense.id} className="p-4">
               {/* Expense card content */}
               <p>Expense: {expense.description}</p>
@@ -128,11 +139,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   // Function to render advances tab content
   const renderAdvancesTab = () => (
     <div className="space-y-4">
-      {advances.length === 0 ? (
+      {localAdvances.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No advances found for this site.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {advances.map((advance) => (
+          {localAdvances.map((advance) => (
             <Card key={advance.id} className="p-4">
               {/* Advance card content */}
               <p>Advance: {advance.recipientName}</p>
@@ -146,11 +157,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   // Function to render funds received tab content
   const renderFundsReceivedTab = () => (
     <div className="space-y-4">
-      {fundsReceived.length === 0 ? (
+      {localFundsReceived.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">No funds received for this site.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {fundsReceived.map((fund) => (
+          {localFundsReceived.map((fund) => (
             <Card key={fund.id} className="p-4">
               {/* Fund card content */}
               <p>Fund: ₹{fund.amount}</p>

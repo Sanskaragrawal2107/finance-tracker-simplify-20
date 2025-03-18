@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
@@ -293,7 +292,7 @@ const SupervisorSites: React.FC = () => {
     return (
       <SiteDetail
         site={selectedSite}
-        onClose={handleCloseSiteDetail}
+        onBack={handleCloseSiteDetail}
         userRole={user?.role || UserRole.VIEWER}
       />
     );

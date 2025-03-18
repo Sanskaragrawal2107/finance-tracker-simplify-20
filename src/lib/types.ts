@@ -23,6 +23,7 @@ export interface Site {
   startDate: Date;
   completionDate?: Date;
   supervisorId: string;
+  supervisor: string; // Add this field to support showing supervisor name
   createdAt: Date;
   isCompleted: boolean;
   funds?: number;
@@ -30,16 +31,6 @@ export interface Site {
 }
 
 // Financial data types
-export interface BalanceSummary {
-  fundsReceived: number;
-  totalExpenditure: number;
-  totalAdvances?: number;
-  debitsToWorker?: number;
-  invoicesPaid?: number;
-  pendingInvoices?: number;
-  totalBalance: number;
-}
-
 export enum PaymentMethod {
   NEFT = "NEFT",
   RTGS = "RTGS",

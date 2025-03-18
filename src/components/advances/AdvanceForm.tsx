@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, User, Briefcase, UserCog } from "lucide-react";
+import { CalendarIcon, Plus, User, Briefcase, UserCog, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -132,16 +133,30 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       setIsSubmitting(true);
       
       const advanceData = {
-        siteId,
+        site_id: siteId,
         date: values.date,
-        recipientName: values.recipientName,
-        recipientType: values.recipientType,
+        recipient_name: values.recipientName,
+        recipient_type: values.recipientType,
         purpose: values.purpose,
         amount: values.amount,
         remarks: values.remarks || "",
+        created_by: user?.id,
+        status: "pending",
       };
       
-      onSubmit(advanceData);
+      console.log("Submitting advance:", advanceData);
+      
+      const { error } = await supabase
+        .from('advances')
+        .insert(advanceData);
+        
+      if (error) {
+        console.error("Error inserting advance:", error);
+        throw error;
+      }
+      
+      toast.success("Advance submitted successfully");
+      onSubmit(advanceData as Partial<Advance>);
       onClose();
     } catch (error) {
       console.error('Error submitting advance:', error);
@@ -370,8 +385,17 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Advance
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Advance
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </form>

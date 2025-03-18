@@ -42,6 +42,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { Expense, ExpenseCategory } from "@/lib/types";
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
+import { supabase } from "@/integrations/supabase/client";
 
 interface ExpenseFormProps {
   isOpen: boolean;
@@ -83,6 +84,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, si
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -205,45 +207,93 @@ Return ONLY the category name, with no additional text or explanation.
     toast.info("Expense removed");
   };
 
-  const submitAllExpenses = () => {
-    console.log("Submitting all expenses:", expenses);
-    expenses.forEach(expense => {
-      const newExpense: Partial<Expense> = {
-        date: expense.date,
-        description: expense.purpose,
-        category: expense.category as unknown as ExpenseCategory,
-        amount: expense.amount,
-        status: "pending" as any,
-        createdAt: new Date(),
-      };
+  const submitAllExpenses = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    try {
+      console.log("Submitting all expenses:", expenses);
       
-      onSubmit(newExpense);
-    });
-    
-    setExpenses([]);
-    form.reset();
-    onClose();
-    
-    if (expenses.length > 0) {
-      toast.success(`${expenses.length} expenses submitted successfully`);
+      // Create an array to store all promises
+      const promises = expenses.map(expense => {
+        const newExpense: Partial<Expense> = {
+          date: expense.date,
+          description: expense.purpose,
+          category: expense.category as unknown as ExpenseCategory,
+          amount: expense.amount,
+          status: "pending" as any,
+          site_id: siteId, // ensure the siteId is properly set
+          created_at: new Date(),
+        };
+        
+        return supabase
+          .from('expenses')
+          .insert(newExpense)
+          .then(({ data, error }) => {
+            if (error) {
+              console.error("Error inserting expense:", error);
+              throw error;
+            }
+            console.log("Successfully inserted expense:", data);
+            return data;
+          });
+      });
+      
+      await Promise.all(promises);
+      
+      setExpenses([]);
+      form.reset();
+      onClose();
+      
+      if (expenses.length > 0) {
+        toast.success(`${expenses.length} expenses submitted successfully`);
+        onSubmit({} as Partial<Expense>); // Trigger the parent's onSubmit to refresh the data
+      }
+    } catch (error) {
+      console.error("Error submitting expenses:", error);
+      toast.error("Failed to submit one or more expenses");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSingleSubmit = (values: FormValues) => {
-    const newExpense: Partial<Expense> = {
-      date: values.date,
-      description: values.purpose,
-      category: values.category as unknown as ExpenseCategory,
-      amount: values.amount,
-      status: "pending" as any,
-      createdAt: new Date(),
-    };
-
-    onSubmit(newExpense);
-    form.reset();
-    setExpenses([]);
-    onClose();
-    toast.success("Expense submitted successfully");
+  const handleSingleSubmit = async (values: FormValues) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    try {
+      const newExpense: Partial<Expense> = {
+        date: values.date,
+        description: values.purpose,
+        category: values.category as unknown as ExpenseCategory,
+        amount: values.amount,
+        status: "pending" as any,
+        site_id: siteId, // ensure the siteId is properly set
+        created_at: new Date(),
+      };
+      
+      console.log("Submitting single expense:", newExpense);
+      
+      const { error } = await supabase
+        .from('expenses')
+        .insert(newExpense);
+        
+      if (error) {
+        console.error("Error inserting expense:", error);
+        throw error;
+      }
+      
+      form.reset();
+      setExpenses([]);
+      onClose();
+      toast.success("Expense submitted successfully");
+      onSubmit(newExpense); // Trigger the parent's onSubmit to refresh the data
+    } catch (error) {
+      console.error("Error submitting expense:", error);
+      toast.error("Failed to submit expense");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePurposeBlur = () => {
@@ -435,7 +485,7 @@ Return ONLY the category name, with no additional text or explanation.
         )}
 
         <DialogFooter className="pt-4 flex flex-col gap-2 sm:flex-row">
-          <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
+          <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto" disabled={isSubmitting}>
             Cancel
           </Button>
           {expenses.length > 0 ? (
@@ -443,16 +493,32 @@ Return ONLY the category name, with no additional text or explanation.
               type="button" 
               onClick={submitAllExpenses} 
               className="w-full sm:w-auto"
+              disabled={isSubmitting}
             >
-              Submit All Expenses
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit All Expenses"
+              )}
             </Button>
           ) : (
             <Button 
               type="button" 
               onClick={form.handleSubmit(handleSingleSubmit)} 
               className="w-full sm:w-auto"
+              disabled={isSubmitting}
             >
-              Submit Expense
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit Expense"
+              )}
             </Button>
           )}
         </DialogFooter>

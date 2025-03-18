@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
@@ -6,6 +7,9 @@ import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
 import { 
   fetchSiteInvoices, 
+  fetchSiteExpenses,
+  fetchSiteAdvances,
+  fetchSiteFundsReceived,
   deleteExpense, 
   deleteAdvance, 
   deleteFundsReceived, 
@@ -85,10 +89,15 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   const [selectedItemToDelete, setSelectedItemToDelete] = useState<{id: string, type: 'expense' | 'advance' | 'funds' | 'invoice'} | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  // Ensure advances are not duplicated by setting them only once on initial render
+  // Load all transaction data when component mounts or siteId changes
   useEffect(() => {
-    setLocalAdvances(advances);
-  }, [advances]);
+    if (!siteId) {
+      console.error('No siteId provided to load transactions');
+      return;
+    }
+    
+    loadAllTransactions();
+  }, [siteId]);
 
   // Update local state when props change
   useEffect(() => {
@@ -106,31 +115,96 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     setLocalFundsReceived(fundsReceived);
   }, [fundsReceived]);
 
-  useEffect(() => {
-    const loadInvoices = async () => {
-      if (!siteId) {
-        console.error('No siteId provided to load invoices');
-        return;
-      }
-      
-      setIsLoading(prev => ({ ...prev, invoices: true }));
-      setError(null);
-      
-      try {
-        console.log('Fetching invoices for site:', siteId);
-        const invoicesData = await fetchSiteInvoices(siteId);
-        console.log('Invoices data received:', invoicesData.length, 'items');
-        setInvoices(invoicesData as Invoice[]);
-      } catch (error) {
-        console.error('Error loading invoices:', error);
-        setError('Failed to load invoices. Please try again.');
-      } finally {
-        setIsLoading(prev => ({ ...prev, invoices: false }));
-      }
-    };
+  const loadAllTransactions = async () => {
+    await Promise.all([
+      loadInvoices(),
+      loadExpenses(),
+      loadAdvances(),
+      loadFundsReceived()
+    ]);
+  };
+
+  const loadInvoices = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load invoices');
+      return;
+    }
     
-    loadInvoices();
-  }, [siteId]);
+    setIsLoading(prev => ({ ...prev, invoices: true }));
+    setError(null);
+    
+    try {
+      console.log('Fetching invoices for site:', siteId);
+      const invoicesData = await fetchSiteInvoices(siteId);
+      console.log('Invoices data received:', invoicesData.length, 'items');
+      setInvoices(invoicesData as Invoice[]);
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+      setError('Failed to load invoices. Please try again.');
+    } finally {
+      setIsLoading(prev => ({ ...prev, invoices: false }));
+    }
+  };
+
+  const loadExpenses = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load expenses');
+      return;
+    }
+    
+    setIsLoading(prev => ({ ...prev, expenses: true }));
+    
+    try {
+      console.log('Fetching expenses for site:', siteId);
+      const expensesData = await fetchSiteExpenses(siteId);
+      console.log('Expenses data received:', expensesData.length, 'items');
+      setLocalExpenses(expensesData as Expense[]);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+    } finally {
+      setIsLoading(prev => ({ ...prev, expenses: false }));
+    }
+  };
+
+  const loadAdvances = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load advances');
+      return;
+    }
+    
+    setIsLoading(prev => ({ ...prev, advances: true }));
+    
+    try {
+      console.log('Fetching advances for site:', siteId);
+      const advancesData = await fetchSiteAdvances(siteId);
+      console.log('Advances data received:', advancesData.length, 'items');
+      setLocalAdvances(advancesData as Advance[]);
+    } catch (error) {
+      console.error('Error loading advances:', error);
+    } finally {
+      setIsLoading(prev => ({ ...prev, advances: false }));
+    }
+  };
+
+  const loadFundsReceived = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load funds received');
+      return;
+    }
+    
+    setIsLoading(prev => ({ ...prev, fundsReceived: true }));
+    
+    try {
+      console.log('Fetching funds received for site:', siteId);
+      const fundsReceivedData = await fetchSiteFundsReceived(siteId);
+      console.log('Funds received data received:', fundsReceivedData.length, 'items');
+      setLocalFundsReceived(fundsReceivedData as FundsReceived[]);
+    } catch (error) {
+      console.error('Error loading funds received:', error);
+    } finally {
+      setIsLoading(prev => ({ ...prev, fundsReceived: false }));
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -223,6 +297,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       }
       
       toast.success('Transaction deleted successfully');
+      if (onTransactionsUpdate) {
+        onTransactionsUpdate();
+      }
     } catch (error) {
       console.error('Error deleting transaction:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to delete transaction');
@@ -425,6 +502,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
                 <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -445,6 +525,26 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                   <td className="px-4 py-3 text-sm">
                     {fund.reference || 'N/A'}
                   </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(fund.id, 'funds')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(fund.id, 'funds')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

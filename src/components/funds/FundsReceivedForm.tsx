@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Plus } from "lucide-react";
+import { CalendarIcon, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -83,8 +83,19 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
         amount: values.amount,
         reference: values.reference,
         method: values.method,
-        siteId: siteId,
+        site_id: siteId,
       };
+
+      console.log("Submitting funds received:", newFunds);
+      
+      const { error } = await supabase
+        .from('funds_received')
+        .insert(newFunds);
+        
+      if (error) {
+        console.error("Error inserting funds received:", error);
+        throw error;
+      }
 
       onSubmit(newFunds);
       form.reset();
@@ -222,8 +233,17 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
                 CANCEL
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                <Plus className="h-4 w-4 mr-2" />
-                SUBMIT
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    SUBMITTING...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    SUBMIT
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </form>

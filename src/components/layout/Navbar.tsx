@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +24,15 @@ const Navbar: React.FC<NavbarProps> = ({
   const isMobile = useIsMobile();
   const { logout, user } = useAuth();
   
+  // Function to handle home button click based on user role
+  const handleHomeClick = () => {
+    if (userRole === UserRole.ADMIN) {
+      navigate('/admin');
+    } else {
+      navigate('/dashboard');
+    }
+  };
+  
   return (
     <header className={cn("h-14 sm:h-16 border-b bg-background/50 backdrop-blur-md sticky top-0 z-10", className)}>
       <div className="h-full container mx-auto px-1 sm:px-4 flex items-center justify-between">
@@ -34,7 +42,7 @@ const Navbar: React.FC<NavbarProps> = ({
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => navigate('/dashboard')}
+              onClick={handleHomeClick}
               className="p-1 md:p-2"
               aria-label="Go to Dashboard"
             >

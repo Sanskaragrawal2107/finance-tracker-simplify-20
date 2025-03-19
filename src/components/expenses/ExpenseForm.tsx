@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -214,6 +213,14 @@ Return ONLY the category name, with no additional text or explanation.
     try {
       console.log("Submitting all expenses:", expenses);
       
+      // Get current user ID from auth
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        throw new Error("User authentication error. Please sign in again.");
+      }
+      
       // Create an array to store all promises
       const promises = expenses.map(expense => {
         const newExpense: Partial<Expense> = {
@@ -222,13 +229,22 @@ Return ONLY the category name, with no additional text or explanation.
           category: expense.category as unknown as ExpenseCategory,
           amount: expense.amount,
           status: "pending" as any,
-          site_id: siteId, // ensure the siteId is properly set
+          siteId: siteId, // ensure the siteId is properly set
+          created_by: userId, // add user ID
           created_at: new Date(),
         };
         
         return supabase
           .from('expenses')
-          .insert(newExpense)
+          .insert({
+            date: newExpense.date instanceof Date ? newExpense.date.toISOString() : new Date().toISOString(),
+            description: newExpense.description || '',
+            category: newExpense.category,
+            amount: newExpense.amount || 0,
+            site_id: siteId,
+            created_by: userId,
+            created_at: new Date().toISOString()
+          })
           .then(({ data, error }) => {
             if (error) {
               console.error("Error inserting expense:", error);
@@ -251,7 +267,7 @@ Return ONLY the category name, with no additional text or explanation.
       }
     } catch (error) {
       console.error("Error submitting expenses:", error);
-      toast.error("Failed to submit one or more expenses");
+      toast.error("Failed to submit one or more expenses: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -262,13 +278,22 @@ Return ONLY the category name, with no additional text or explanation.
     setIsSubmitting(true);
     
     try {
+      // Get current user ID from auth
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        throw new Error("User authentication error. Please sign in again.");
+      }
+      
       const newExpense: Partial<Expense> = {
         date: values.date,
         description: values.purpose,
         category: values.category as unknown as ExpenseCategory,
         amount: values.amount,
         status: "pending" as any,
-        site_id: siteId, // ensure the siteId is properly set
+        siteId: siteId, // ensure the siteId is properly set
+        created_by: userId, // add user ID
         created_at: new Date(),
       };
       
@@ -276,7 +301,15 @@ Return ONLY the category name, with no additional text or explanation.
       
       const { error } = await supabase
         .from('expenses')
-        .insert(newExpense);
+        .insert({
+          date: newExpense.date instanceof Date ? newExpense.date.toISOString() : new Date().toISOString(),
+          description: newExpense.description || '',
+          category: newExpense.category,
+          amount: newExpense.amount || 0,
+          site_id: siteId,
+          created_by: userId,
+          created_at: new Date().toISOString()
+        });
         
       if (error) {
         console.error("Error inserting expense:", error);
@@ -290,7 +323,7 @@ Return ONLY the category name, with no additional text or explanation.
       onSubmit(newExpense); // Trigger the parent's onSubmit to refresh the data
     } catch (error) {
       console.error("Error submitting expense:", error);
-      toast.error("Failed to submit expense");
+      toast.error("Failed to submit expense: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }

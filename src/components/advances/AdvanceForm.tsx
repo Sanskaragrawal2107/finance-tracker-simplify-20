@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -132,15 +131,23 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       if (isSubmitting) return;
       setIsSubmitting(true);
       
+      // Get current user ID from auth
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        throw new Error("User authentication error. Please sign in again.");
+      }
+      
       const advanceData = {
         site_id: siteId,
-        date: values.date,
+        date: values.date instanceof Date ? values.date.toISOString() : new Date().toISOString(),
         recipient_name: values.recipientName,
         recipient_type: values.recipientType,
         purpose: values.purpose,
         amount: values.amount,
         remarks: values.remarks || "",
-        created_by: user?.id,
+        created_by: userId,
         status: "pending",
       };
       
@@ -160,7 +167,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       onClose();
     } catch (error) {
       console.error('Error submitting advance:', error);
-      toast.error('Failed to submit advance');
+      toast.error('Failed to submit advance: ' + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }

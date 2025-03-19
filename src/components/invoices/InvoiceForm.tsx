@@ -284,6 +284,19 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
 
     try {
+      // Get current user ID from auth
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId && siteId) {
+        toast({
+          title: "Authentication Error",
+          description: "User authentication error. Please sign in again.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       let fileUrl = '';
       if (billFile) {
         fileUrl = await uploadFile(billFile) || '';
@@ -313,9 +326,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         bankDetails: bankDetails,
         billUrl: fileUrl,
         paymentStatus,
-        createdBy: 'Current User',
+        createdBy: userId || 'Unknown',
         approverType: approverType,
-        siteId: siteId
+        siteId: siteId,
+        status: paymentStatus
       };
 
       // Save to Supabase
@@ -337,8 +351,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             bank_details: JSON.stringify(bankDetails),
             bill_url: fileUrl,
             payment_status: paymentStatus,
-            created_by: 'Current User',
-            approver_type: approverType
+            created_by: userId,
+            approver_type: approverType,
+            created_at: new Date().toISOString()
           });
 
         if (error) {

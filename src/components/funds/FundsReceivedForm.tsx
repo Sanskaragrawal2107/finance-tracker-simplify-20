@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -78,32 +77,48 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
     setIsSubmitting(true);
     
     try {
-      const newFunds: Partial<FundsReceived> = {
-        date: values.date,
-        amount: values.amount,
-        reference: values.reference,
-        method: values.method,
+      // Get current user ID from auth
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        throw new Error("User authentication error. Please sign in again.");
+      }
+      
+      const fundsData = {
         site_id: siteId,
+        date: values.date instanceof Date ? values.date.toISOString() : new Date().toISOString(),
+        amount: values.amount,
+        reference: values.reference || null,
+        method: values.method || null,
+        created_by: userId,
+        created_at: new Date().toISOString()
       };
 
-      console.log("Submitting funds received:", newFunds);
+      console.log("Submitting funds received:", fundsData);
       
       const { error } = await supabase
         .from('funds_received')
-        .insert(newFunds);
+        .insert(fundsData);
         
       if (error) {
         console.error("Error inserting funds received:", error);
         throw error;
       }
 
-      onSubmit(newFunds);
+      onSubmit({
+        date: values.date,
+        amount: values.amount,
+        reference: values.reference,
+        method: values.method,
+        siteId: siteId
+      });
       form.reset();
       onClose();
       toast.success("Funds received recorded successfully");
     } catch (error) {
       console.error('Error submitting funds:', error);
-      toast.error('Failed to record funds');
+      toast.error('Failed to record funds: ' + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }

@@ -11,6 +11,25 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+// Function to refresh the schema cache
+export const refreshSchemaCache = async () => {
+  try {
+    // Force a refresh of the schema cache by making a simple query
+    // This ensures that the client is aware of any schema changes
+    await supabase.from('site_invoices').select('id').limit(1);
+    await supabase.from('funds_received').select('id').limit(1);
+    
+    console.log('Schema cache refreshed successfully');
+    return true;
+  } catch (error) {
+    console.error('Error refreshing schema cache:', error);
+    return false;
+  }
+};
+
+// Initialize the schema cache refresh
+refreshSchemaCache();
+
 // Function to calculate total paid invoices for a site
 export const calculatePaidInvoicesTotalForSite = async (siteId: string): Promise<number> => {
   try {

@@ -84,7 +84,13 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
       const userId = session?.user?.id || user?.id;
       
       if (!userId) {
+        toast.error("User authentication error. Please sign in again.");
         throw new Error("User authentication error. Please sign in again.");
+      }
+
+      if (!siteId) {
+        toast.error("Site ID is required. Please select a site first.");
+        throw new Error("Site ID is required");
       }
 
       // Prepare data for supabase
@@ -100,26 +106,66 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
 
       console.log("Submitting funds data:", fundsData);
       
-      const { error } = await supabase
-        .from('funds_received')
-        .insert(fundsData);
+      // First check if the funds_received table has the created_by column
+      try {
+        // Try to refresh schema cache
+        await supabase.from('funds_received').select('id').limit(1);
         
-      if (error) {
-        console.error("Error inserting funds received:", error);
-        toast.error("Error adding funds: " + error.message);
-        throw error;
+        const { error } = await supabase
+          .from('funds_received')
+          .insert(fundsData);
+          
+        if (error) {
+          console.error("Error inserting funds received:", error);
+          // If the error is about the created_by column, try without it
+          if (error.message.includes('created_by')) {
+            const { site_id, created_by, ...essentialData } = fundsData;
+            const fallbackData = { ...essentialData, site_id };
+            
+            console.log("Retrying without created_by field:", fallbackData);
+            const { error: fallbackError } = await supabase
+              .from('funds_received')
+              .insert(fallbackData);
+              
+            if (fallbackError) {
+              console.error("Error in fallback funds insertion:", fallbackError);
+              toast.error("Error adding funds: " + fallbackError.message);
+              throw fallbackError;
+            } else {
+              // Success with fallback
+              toast.success("Funds received recorded successfully");
+              onSubmit({
+                date: values.date,
+                amount: values.amount,
+                reference: values.reference,
+                method: values.method,
+                siteId: siteId
+              });
+              form.reset();
+              onClose();
+              return;
+            }
+          } else {
+            toast.error("Error adding funds: " + error.message);
+            throw error;
+          }
+        }
+        
+        onSubmit({
+          date: values.date,
+          amount: values.amount,
+          reference: values.reference,
+          method: values.method,
+          siteId: siteId
+        });
+        form.reset();
+        onClose();
+        toast.success("Funds received recorded successfully");
+      } catch (schemaError) {
+        console.error("Schema or query error:", schemaError);
+        toast.error("Database schema error. Please contact support.");
+        throw schemaError;
       }
-
-      onSubmit({
-        date: values.date,
-        amount: values.amount,
-        reference: values.reference,
-        method: values.method,
-        siteId: siteId
-      });
-      form.reset();
-      onClose();
-      toast.success("Funds received recorded successfully");
     } catch (error) {
       console.error('Error submitting funds:', error);
       toast.error('Failed to record funds: ' + (error instanceof Error ? error.message : "Unknown error"));

@@ -139,6 +139,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          created_by: string | null
           date: string
           id: string
           method: string | null
@@ -148,6 +149,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          created_by?: string | null
           date?: string
           id?: string
           method?: string | null
@@ -157,6 +159,7 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          created_by?: string | null
           date?: string
           id?: string
           method?: string | null
@@ -171,6 +174,13 @@ export type Database = {
             referencedRelation: "sites"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "funds_received_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
         ]
       }
       invoices: {
@@ -307,6 +317,7 @@ export type Database = {
           quantity: number
           rate: number
           site_id: string | null
+          status: string
         }
         Insert: {
           approver_type?: string | null
@@ -327,6 +338,7 @@ export type Database = {
           quantity: number
           rate: number
           site_id?: string | null
+          status?: string
         }
         Update: {
           approver_type?: string | null
@@ -347,6 +359,7 @@ export type Database = {
           quantity?: number
           rate?: number
           site_id?: string | null
+          status?: string
         }
         Relationships: [
           {

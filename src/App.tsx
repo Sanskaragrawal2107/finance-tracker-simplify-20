@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,9 +14,9 @@ import Navbar from "./components/layout/Navbar";
 import { UserRole } from "./lib/types";
 import { useIsMobile } from "./hooks/use-mobile";
 import { AuthProvider, useAuth } from "./hooks/use-auth";
-import AppLayout from '@/components/layout/AppLayout';
-import ProtectedRoute from '@/components/auth/ProtectedRoute';
-import { refreshSchemaCache } from '@/integrations/supabase/client';
+import AppLayout from "./components/layout/AppLayout";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
+import { refreshSchemaCache } from "./integrations/supabase/client";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,78 +49,6 @@ const RoleBasedRedirect = () => {
   
   console.log("Default case, redirecting to /dashboard");
   return <Navigate to="/dashboard" replace />;
-};
-
-// Protected route component
-const ProtectedRoute = ({ 
-  children, 
-  allowedRoles = [UserRole.ADMIN, UserRole.SUPERVISOR]
-}: { 
-  children: React.ReactNode, 
-  allowedRoles?: UserRole[] 
-}) => {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-  
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-  
-  if (!user) {
-    return <Navigate to="/" state={{ from: location }} replace />;
-  }
-  
-  if (!allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-  
-  return <>{children}</>;
-};
-
-// Layout component for authenticated pages
-const AppLayout = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuth();
-  const location = useLocation();
-  const isMobile = useIsMobile();
-  
-  // Get page title based on current route
-  const getPageTitle = () => {
-    const path = location.pathname;
-    
-    switch (path) {
-      case '/dashboard':
-        return 'Dashboard';
-      case '/expenses':
-        return 'Expenses';
-      case '/admin':
-        return 'Admin Dashboard';
-      default:
-        return '';
-    }
-  };
-  
-  // For debugging location state
-  console.log("Current location state:", location.state);
-  
-  return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar 
-        onMenuClick={() => {}} // Empty function since we don't have a sidebar
-        pageTitle={getPageTitle()}
-        userRole={user?.role}
-      />
-      
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
-        <div className="container mx-auto">
-          {children}
-        </div>
-      </main>
-    </div>
-  );
 };
 
 // Main App
@@ -175,6 +103,8 @@ const AppContent = () => {
 };
 
 const App = () => {
+  const [isInitialized, setIsInitialized] = useState(false);
+
   useEffect(() => {
     // Refresh schema cache on application startup
     const initializeApp = async () => {

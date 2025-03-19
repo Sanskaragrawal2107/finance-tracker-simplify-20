@@ -175,7 +175,7 @@ export interface Invoice {
   status: PaymentStatus;
 }
 
-// Add the BalanceSummary interface that was missing
+// Balance Summary interface
 export interface BalanceSummary {
   fundsReceived: number;
   totalExpenditure: number;

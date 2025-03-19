@@ -125,11 +125,22 @@ const HeadOffice: React.FC = () => {
     
     try {
       console.log(`Attempting to delete fund with ID: ${selectedItemToDelete}`);
+      
+      // Make sure we have a valid ID before attempting to delete
+      if (!selectedItemToDelete || selectedItemToDelete.trim() === '') {
+        throw new Error('Invalid transaction ID');
+      }
+      
       const result = await deleteFundsReceived(selectedItemToDelete, user.id);
+      console.log('Delete result:', result);
       
       if (result.success) {
+        // Update local state to remove the deleted item
         setAllFunds(prevFunds => prevFunds.filter(fund => fund.id !== selectedItemToDelete));
         toast.success('Transaction deleted successfully');
+      } else {
+        // If we get here, it means the API call was successful but returned success: false
+        throw new Error('Failed to delete transaction: ' + (result.message || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error deleting transaction:', error);
@@ -141,6 +152,7 @@ const HeadOffice: React.FC = () => {
   };
 
   const confirmDelete = (id: string) => {
+    console.log(`Confirming deletion of fund with ID: ${id}`);
     setSelectedItemToDelete(id);
     setIsDeleteDialogOpen(true);
   };

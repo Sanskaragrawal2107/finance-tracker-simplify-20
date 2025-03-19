@@ -247,6 +247,7 @@ export type Database = {
         Row: {
           current_balance: number | null
           debit_to_worker: number | null
+          funds_received: number | null
           id: string
           invoices_paid: number | null
           last_updated: string | null
@@ -257,6 +258,7 @@ export type Database = {
         Insert: {
           current_balance?: number | null
           debit_to_worker?: number | null
+          funds_received?: number | null
           id?: string
           invoices_paid?: number | null
           last_updated?: string | null
@@ -267,6 +269,7 @@ export type Database = {
         Update: {
           current_balance?: number | null
           debit_to_worker?: number | null
+          funds_received?: number | null
           id?: string
           invoices_paid?: number | null
           last_updated?: string | null

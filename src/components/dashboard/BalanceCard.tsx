@@ -41,20 +41,8 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
       if (data) {
         console.log("Retrieved financial summary from DB:", data);
         
-        // Calculate funds received separately as it might not be in the summary table
-        const { data: fundsData, error: fundsError } = await supabase
-          .from('funds_received')
-          .select('amount')
-          .eq('site_id', siteId);
-          
-        if (fundsError) {
-          console.error("Error fetching funds received:", fundsError);
-        }
-        
-        const totalFundsReceived = fundsData?.reduce((sum, fund) => sum + (Number(fund.amount) || 0), 0) || 0;
-        
         setLocalBalanceData({
-          fundsReceived: totalFundsReceived,
+          fundsReceived: data.funds_received || 0,
           totalExpenditure: data.total_expenses_paid || 0,
           totalAdvances: data.total_advances_paid || 0,
           debitsToWorker: data.debit_to_worker || 0,

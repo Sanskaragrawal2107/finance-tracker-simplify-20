@@ -154,26 +154,25 @@ export interface Invoice {
   date: Date;
   partyId: string;
   partyName: string;
-  vendorName?: string;
-  invoiceNumber?: string;
   material: string;
   quantity: number;
   rate: number;
   gstPercentage: number;
   grossAmount: number;
   netAmount: number;
-  amount?: number;
   materialItems?: MaterialItem[];
-  bankDetails?: BankDetails;
+  bankDetails: BankDetails;
   billUrl?: string;
-  paymentStatus: PaymentStatus | string;
-  status?: string;
-  createdBy?: string;
+  invoiceImageUrl?: string;
+  paymentStatus: PaymentStatus;
+  createdBy: string;
   createdAt: Date;
-  approverType?: string;
-  siteId: string;
-  payment_by?: 'supervisor' | 'H.O.' | string;
-  paymentBy?: 'supervisor' | 'H.O.' | string;
+  approverType?: "ho" | "supervisor";
+  siteId?: string; // Reference to the site
+  vendorName?: string;  // Added for compatibility
+  invoiceNumber?: string; // Added for compatibility
+  amount?: number;       // Added for compatibility
+  status: PaymentStatus;
 }
 
 // Add the BalanceSummary interface that was missing

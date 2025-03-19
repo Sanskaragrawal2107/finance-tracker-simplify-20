@@ -85,58 +85,30 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     totalBalance: 0
   };
 
-  const [calculatedSummary, setCalculatedSummary] = useState<BalanceSummary>(defaultBalanceSummary);
+  const siteSummary = balanceSummary || defaultBalanceSummary;
 
-  const siteSummary = calculatedSummary || defaultBalanceSummary;
+  // Calculate total advances excluding debit to worker advances
+  const totalAdvances = advances.reduce((sum, advance) => {
+    if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
+      return sum + (Number(advance.amount) || 0);
+    }
+    return sum;
+  }, 0);
 
-  // Calculate financial summary
-  useEffect(() => {
-    // Calculate total advances excluding debit to worker advances
-    const totalAdvances = advances.reduce((sum, advance) => {
-      if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
-        return sum + (Number(advance.amount) || 0);
-      }
-      return sum;
-    }, 0);
+  // Calculate total debit to worker advances
+  const totalDebitToWorker = advances.reduce((sum, advance) => {
+    if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
+      return sum + (Number(advance.amount) || 0);
+    }
+    return sum;
+  }, 0);
 
-    // Calculate total debit to worker advances
-    const totalDebitToWorker = advances.reduce((sum, advance) => {
-      if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
-        return sum + (Number(advance.amount) || 0);
-      }
-      return sum;
-    }, 0);
+  const totalExpenses = siteSummary.totalExpenditure;
+  const totalFundsReceived = siteSummary.fundsReceived;
+  const totalInvoices = siteSummary.invoicesPaid || 0;
 
-    // Calculate total expenses
-    const totalExpenses = expenses.reduce((sum, expense) => 
-      sum + (Number(expense.amount) || 0), 0);
-
-    // Calculate total funds received
-    const totalFundsReceived = fundsReceived.reduce((sum, fund) => 
-      sum + (Number(fund.amount) || 0), 0);
-
-    // Calculate invoices paid by supervisor
-    const supervisorInvoicesTotal = invoices
-      .filter(invoice => 
-        invoice.paymentStatus === 'paid' && 
-        (invoice.payment_by === 'supervisor' || invoice.paymentBy === 'supervisor')
-      )
-      .reduce((sum, invoice) => sum + (Number(invoice.netAmount) || Number(invoice.amount) || 0), 0);
-
-    // Calculate current balance
-    // Current Balance = Funds Received from HO - Total Expenses - Total Advances - Invoices Paid by Supervisor
-    const currentBalance = totalFundsReceived - totalExpenses - totalAdvances - supervisorInvoicesTotal;
-
-    setCalculatedSummary({
-      fundsReceived: totalFundsReceived,
-      totalExpenditure: totalExpenses,
-      totalAdvances: totalAdvances,
-      debitsToWorker: totalDebitToWorker,
-      invoicesPaid: supervisorInvoicesTotal,
-      pendingInvoices: 0,
-      totalBalance: currentBalance
-    });
-  }, [expenses, advances, fundsReceived, invoices]);
+  // Calculate current balance
+  const currentBalance = totalFundsReceived - totalExpenses - totalAdvances - totalInvoices;
 
   const handleMarkComplete = async () => {
     try {
@@ -311,16 +283,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           </div>
         </CustomCard>
 
-        <BalanceCard 
-          balanceData={siteSummary} 
-          siteId={site.id} 
-          refreshData={() => {
-            // Refresh the financial data
-            if (onEntrySuccess) {
-              onEntrySuccess('transactions');
-            }
-          }}
-        />
+        <BalanceCard balanceData={siteSummary} siteId={site.id} />
       </div>
 
       {userRole !== UserRole.VIEWER && !site.isCompleted && (
@@ -373,29 +336,29 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total Expenses</span>
-                  <span className="font-medium">₹{siteSummary.totalExpenditure.toLocaleString()}</span>
+                  <span className="font-medium">₹{totalExpenses.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total Advances</span>
-                  <span className="font-medium">₹{siteSummary.totalAdvances.toLocaleString()}</span>
+                  <span className="font-medium">₹{totalAdvances.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total Invoices</span>
-                  <span className="font-medium">₹{siteSummary.invoicesPaid.toLocaleString()}</span>
+                  <span className="font-medium">₹{totalInvoices.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Debits to Worker</span>
-                  <span className="font-medium">₹{siteSummary.debitsToWorker.toLocaleString()}</span>
+                  <span className="font-medium">₹{totalDebitToWorker.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total Funds Received</span>
-                  <span className="font-medium">₹{siteSummary.fundsReceived.toLocaleString()}</span>
+                  <span className="font-medium">₹{totalFundsReceived.toLocaleString()}</span>
                 </div>
                 <div className="pt-2 border-t">
                   <div className="flex justify-between items-center font-medium">
                     <span>Current Balance</span>
-                    <span className={siteSummary.totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ₹{siteSummary.totalBalance.toLocaleString()}
+                    <span className={currentBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      ₹{currentBalance.toLocaleString()}
                     </span>
                   </div>
                 </div>

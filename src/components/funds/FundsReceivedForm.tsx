@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { CalendarIcon, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +61,8 @@ type FormValues = z.infer<typeof formSchema>;
 
 const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const { user } = useAuth();
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -72,30 +75,30 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
   });
 
   const handleSubmit = async (values: FormValues) => {
-    // Prevent multiple submissions
     if (isSubmitting) return;
     setIsSubmitting(true);
-    
+
     try {
-      // Get current user ID from auth
+      // Get current user ID from auth session
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
+      const userId = session?.user?.id || user?.id;
       
       if (!userId) {
         throw new Error("User authentication error. Please sign in again.");
       }
-      
+
+      // Prepare data for supabase
       const fundsData = {
-        site_id: siteId,
-        date: values.date instanceof Date ? values.date.toISOString() : new Date().toISOString(),
+        date: values.date.toISOString(),
         amount: values.amount,
         reference: values.reference || null,
         method: values.method || null,
+        site_id: siteId,
         created_by: userId,
         created_at: new Date().toISOString()
       };
 
-      console.log("Submitting funds received:", fundsData);
+      console.log("Submitting funds data:", fundsData);
       
       const { error } = await supabase
         .from('funds_received')
@@ -103,6 +106,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
         
       if (error) {
         console.error("Error inserting funds received:", error);
+        toast.error("Error adding funds: " + error.message);
         throw error;
       }
 
@@ -254,10 +258,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
                     SUBMITTING...
                   </>
                 ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    SUBMIT
-                  </>
+                  "SUBMIT"
                 )}
               </Button>
             </DialogFooter>

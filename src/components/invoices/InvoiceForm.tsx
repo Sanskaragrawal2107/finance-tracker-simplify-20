@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from "@/hooks/use-auth";
 
 type InvoiceFormProps = {
   isOpen?: boolean;
@@ -64,6 +65,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [isFetchingBankDetails, setIsFetchingBankDetails] = useState<boolean>(false);
 
   const [approverType, setApproverType] = useState<"ho" | "supervisor">("ho");
+
+  const { user } = useAuth();
 
   const handlePartyNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!partyNameFixed) {
@@ -286,9 +289,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     try {
       // Get current user ID from auth
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
+      const userId = session?.user?.id || user?.id;
       
-      if (!userId && siteId) {
+      if (!userId) {
         toast({
           title: "Authentication Error",
           description: "User authentication error. Please sign in again.",
@@ -312,7 +315,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         mobile: approverType === "ho" ? mobile : "",
       };
 
-      const invoiceData: Omit<Invoice, 'id' | 'createdAt'> = {
+      const invoiceData: Partial<Invoice> = {
         date,
         partyId,
         partyName,
@@ -326,11 +329,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         bankDetails: bankDetails,
         billUrl: fileUrl,
         paymentStatus,
-        createdBy: userId || 'Unknown',
+        createdBy: userId,
         approverType: approverType,
         siteId: siteId,
         status: paymentStatus
       };
+
+      console.log("Saving invoice data:", invoiceData);
 
       // Save to Supabase
       if (siteId) {
@@ -353,7 +358,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             payment_status: paymentStatus,
             created_by: userId,
             approver_type: approverType,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            status: paymentStatus
           });
 
         if (error) {
@@ -365,6 +371,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           });
           return;
         }
+      } else {
+        toast({
+          title: "Missing Site ID",
+          description: "Site ID is required to save an invoice",
+          variant: "destructive"
+        });
+        return;
       }
 
       onSubmit(invoiceData);

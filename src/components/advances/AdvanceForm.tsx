@@ -79,10 +79,12 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
-  const [recipientOptions, setRecipientOptions] = useState<any[]>([]);
-  const [showRemarks, setShowRemarks] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [recipientOptions, setRecipientOptions] = useState<{ id: string; name: string; }[]>([]);
+  const [showRemarks, setShowRemarks] = useState(false);
+  const [supervisors, setSupervisors] = useState<{ id: string; name: string; }[]>([]);
+  const [contractors, setContractors] = useState<{ id: string; name: string; }[]>([]);
   const { user } = useAuth();
   
   const form = useForm<FormValues>({
@@ -133,9 +135,10 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       
       // Get current user ID from auth
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
+      const userId = session?.user?.id || user?.id;
       
       if (!userId) {
+        toast.error("User authentication error. Please sign in again.");
         throw new Error("User authentication error. Please sign in again.");
       }
       
@@ -148,6 +151,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         amount: values.amount,
         remarks: values.remarks || "",
         created_by: userId,
+        created_at: new Date().toISOString(),
         status: "pending",
       };
       
@@ -159,6 +163,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         
       if (error) {
         console.error("Error inserting advance:", error);
+        toast.error("Error adding advance: " + error.message);
         throw error;
       }
       

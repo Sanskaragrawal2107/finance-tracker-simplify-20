@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { Expense, ExpenseCategory } from "@/lib/types";
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 
 interface ExpenseFormProps {
   isOpen: boolean;
@@ -84,6 +85,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, si
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -215,10 +217,16 @@ Return ONLY the category name, with no additional text or explanation.
       
       // Get current user ID from auth
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
+      const userId = session?.user?.id || user?.id;
       
       if (!userId) {
+        toast.error("User authentication error. Please sign in again.");
         throw new Error("User authentication error. Please sign in again.");
+      }
+      
+      if (!siteId) {
+        toast.error("Site ID is required. Please select a site first.");
+        throw new Error("Site ID is required");
       }
       
       // Create an array to store all promises
@@ -229,8 +237,8 @@ Return ONLY the category name, with no additional text or explanation.
           category: expense.category as unknown as ExpenseCategory,
           amount: expense.amount,
           status: "pending" as any,
-          siteId: siteId, // ensure the siteId is properly set
-          created_by: userId, // add user ID
+          siteId: siteId,
+          created_by: userId,
           created_at: new Date(),
         };
         
@@ -280,10 +288,16 @@ Return ONLY the category name, with no additional text or explanation.
     try {
       // Get current user ID from auth
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
+      const userId = session?.user?.id || user?.id;
       
       if (!userId) {
+        toast.error("User authentication error. Please sign in again.");
         throw new Error("User authentication error. Please sign in again.");
+      }
+      
+      if (!siteId) {
+        toast.error("Site ID is required. Please select a site first.");
+        throw new Error("Site ID is required");
       }
       
       const newExpense: Partial<Expense> = {
@@ -292,8 +306,8 @@ Return ONLY the category name, with no additional text or explanation.
         category: values.category as unknown as ExpenseCategory,
         amount: values.amount,
         status: "pending" as any,
-        siteId: siteId, // ensure the siteId is properly set
-        created_by: userId, // add user ID
+        siteId: siteId,
+        created_by: userId,
         created_at: new Date(),
       };
       
@@ -313,6 +327,7 @@ Return ONLY the category name, with no additional text or explanation.
         
       if (error) {
         console.error("Error inserting expense:", error);
+        toast.error("Error adding expense: " + error.message);
         throw error;
       }
       

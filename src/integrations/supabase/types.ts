@@ -243,6 +243,47 @@ export type Database = {
           },
         ]
       }
+      site_financial_summary: {
+        Row: {
+          current_balance: number | null
+          debit_to_worker: number | null
+          id: string
+          invoices_paid: number | null
+          last_updated: string | null
+          site_id: string
+          total_advances_paid: number | null
+          total_expenses_paid: number | null
+        }
+        Insert: {
+          current_balance?: number | null
+          debit_to_worker?: number | null
+          id?: string
+          invoices_paid?: number | null
+          last_updated?: string | null
+          site_id: string
+          total_advances_paid?: number | null
+          total_expenses_paid?: number | null
+        }
+        Update: {
+          current_balance?: number | null
+          debit_to_worker?: number | null
+          id?: string
+          invoices_paid?: number | null
+          last_updated?: string | null
+          site_id?: string
+          total_advances_paid?: number | null
+          total_expenses_paid?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_financial_summary_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: true
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_invoices: {
         Row: {
           approver_type: string | null
@@ -406,7 +447,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      initialize_site_financial_summaries: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

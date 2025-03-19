@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { IndianRupee, RefreshCw } from 'lucide-react';
 import CustomCard from '../ui/CustomCard';
 import { BalanceSummary } from '@/lib/types';
-import { supabase, calculatePaidInvoicesTotalForSite } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '../ui/button';
 
 interface BalanceCardProps {
@@ -20,20 +21,37 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   const [localBalanceData, setLocalBalanceData] = useState(balanceData);
   const [isLoading, setIsLoading] = useState(false);
   
-  const refreshInvoiceData = async () => {
+  const refreshBalanceData = async () => {
     if (!siteId) return;
     
     setIsLoading(true);
     try {
-      const invoicesPaid = await calculatePaidInvoicesTotalForSite(siteId);
-      console.log("Refreshed invoices paid amount:", invoicesPaid);
+      // Fetch data from the site_financial_summary table
+      const { data, error } = await supabase
+        .from('site_financial_summary')
+        .select('*')
+        .eq('site_id', siteId)
+        .single();
       
-      setLocalBalanceData(prev => ({
-        ...prev,
-        invoicesPaid: invoicesPaid
-      }));
+      if (error) {
+        console.error("Error fetching site financial summary:", error);
+        return;
+      }
+      
+      if (data) {
+        console.log("Retrieved financial summary from DB:", data);
+        setLocalBalanceData({
+          fundsReceived: data.funds_received || 0,
+          totalExpenditure: data.total_expenses_paid || 0,
+          totalAdvances: data.total_advances_paid || 0,
+          debitsToWorker: data.debit_to_worker || 0,
+          invoicesPaid: data.invoices_paid || 0,
+          pendingInvoices: localBalanceData.pendingInvoices || 0, // Keep existing value as it's not in the summary table
+          totalBalance: data.current_balance || 0
+        });
+      }
     } catch (error) {
-      console.error("Error refreshing invoice data:", error);
+      console.error("Error refreshing balance data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -41,7 +59,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   
   useEffect(() => {
     if (siteId) {
-      refreshInvoiceData();
+      refreshBalanceData();
     }
   }, [siteId]);
   
@@ -75,7 +93,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
               variant="ghost" 
               size="icon" 
               className="text-white hover:bg-white/20 p-2 h-auto w-auto rounded-full" 
-              onClick={refreshInvoiceData}
+              onClick={refreshBalanceData}
               disabled={isLoading}
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />

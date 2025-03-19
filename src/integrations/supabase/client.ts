@@ -34,6 +34,28 @@ export const calculatePaidInvoicesTotalForSite = async (siteId: string): Promise
   }
 };
 
+// Function to calculate total funds received for a site
+export const calculateFundsReceivedForSite = async (siteId: string): Promise<number> => {
+  try {
+    const { data, error } = await supabase
+      .from('funds_received')
+      .select('amount')
+      .eq('site_id', siteId);
+      
+    if (error) {
+      console.error('Error fetching funds received:', error);
+      throw error;
+    }
+    
+    // Sum all amount values
+    const total = data?.reduce((sum, fund) => sum + (Number(fund.amount) || 0), 0) || 0;
+    return total;
+  } catch (error) {
+    console.error('Error calculating funds received total:', error);
+    return 0;
+  }
+};
+
 // Function to fetch site invoices
 export const fetchSiteInvoices = async (siteId: string) => {
   try {
@@ -371,4 +393,39 @@ export const deleteInvoice = async (invoiceId: string, userId: string) => {
 // Function to update an invoice
 export const updateInvoice = async (invoiceId: string, updates: any, userId: string) => {
   return updateTransaction(invoiceId, updates, userId, 'site_invoices');
+};
+
+// Function to fetch site financial summary
+export const fetchSiteFinancialSummary = async (siteId: string): Promise<BalanceSummary | null> => {
+  try {
+    console.log('Fetching financial summary for site ID:', siteId);
+    const { data, error } = await supabase
+      .from('site_financial_summary')
+      .select('*')
+      .eq('site_id', siteId)
+      .single();
+      
+    if (error) {
+      console.error('Error fetching site financial summary:', error);
+      return null;
+    }
+
+    console.log('Site financial summary from DB:', data);
+    
+    if (!data) return null;
+    
+    // Transform the data to match the expected BalanceSummary format
+    return {
+      fundsReceived: Number(data.funds_received) || 0,
+      totalExpenditure: Number(data.total_expenses_paid) || 0,
+      totalAdvances: Number(data.total_advances_paid) || 0,
+      debitsToWorker: Number(data.debit_to_worker) || 0,
+      invoicesPaid: Number(data.invoices_paid) || 0,
+      pendingInvoices: 0, // This is not stored in the summary table, would need additional query
+      totalBalance: Number(data.current_balance) || 0
+    };
+  } catch (error) {
+    console.error('Error processing site financial summary:', error);
+    return null;
+  }
 };

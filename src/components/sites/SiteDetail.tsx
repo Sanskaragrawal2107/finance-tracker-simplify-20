@@ -87,7 +87,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 
   const siteSummary = balanceSummary || defaultBalanceSummary;
 
-  // Calculate total advances excluding debit to worker advances
   const totalAdvances = advances.reduce((sum, advance) => {
     if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
       return sum + (Number(advance.amount) || 0);
@@ -95,7 +94,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     return sum;
   }, 0);
 
-  // Calculate total debit to worker advances
   const totalDebitToWorker = advances.reduce((sum, advance) => {
     if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
       return sum + (Number(advance.amount) || 0);
@@ -107,8 +105,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const totalFundsReceived = siteSummary.fundsReceived;
   const totalInvoices = siteSummary.invoicesPaid || 0;
 
-  // Calculate current balance
-  const currentBalance = totalFundsReceived - totalExpenses - totalAdvances - totalInvoices;
+  const currentBalance = siteSummary.totalBalance;
 
   const handleMarkComplete = async () => {
     try {

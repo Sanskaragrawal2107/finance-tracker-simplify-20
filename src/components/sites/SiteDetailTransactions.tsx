@@ -1,756 +1,702 @@
+
 import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { Calendar, CreditCard, Hash, Landmark, Receipt, Tag, Truck, User, Wallet, CircleDollarSign, FileText, BadgeCheck, Edit, Trash, Eye, Loader2 } from 'lucide-react';
-import { Expense, Advance, FundsReceived, ApprovalStatus, UserRole, Invoice, PaymentStatus } from '@/lib/types';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card } from '@/components/ui/card';
+import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem, Site, RecipientType } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { deleteExpense, deleteAdvance, deleteFundsReceived, deleteInvoice, fetchSiteExpenses, fetchSiteAdvances, fetchSiteFundsReceived, fetchSiteInvoices } from '@/integrations/supabase/client';
+import InvoiceDetails from '@/components/invoices/InvoiceDetails';
+import { 
+  fetchSiteInvoices, 
+  fetchSiteExpenses,
+  fetchSiteAdvances,
+  fetchSiteFundsReceived,
+  deleteExpense, 
+  deleteAdvance, 
+  deleteFundsReceived, 
+  deleteInvoice 
+} from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee, Trash2, Edit2, AlertCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/use-auth';
-import ExpenseForm from '../expenses/ExpenseForm';
-import AdvanceForm from '../advances/AdvanceForm';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface SiteDetailTransactionsProps {
   siteId: string;
-  expensesCount: number;
-  advancesCount: number;
-  fundsReceivedCount: number;
+  expensesCount?: number;
+  advancesCount?: number;
+  fundsReceivedCount?: number;
   userRole: UserRole;
-  isAdminView: boolean;
-  site: any;
-  supervisor: any;
+  isAdminView?: boolean;
+  site?: Site;
+  supervisor?: any;
   expenses?: Expense[];
   advances?: Advance[];
   fundsReceived?: FundsReceived[];
   onTransactionsUpdate?: () => void;
 }
 
-const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({ 
+const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   siteId,
-  expensesCount,
-  advancesCount,
-  fundsReceivedCount,
+  expensesCount = 0,
+  advancesCount = 0,
+  fundsReceivedCount = 0,
   userRole,
   isAdminView,
   site,
   supervisor,
-  expenses,
-  advances,
-  fundsReceived,
-  onTransactionsUpdate,
+  expenses = [],
+  advances = [],
+  fundsReceived = [],
+  onTransactionsUpdate
 }) => {
+  console.info('SiteDetailTransactions props:', { 
+    siteId, 
+    expensesCount, 
+    advancesCount, 
+    fundsReceivedCount, 
+    userRole, 
+    isAdminView,
+    site,
+    supervisor
+  });
+
+  const [localExpenses, setLocalExpenses] = useState<Expense[]>(expenses);
+  const [localAdvances, setLocalAdvances] = useState<Advance[]>(advances);
+  const [localFundsReceived, setLocalFundsReceived] = useState<FundsReceived[]>(fundsReceived);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState({
+    expenses: false,
+    advances: false,
+    fundsReceived: false,
+    invoices: false,
+  });
+  const [error, setError] = useState<string | null>(null);
+
   const { user } = useAuth();
-  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-  const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [selectedAdvance, setSelectedAdvance] = useState<Advance | null>(null);
-  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+  const [selectedItemToDelete, setSelectedItemToDelete] = useState<{id: string, type: 'expense' | 'advance' | 'funds' | 'invoice'} | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const [loadingStates, setLoadingStates] = useState({
-    expenses: true,
-    advances: true,
-    fundsReceived: true,
-    invoices: true
-  });
-  
-  const [localData, setLocalData] = useState({
-    expenses: expenses || [],
-    advances: advances || [],
-    fundsReceived: fundsReceived || [],
-    invoices: [],
-  });
-
-  const [activeTab, setActiveTab] = useState('expenses');
-  
-  const fetchExpenses = async () => {
-    try {
-      if (!siteId) return;
-      
-      setLoadingStates(prev => ({ ...prev, expenses: true }));
-      
-      const data = await fetchSiteExpenses(siteId);
-      
-      // Transform data to match the expected format
-      const transformedExpenses = data.map(expense => ({
-        id: expense.id,
-        date: new Date(expense.date),
-        description: expense.description || '',
-        category: expense.category,
-        amount: Number(expense.amount),
-        status: ApprovalStatus.APPROVED,
-        createdAt: new Date(expense.created_at),
-        createdBy: expense.created_by || '',
-        supervisorId: supervisor?.id || '',
-        siteId: expense.site_id,
-      }));
-      
-      setLocalData(prev => ({ ...prev, expenses: transformedExpenses }));
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-      toast.error('Failed to load expenses');
-    } finally {
-      setLoadingStates(prev => ({ ...prev, expenses: false }));
-    }
-  };
-  
-  const fetchAdvances = async () => {
-    try {
-      if (!siteId) return;
-      
-      setLoadingStates(prev => ({ ...prev, advances: true }));
-      
-      const data = await fetchSiteAdvances(siteId);
-      
-      // Transform data to match the expected format
-      const transformedAdvances = data.map(advance => ({
-        id: advance.id,
-        date: new Date(advance.date),
-        recipientName: advance.recipient_name,
-        recipientType: advance.recipient_type,
-        purpose: advance.purpose,
-        amount: Number(advance.amount),
-        remarks: advance.remarks || '',
-        status: advance.status,
-        createdBy: advance.created_by || '',
-        createdAt: new Date(advance.created_at),
-        siteId: advance.site_id,
-      }));
-      
-      setLocalData(prev => ({ ...prev, advances: transformedAdvances }));
-    } catch (error) {
-      console.error('Error fetching advances:', error);
-      toast.error('Failed to load advances');
-    } finally {
-      setLoadingStates(prev => ({ ...prev, advances: false }));
-    }
-  };
-  
-  const fetchFundsReceived = async () => {
-    try {
-      if (!siteId) return;
-      
-      setLoadingStates(prev => ({ ...prev, fundsReceived: true }));
-      
-      const data = await fetchSiteFundsReceived(siteId);
-      
-      // Transform data to match the expected format
-      const transformedFunds = data.map(fund => ({
-        id: fund.id,
-        date: new Date(fund.date),
-        amount: Number(fund.amount),
-        reference: fund.reference || undefined,
-        method: fund.method || undefined,
-        siteId: fund.site_id,
-        createdAt: new Date(fund.created_at),
-      }));
-      
-      setLocalData(prev => ({ ...prev, fundsReceived: transformedFunds }));
-    } catch (error) {
-      console.error('Error fetching funds received:', error);
-      toast.error('Failed to load funds received');
-    } finally {
-      setLoadingStates(prev => ({ ...prev, fundsReceived: false }));
-    }
-  };
-  
-  const fetchInvoices = async () => {
-    try {
-      if (!siteId) return;
-      
-      setLoadingStates(prev => ({ ...prev, invoices: true }));
-      
-      const invoicesData = await fetchSiteInvoices(siteId);
-      setLocalData(prev => ({ ...prev, invoices: invoicesData }));
-    } catch (error) {
-      console.error('Error fetching invoices:', error);
-      toast.error('Failed to load invoices');
-    } finally {
-      setLoadingStates(prev => ({ ...prev, invoices: false }));
-    }
-  };
-
+  // Load all transaction data when component mounts or siteId changes
   useEffect(() => {
-    if (siteId) {
-      fetchExpenses();
-      fetchAdvances();
-      fetchFundsReceived();
-      fetchInvoices();
+    if (!siteId) {
+      console.error('No siteId provided to load transactions');
+      return;
     }
+    
+    loadAllTransactions();
   }, [siteId]);
-  
-  // Also update when external props change
+
+  // Update local state when props change
   useEffect(() => {
-    if (expenses) setLocalData(prev => ({ ...prev, expenses }));
-    if (advances) setLocalData(prev => ({ ...prev, advances }));
-    if (fundsReceived) setLocalData(prev => ({ ...prev, fundsReceived }));
-  }, [expenses, advances, fundsReceived]);
+    console.log('Expenses prop updated with', expenses.length, 'items');
+    setLocalExpenses(expenses);
+  }, [expenses]);
 
-  const handleDeleteExpense = async (id) => {
-    if (!user?.id) {
-      toast.error('User ID not available. Please reload the page.');
+  useEffect(() => {
+    console.log('Advances prop updated with', advances.length, 'items');
+    setLocalAdvances(advances);
+  }, [advances]);
+
+  useEffect(() => {
+    console.log('FundsReceived prop updated with', fundsReceived.length, 'items');
+    setLocalFundsReceived(fundsReceived);
+  }, [fundsReceived]);
+
+  const loadAllTransactions = async () => {
+    await Promise.all([
+      loadInvoices(),
+      loadExpenses(),
+      loadAdvances(),
+      loadFundsReceived()
+    ]);
+  };
+
+  const loadInvoices = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load invoices');
       return;
     }
     
+    setIsLoading(prev => ({ ...prev, invoices: true }));
+    setError(null);
+    
     try {
-      await deleteExpense(id, user.id);
-      
-      // Remove the expense from the local state
-      setLocalData(prev => ({
-        ...prev,
-        expenses: prev.expenses.filter(expense => expense.id !== id)
-      }));
-      
-      toast.success('Expense deleted successfully');
-      if (onTransactionsUpdate) onTransactionsUpdate();
+      console.log('Fetching invoices for site:', siteId);
+      const invoicesData = await fetchSiteInvoices(siteId);
+      console.log('Invoices data received:', invoicesData.length, 'items');
+      setInvoices(invoicesData as Invoice[]);
     } catch (error) {
-      console.error('Error deleting expense:', error);
-      toast.error('Failed to delete expense: ' + (error.message || 'Unknown error'));
+      console.error('Error loading invoices:', error);
+      setError('Failed to load invoices. Please try again.');
+    } finally {
+      setIsLoading(prev => ({ ...prev, invoices: false }));
     }
   };
-  
-  const handleDeleteAdvance = async (id) => {
-    if (!user?.id) {
-      toast.error('User ID not available. Please reload the page.');
+
+  const loadExpenses = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load expenses');
       return;
     }
     
+    setIsLoading(prev => ({ ...prev, expenses: true }));
+    
     try {
-      await deleteAdvance(id, user.id);
-      
-      // Remove the advance from the local state
-      setLocalData(prev => ({
-        ...prev,
-        advances: prev.advances.filter(advance => advance.id !== id)
-      }));
-      
-      toast.success('Advance deleted successfully');
-      if (onTransactionsUpdate) onTransactionsUpdate();
+      console.log('Fetching expenses for site:', siteId);
+      const expensesData = await fetchSiteExpenses(siteId);
+      console.log('Expenses data received:', expensesData.length, 'items');
+      setLocalExpenses(expensesData as Expense[]);
     } catch (error) {
-      console.error('Error deleting advance:', error);
-      toast.error('Failed to delete advance: ' + (error.message || 'Unknown error'));
+      console.error('Error loading expenses:', error);
+    } finally {
+      setIsLoading(prev => ({ ...prev, expenses: false }));
     }
   };
-  
-  const handleDeleteFundsReceived = async (id) => {
-    if (!user?.id) {
-      toast.error('User ID not available. Please reload the page.');
+
+  const loadAdvances = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load advances');
       return;
     }
     
+    setIsLoading(prev => ({ ...prev, advances: true }));
+    
     try {
-      await deleteFundsReceived(id, user.id);
-      
-      // Remove the funds received from the local state
-      setLocalData(prev => ({
-        ...prev,
-        fundsReceived: prev.fundsReceived.filter(fund => fund.id !== id)
-      }));
-      
-      toast.success('Funds received record deleted successfully');
-      if (onTransactionsUpdate) onTransactionsUpdate();
+      console.log('Fetching advances for site:', siteId);
+      const advancesData = await fetchSiteAdvances(siteId);
+      console.log('Advances data received:', advancesData.length, 'items');
+      setLocalAdvances(advancesData as Advance[]);
     } catch (error) {
-      console.error('Error deleting funds received:', error);
-      toast.error('Failed to delete funds received: ' + (error.message || 'Unknown error'));
+      console.error('Error loading advances:', error);
+    } finally {
+      setIsLoading(prev => ({ ...prev, advances: false }));
     }
   };
-  
-  const handleDeleteInvoice = async (id) => {
-    if (!user?.id) {
-      toast.error('User ID not available. Please reload the page.');
+
+  const loadFundsReceived = async () => {
+    if (!siteId) {
+      console.error('No siteId provided to load funds received');
       return;
     }
     
+    setIsLoading(prev => ({ ...prev, fundsReceived: true }));
+    
     try {
-      await deleteInvoice(id, user.id);
-      
-      // Remove the invoice from the local state
-      setLocalData(prev => ({
-        ...prev,
-        invoices: prev.invoices.filter(invoice => invoice.id !== id)
-      }));
-      
-      toast.success('Invoice deleted successfully');
-      if (onTransactionsUpdate) onTransactionsUpdate();
+      console.log('Fetching funds received for site:', siteId);
+      const fundsReceivedData = await fetchSiteFundsReceived(siteId);
+      console.log('Funds received data received:', fundsReceivedData.length, 'items');
+      setLocalFundsReceived(fundsReceivedData as FundsReceived[]);
     } catch (error) {
-      console.error('Error deleting invoice:', error);
-      toast.error('Failed to delete invoice: ' + (error.message || 'Unknown error'));
+      console.error('Error loading funds received:', error);
+    } finally {
+      setIsLoading(prev => ({ ...prev, fundsReceived: false }));
     }
   };
 
-  const handleEditExpense = (expense: Expense) => {
-    setSelectedExpense(expense);
-    setIsExpenseModalOpen(true);
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'text-green-600 bg-green-100';
+      case 'pending':
+        return 'text-orange-600 bg-orange-100';
+      case 'rejected':
+        return 'text-red-600 bg-red-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
+    }
   };
 
-  const handleEditAdvance = (advance: Advance) => {
-    setSelectedAdvance(advance);
-    setIsAdvanceModalOpen(true);
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return <Check className="h-4 w-4" />;
+      case 'pending':
+        return <Clock className="h-4 w-4" />;
+      default:
+        return null;
+    }
   };
 
-  const handleEditFund = (fund: FundsReceived) => {
-    // Implement edit fund logic here
+  const getRecipientTypeIcon = (type: RecipientType) => {
+    switch (type) {
+      case RecipientType.WORKER:
+        return <User className="h-4 w-4 mr-1 text-muted-foreground" />;
+      case RecipientType.SUBCONTRACTOR:
+        return <Briefcase className="h-4 w-4 mr-1 text-muted-foreground" />;
+      case RecipientType.SUPERVISOR:
+        return <UserCog className="h-4 w-4 mr-1 text-muted-foreground" />;
+      default:
+        return null;
+    }
   };
 
-  const handleViewInvoice = (invoice: Invoice) => {
-    setViewInvoice(invoice);
+  const openInvoiceDetails = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setIsDetailsOpen(true);
   };
 
-  const renderExpensesTab = () => {
+  const closeInvoiceDetails = () => {
+    setIsDetailsOpen(false);
+    setSelectedInvoice(null);
+  };
+
+  const handleDelete = async () => {
+    if (!selectedItemToDelete || !user?.id) return;
     
-    return (
-      <div className="space-y-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-medium">Expenses History</h3>
-          {/* ...keep existing filter controls... */}
-        </div>
-        
-        {loadingStates.expenses ? (
-          <div className="my-8 flex justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : localData.expenses.length === 0 ? (
-          <CustomCard className="py-8">
-            <div className="text-center">
-              <Receipt className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-3" />
-              <h3 className="text-lg font-medium">No Expenses</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                No expenses have been recorded yet.
-              </p>
-            </div>
-          </CustomCard>
-        ) : (
-          <div className="space-y-4">
-            {localData.expenses.map((expense) => (
-              <CustomCard key={expense.id} className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-1">
-                    <h4 className="font-medium">{expense.description}</h4>
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {format(new Date(expense.date), 'dd/MM/yyyy')}
-                      <div className="mx-2 h-1 w-1 rounded-full bg-muted-foreground"></div>
-                      <Tag className="mr-1 h-3 w-3" />
+    try {
+      setIsLoading(prev => ({ ...prev, [selectedItemToDelete.type + 's']: true }));
+      
+      let result;
+      
+      switch (selectedItemToDelete.type) {
+        case 'expense':
+          result = await deleteExpense(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalExpenses(prevExpenses => 
+              prevExpenses.filter(expense => expense.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+        case 'advance':
+          result = await deleteAdvance(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalAdvances(prevAdvances => 
+              prevAdvances.filter(advance => advance.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+        case 'funds':
+          result = await deleteFundsReceived(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalFundsReceived(prevFunds => 
+              prevFunds.filter(fund => fund.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+        case 'invoice':
+          result = await deleteInvoice(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setInvoices(prevInvoices => 
+              prevInvoices.filter(invoice => invoice.id !== selectedItemToDelete.id)
+            );
+          }
+          break;
+      }
+      
+      toast.success('Transaction deleted successfully');
+      if (onTransactionsUpdate) {
+        onTransactionsUpdate();
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete transaction');
+    } finally {
+      setIsLoading(prev => ({ ...prev, [selectedItemToDelete.type + 's']: false }));
+      setIsDeleteDialogOpen(false);
+      setSelectedItemToDelete(null);
+    }
+  };
+
+  const confirmDelete = (id: string, type: 'expense' | 'advance' | 'funds' | 'invoice') => {
+    setSelectedItemToDelete({ id, type });
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleEdit = (id: string, type: 'expense' | 'advance' | 'funds' | 'invoice') => {
+    // Navigation to edit forms will be handled by the parent component
+    // For now, just log the action
+    console.log(`Edit ${type} with ID: ${id}`);
+    toast.info(`Edit functionality for ${type} will be implemented soon`);
+  };
+
+  const renderExpensesTab = () => (
+    <div className="space-y-4">
+      {isLoading.expenses ? (
+        <p className="text-center text-muted-foreground py-8">Loading expenses...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
+      ) : localExpenses.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">No expenses found for this site.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Description</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Category</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {localExpenses.map((expense) => (
+                <tr key={expense.id} className="border-b hover:bg-muted/50 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    {format(new Date(expense.date), 'dd MMM yyyy')}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    {expense.description}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
                       {expense.category}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      <IndianRupee className="h-3 w-3 mr-1" />
+                      {expense.amount.toLocaleString()}
                     </div>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-bold mr-4">₹{Number(expense.amount).toLocaleString()}</span>
-                    
-                    {/* Only show edit/delete for admin users */}
-                    {userRole === UserRole.ADMIN && (
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditExpense(expense)}>
-                          <Edit className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteExpense(expense.id)}>
-                          <Trash className="h-4 w-4 text-red-500" />
-                        </Button>
+                  </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(expense.id, 'expense')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(expense.id, 'expense')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </CustomCard>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderAdvancesTab = () => {
-    
-    return (
-      <div className="space-y-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-medium">Advances History</h3>
-          {/* ...keep existing filter controls... */}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        
-        {loadingStates.advances ? (
-          <div className="my-8 flex justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : localData.advances.length === 0 ? (
-          <CustomCard className="py-8">
-            <div className="text-center">
-              <Wallet className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-3" />
-              <h3 className="text-lg font-medium">No Advances</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                No advances have been recorded yet.
-              </p>
-            </div>
-          </CustomCard>
-        ) : (
-          <div className="space-y-4">
-            {localData.advances.map((advance) => (
-              <CustomCard key={advance.id} className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-1">
-                    <h4 className="font-medium">{advance.recipientName}</h4>
-                    <div className="flex flex-wrap items-center text-sm text-muted-foreground gap-2">
-                      <div className="flex items-center">
-                        <Calendar className="mr-1 h-3 w-3" />
-                        {format(new Date(advance.date), 'dd/MM/yyyy')}
-                      </div>
-                      <div className="flex items-center">
-                        <User className="mr-1 h-3 w-3" />
-                        {advance.recipientType}
-                      </div>
-                      <div className="flex items-center">
-                        <Tag className="mr-1 h-3 w-3" />
-                        {advance.purpose}
-                      </div>
+      )}
+    </div>
+  );
+
+  const canEditDelete = userRole === UserRole.ADMIN;
+
+  const renderAdvancesTab = () => (
+    <div className="space-y-4">
+      {isLoading.advances ? (
+        <p className="text-center text-muted-foreground py-8">Loading advances...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
+      ) : localAdvances.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">No advances found for this site.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Recipient</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Type</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Purpose</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {localAdvances.map((advance) => (
+                <tr key={advance.id} className="border-b hover:bg-muted/50 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    {format(new Date(advance.date), 'dd MMM yyyy')}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      {getRecipientTypeIcon(advance.recipientType)}
+                      {advance.recipientName}
                     </div>
-                    {advance.remarks && (
-                      <p className="text-xs text-muted-foreground italic">
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <Badge variant="outline" className="bg-gray-100 text-gray-800">
+                      {advance.recipientType}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <span className="capitalize">{advance.purpose.replace('_', ' ')}</span>
+                    {advance.remarks && advance.remarks.length > 0 && (
+                      <span className="block text-xs text-muted-foreground mt-1">
                         Note: {advance.remarks}
-                      </p>
+                      </span>
                     )}
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-bold mr-4">₹{Number(advance.amount).toLocaleString()}</span>
-                    
-                    {/* Only show edit/delete for admin users */}
-                    {userRole === UserRole.ADMIN && (
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditAdvance(advance)}>
-                          <Edit className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteAdvance(advance.id)}>
-                          <Trash className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CustomCard>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderFundsReceivedTab = () => {
-    
-    return (
-      <div className="space-y-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-medium">Funds Received History</h3>
-          {/* ...keep existing filter controls... */}
-        </div>
-        
-        {loadingStates.fundsReceived ? (
-          <div className="my-8 flex justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : localData.fundsReceived.length === 0 ? (
-          <CustomCard className="py-8">
-            <div className="text-center">
-              <Landmark className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-3" />
-              <h3 className="text-lg font-medium">No Funds Received</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                No funds have been received yet.
-              </p>
-            </div>
-          </CustomCard>
-        ) : (
-          <div className="space-y-4">
-            {localData.fundsReceived.map((fund) => (
-              <CustomCard key={fund.id} className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-1">
-                    <h4 className="font-medium">Funds from Head Office</h4>
-                    <div className="flex flex-wrap items-center text-sm text-muted-foreground gap-2">
-                      <div className="flex items-center">
-                        <Calendar className="mr-1 h-3 w-3" />
-                        {format(new Date(fund.date), 'dd/MM/yyyy')}
-                      </div>
-                      {fund.method && (
-                        <div className="flex items-center">
-                          <CreditCard className="mr-1 h-3 w-3" />
-                          {fund.method}
-                        </div>
-                      )}
-                      {fund.reference && (
-                        <div className="flex items-center">
-                          <Hash className="mr-1 h-3 w-3" />
-                          Ref: {fund.reference}
-                        </div>
-                      )}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      <IndianRupee className="h-3 w-3 mr-1" />
+                      {advance.amount.toLocaleString()}
                     </div>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-bold mr-4">₹{Number(fund.amount).toLocaleString()}</span>
-                    
-                    {/* Only show edit/delete for admin users */}
-                    {userRole === UserRole.ADMIN && (
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditFund(fund)}>
-                          <Edit className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteFundsReceived(fund.id)}>
-                          <Trash className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CustomCard>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderInvoicesTab = () => {
-    
-    return (
-      <div className="space-y-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-medium">Invoices History</h3>
-          {/* ...keep existing filter controls... */}
-        </div>
-        
-        {loadingStates.invoices ? (
-          <div className="my-8 flex justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : localData.invoices.length === 0 ? (
-          <CustomCard className="py-8">
-            <div className="text-center">
-              <FileText className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-3" />
-              <h3 className="text-lg font-medium">No Invoices</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                No invoices have been recorded yet.
-              </p>
-            </div>
-          </CustomCard>
-        ) : (
-          <div className="space-y-4">
-            {localData.invoices.map((invoice) => (
-              <CustomCard key={invoice.id} className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-1">
-                    <h4 className="font-medium">{invoice.partyName}</h4>
-                    <div className="flex flex-wrap items-center text-sm text-muted-foreground gap-2">
-                      <div className="flex items-center">
-                        <Calendar className="mr-1 h-3 w-3" />
-                        {format(new Date(invoice.date), 'dd/MM/yyyy')}
-                      </div>
-                      <div className="flex items-center">
-                        <Truck className="mr-1 h-3 w-3" />
-                        {invoice.material}
-                      </div>
-                      <div className="flex items-center">
-                        <CircleDollarSign className="mr-1 h-3 w-3" />
-                        GST: {invoice.gstPercentage}%
-                      </div>
-                      <div className="flex items-center">
-                        <BadgeCheck className="mr-1 h-3 w-3" />
-                        {invoice.paymentStatus.toUpperCase()}
-                      </div>
-                      {invoice.approverType && (
-                        <Badge variant="outline" className={invoice.approverType === 'supervisor' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>
-                          {invoice.approverType === 'supervisor' ? 'Supervisor' : 'H.O.'}
-                        </Badge>
-                      )}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(advance.status)}`}>
+                      {getStatusIcon(advance.status)}
+                      <span className="ml-1 capitalize">{advance.status}</span>
                     </div>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-bold mr-4">₹{Number(invoice.netAmount).toLocaleString()}</span>
-                    
-                    {/* Only show edit/delete for admin users */}
-                    {userRole === UserRole.ADMIN && (
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewInvoice(invoice)}>
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteInvoice(invoice.id)}>
-                          <Trash className="h-4 w-4 text-red-500" />
-                        </Button>
+                  </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(advance.id, 'advance')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(advance.id, 'advance')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </CustomCard>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 
-  // ... keep existing code for the render method
-  // Make sure to include the tabs and content
+  const renderFundsReceivedTab = () => (
+    <div className="space-y-4">
+      {isLoading.fundsReceived ? (
+        <p className="text-center text-muted-foreground py-8">Loading funds received...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
+      ) : localFundsReceived.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">No funds received for this site.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Method</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Reference</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {localFundsReceived.map((fund) => (
+                <tr key={fund.id} className="border-b hover:bg-muted/50 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    {format(new Date(fund.date), 'dd MMM yyyy')}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      <IndianRupee className="h-3 w-3 mr-1" />
+                      {fund.amount.toLocaleString()}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {fund.method || 'N/A'}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {fund.reference || 'N/A'}
+                  </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(fund.id, 'funds')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(fund.id, 'funds')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderInvoicesTab = () => (
+    <div className="space-y-4">
+      {isLoading.invoices ? (
+        <p className="text-center text-muted-foreground py-8">Loading invoices...</p>
+      ) : error ? (
+        <p className="text-center text-red-500 py-8">{error}</p>
+      ) : invoices.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">No invoices found for this site.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Invoice #</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Vendor</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
+                {canEditDelete && (
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((invoice) => (
+                <tr key={invoice.id} className="border-b hover:bg-muted/50 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    {format(new Date(invoice.date), 'dd MMM yyyy')}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    {invoice.invoiceNumber || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {invoice.vendorName || invoice.partyName}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">
+                    <div className="flex items-center">
+                      <IndianRupee className="h-3 w-3 mr-1" />
+                      {(invoice.amount || invoice.netAmount)?.toLocaleString() || '0'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(invoice.status || invoice.paymentStatus)}`}>
+                      {getStatusIcon(invoice.status || invoice.paymentStatus)}
+                      <span className="ml-1 capitalize">{invoice.status || invoice.paymentStatus}</span>
+                    </div>
+                  </td>
+                  {canEditDelete && (
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex space-x-2">
+                        <button
+                          className="text-primary hover:text-primary/80 transition-colors flex items-center"
+                          onClick={() => openInvoiceDetails(invoice)}
+                        >
+                          View <ArrowUpRight className="h-3 w-3 ml-1" />
+                        </button>
+                        <button 
+                          className="text-blue-600 hover:text-blue-800 transition-colors flex items-center"
+                          onClick={() => handleEdit(invoice.id, 'invoice')}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button 
+                          className="text-red-600 hover:text-red-800 transition-colors flex items-center"
+                          onClick={() => confirmDelete(invoice.id, 'invoice')}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <div>
-      <Tabs defaultValue="expenses" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-4 mb-4">
-          <TabsTrigger value="expenses">
-            Expenses
-            {localData.expenses.length > 0 && (
-              <Badge variant="secondary" className="ml-2 bg-primary/10">
-                {localData.expenses.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="advances">
-            Advances
-            {localData.advances.length > 0 && (
-              <Badge variant="secondary" className="ml-2 bg-primary/10">
-                {localData.advances.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="funds">
-            Funds Received
-            {localData.fundsReceived.length > 0 && (
-              <Badge variant="secondary" className="ml-2 bg-primary/10">
-                {localData.fundsReceived.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="invoices">
-            Invoices
-            {localData.invoices.length > 0 && (
-              <Badge variant="secondary" className="ml-2 bg-primary/10">
-                {localData.invoices.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="expenses">
-          {renderExpensesTab()}
-        </TabsContent>
-        
-        <TabsContent value="advances">
-          {renderAdvancesTab()}
-        </TabsContent>
-        
-        <TabsContent value="funds">
-          {renderFundsReceivedTab()}
-        </TabsContent>
-        
-        <TabsContent value="invoices">
-          {renderInvoicesTab()}
-        </TabsContent>
-      </Tabs>
-      
-      {/* Expense Modal */}
-      <ExpenseForm
-        isOpen={isExpenseModalOpen}
-        onClose={() => {
-          setIsExpenseModalOpen(false);
-          setSelectedExpense(null);
-        }}
-        onSubmit={(updatedExpense) => {
-          setLocalData(prev => ({
-            ...prev,
-            expenses: prev.expenses.map(exp =>
-              exp.id === updatedExpense.id ? { ...exp, ...updatedExpense } : exp
-            )
-          }));
-          setIsExpenseModalOpen(false);
-          setSelectedExpense(null);
-          if (onTransactionsUpdate) onTransactionsUpdate();
-        }}
-        siteId={siteId}
-        defaultExpense={selectedExpense}
-      />
+    <>
+      <CustomCard className="mb-6">
+        <Tabs defaultValue="expenses">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="expenses">
+              Expenses {localExpenses.length > 0 && `(${localExpenses.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="advances">
+              Advances {localAdvances.length > 0 && `(${localAdvances.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="fundsReceived">
+              Funds Received {localFundsReceived.length > 0 && `(${localFundsReceived.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="invoices">
+              Invoices {invoices.length > 0 && `(${invoices.length})`}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="expenses" className="pt-4">
+            {renderExpensesTab()}
+          </TabsContent>
+          <TabsContent value="advances" className="pt-4">
+            {renderAdvancesTab()}
+          </TabsContent>
+          <TabsContent value="fundsReceived" className="pt-4">
+            {renderFundsReceivedTab()}
+          </TabsContent>
+          <TabsContent value="invoices" className="pt-4">
+            {renderInvoicesTab()}
+          </TabsContent>
+        </Tabs>
+      </CustomCard>
 
-      {/* Advance Modal */}
-      <AdvanceForm
-        isOpen={isAdvanceModalOpen}
-        onClose={() => {
-          setIsAdvanceModalOpen(false);
-          setSelectedAdvance(null);
-        }}
-        onSubmit={(updatedAdvance) => {
-          setLocalData(prev => ({
-            ...prev,
-            advances: prev.advances.map(adv =>
-              adv.id === updatedAdvance.id ? { ...adv, ...updatedAdvance } : adv
-            )
-          }));
-          setIsAdvanceModalOpen(false);
-          setSelectedAdvance(null);
-          if (onTransactionsUpdate) onTransactionsUpdate();
-        }}
-        siteId={siteId}
-        defaultAdvance={selectedAdvance}
-      />
+      {selectedInvoice && (
+        <InvoiceDetails
+          invoice={selectedInvoice}
+          isOpen={isDetailsOpen}
+          onClose={closeInvoiceDetails}
+        />
+      )}
 
-      {/* Invoice View Modal */}
-      <Dialog open={!!viewInvoice} onOpenChange={() => setViewInvoice(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Invoice Details</DialogTitle>
-            <DialogDescription>
-              View the details of the selected invoice.
-            </DialogDescription>
-          </DialogHeader>
-          {viewInvoice && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="name" className="text-right">
-                  Party Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  value={viewInvoice.partyName}
-                  readOnly
-                  className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="date" className="text-right">
-                  Date
-                </label>
-                <input
-                  type="text"
-                  id="date"
-                  value={format(new Date(viewInvoice.date), 'dd/MM/yyyy')}
-                  readOnly
-                  className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="material" className="text-right">
-                  Material
-                </label>
-                <input
-                  type="text"
-                  id="material"
-                  value={viewInvoice.material}
-                  readOnly
-                  className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="amount" className="text-right">
-                  Amount
-                </label>
-                <input
-                  type="text"
-                  id="amount"
-                  value={Number(viewInvoice.netAmount).toLocaleString()}
-                  readOnly
-                  className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
+              Confirm Deletion
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this {selectedItemToDelete?.type}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-500 text-white hover:bg-red-600">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

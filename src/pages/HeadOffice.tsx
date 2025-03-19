@@ -1,10 +1,23 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
-import { Search, Filter, Plus, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Plus, Download, ChevronLeft, ChevronRight, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
-import { HeadOfficeTransaction } from '@/lib/types';
+import { HeadOfficeTransaction, FundsReceived, UserRole } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
+import { fetchSiteFundsReceived, deleteFundsReceived } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Mock data for demonstration
 const transactions: HeadOfficeTransaction[] = [
@@ -65,6 +78,73 @@ const transactions: HeadOfficeTransaction[] = [
 ];
 
 const HeadOffice: React.FC = () => {
+  const { user } = useAuth();
+  const [allFunds, setAllFunds] = useState<FundsReceived[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedItemToDelete, setSelectedItemToDelete] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  useEffect(() => {
+    // Load all funds received data when component mounts
+    if (user?.id && user?.role === UserRole.ADMIN) {
+      loadAllFundsReceived();
+    }
+  }, [user]);
+
+  const loadAllFundsReceived = async () => {
+    try {
+      setIsLoading(true);
+      // In a real implementation, we would fetch all funds from all sites
+      // For now, this is a placeholder
+      const data = await fetchAllFundsReceived();
+      setAllFunds(data);
+    } catch (error) {
+      console.error('Error loading funds received:', error);
+      toast.error('Failed to load transactions');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Placeholder function - in a real implementation, this would fetch from all sites
+  const fetchAllFundsReceived = async (): Promise<FundsReceived[]> => {
+    // Return the mock data for now
+    return transactions.map(t => ({
+      id: t.id,
+      siteId: '',
+      amount: t.amount,
+      date: t.date,
+      method: 'Bank Transfer',
+      reference: `Ref-${t.id}`,
+      createdAt: t.createdAt
+    }));
+  };
+
+  const handleDelete = async () => {
+    if (!selectedItemToDelete || !user?.id) return;
+    
+    try {
+      console.log(`Attempting to delete fund with ID: ${selectedItemToDelete}`);
+      const result = await deleteFundsReceived(selectedItemToDelete, user.id);
+      
+      if (result.success) {
+        setAllFunds(prevFunds => prevFunds.filter(fund => fund.id !== selectedItemToDelete));
+        toast.success('Transaction deleted successfully');
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete transaction');
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setSelectedItemToDelete(null);
+    }
+  };
+
+  const confirmDelete = (id: string) => {
+    setSelectedItemToDelete(id);
+    setIsDeleteDialogOpen(true);
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       <PageTitle 
@@ -118,9 +198,19 @@ const HeadOffice: React.FC = () => {
                   <td className="py-4 text-sm font-medium">₹{transaction.amount.toLocaleString()}</td>
                   <td className="py-4 text-sm">{transaction.description}</td>
                   <td className="py-4 pr-4 text-right">
-                    <button className="p-1 rounded-md hover:bg-muted transition-colors">
-                      <Download className="h-4 w-4 text-muted-foreground" />
-                    </button>
+                    <div className="flex items-center justify-end space-x-2">
+                      <button className="p-1 rounded-md hover:bg-muted transition-colors">
+                        <Download className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                      {user?.role === UserRole.ADMIN && (
+                        <button 
+                          className="p-1 rounded-md hover:bg-red-100 transition-colors text-red-600"
+                          onClick={() => confirmDelete(transaction.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -141,6 +231,26 @@ const HeadOffice: React.FC = () => {
           </div>
         </div>
       </CustomCard>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
+              Confirm Deletion
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this transaction? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-500 text-white hover:bg-red-600">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

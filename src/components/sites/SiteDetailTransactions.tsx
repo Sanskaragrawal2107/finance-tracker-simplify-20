@@ -254,50 +254,64 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!selectedItemToDelete || !user?.id) return;
+    if (!selectedItemToDelete || !user?.id) {
+      console.error('Cannot delete: missing item or user ID');
+      return;
+    }
     
     try {
       setIsLoading(prev => ({ ...prev, [selectedItemToDelete.type + 's']: true }));
       
+      console.log(`Starting deletion process for ${selectedItemToDelete.type} with ID: ${selectedItemToDelete.id}`);
       let result;
       
       switch (selectedItemToDelete.type) {
         case 'expense':
+          console.log(`Deleting expense ${selectedItemToDelete.id}`);
           result = await deleteExpense(selectedItemToDelete.id, user.id);
           if (result.success) {
             setLocalExpenses(prevExpenses => 
               prevExpenses.filter(expense => expense.id !== selectedItemToDelete.id)
             );
+            console.log('Expense deleted successfully from frontend state');
           }
           break;
         case 'advance':
+          console.log(`Deleting advance ${selectedItemToDelete.id}`);
           result = await deleteAdvance(selectedItemToDelete.id, user.id);
           if (result.success) {
             setLocalAdvances(prevAdvances => 
               prevAdvances.filter(advance => advance.id !== selectedItemToDelete.id)
             );
+            console.log('Advance deleted successfully from frontend state');
           }
           break;
         case 'funds':
+          console.log(`Deleting funds received ${selectedItemToDelete.id}`);
           result = await deleteFundsReceived(selectedItemToDelete.id, user.id);
+          console.log('Funds received deletion result:', result);
           if (result.success) {
             setLocalFundsReceived(prevFunds => 
               prevFunds.filter(fund => fund.id !== selectedItemToDelete.id)
             );
+            console.log('Funds received deleted successfully from frontend state');
           }
           break;
         case 'invoice':
+          console.log(`Deleting invoice ${selectedItemToDelete.id}`);
           result = await deleteInvoice(selectedItemToDelete.id, user.id);
           if (result.success) {
             setInvoices(prevInvoices => 
               prevInvoices.filter(invoice => invoice.id !== selectedItemToDelete.id)
             );
+            console.log('Invoice deleted successfully from frontend state');
           }
           break;
       }
       
       toast.success('Transaction deleted successfully');
       if (onTransactionsUpdate) {
+        console.log('Calling onTransactionsUpdate to refresh parent component data');
         onTransactionsUpdate();
       }
     } catch (error) {

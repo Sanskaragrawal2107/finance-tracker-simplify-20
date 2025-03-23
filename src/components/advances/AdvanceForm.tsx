@@ -42,8 +42,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { Advance, AdvancePurpose, RecipientType, ApprovalStatus } from "@/lib/types";
 import SearchableDropdown from '../expenses/SearchableDropdown';
-import { contractors } from '@/data/contractors';
-import { supervisors } from '@/data/supervisors';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -99,6 +97,61 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
     },
   });
 
+  // Fetch supervisors from the database
+  useEffect(() => {
+    const fetchSupervisors = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, name')
+          .eq('role', 'supervisor');
+        
+        if (error) {
+          console.error('Error fetching supervisors:', error);
+          toast.error('Failed to load supervisors');
+          return;
+        }
+        
+        if (data) {
+          console.log('Fetched supervisors:', data);
+          setSupervisors(data);
+        }
+      } catch (error) {
+        console.error('Error fetching supervisors:', error);
+        toast.error('Failed to load supervisors');
+      }
+    };
+    
+    fetchSupervisors();
+  }, []);
+
+  // Fetch contractors from the database
+  useEffect(() => {
+    const fetchContractors = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('contractors')
+          .select('id, name');
+        
+        if (error) {
+          console.error('Error fetching contractors:', error);
+          toast.error('Failed to load contractors');
+          return;
+        }
+        
+        if (data) {
+          console.log('Fetched contractors:', data);
+          setContractors(data);
+        }
+      } catch (error) {
+        console.error('Error fetching contractors:', error);
+        toast.error('Failed to load contractors');
+      }
+    };
+    
+    fetchContractors();
+  }, []);
+
   useEffect(() => {
     const recipientType = form.watch("recipientType");
     
@@ -113,7 +166,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
     if (form.getValues("recipientName")) {
       form.setValue("recipientName", "");
     }
-  }, [form.watch("recipientType")]);
+  }, [form.watch("recipientType"), supervisors, contractors]);
 
   useEffect(() => {
     const purpose = form.watch("purpose");

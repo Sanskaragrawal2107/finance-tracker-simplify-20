@@ -1,4 +1,3 @@
-
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,56 +46,99 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Check active session and fetch user data on mount
   useEffect(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
     const checkSession = async () => {
       try {
+        console.log("Checking for existing session...");
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (session) {
+        if (session && mounted) {
+          console.log("Found existing session, fetching user profile");
           const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
+          if (profile && mounted) {
+            console.log("Setting user from existing session");
             setUser(profile);
+          } else {
+            console.log("No user profile found for existing session");
+            // If we have a session but no profile, log this error
+            if (mounted) {
+              console.error("Session exists but no user profile found");
+            }
           }
+        } else {
+          console.log("No existing session found");
         }
       } catch (error) {
         console.error('Session check error:', error);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          console.log("Initial auth check complete, setting loading to false");
+          setLoading(false);
+        }
       }
     };
+
+    // Set a safety timeout to ensure loading state is reset even if checkSession hangs
+    timeoutId = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn("Auth check timed out after 5 seconds, forcing loading state to false");
+        setLoading(false);
+      }
+    }, 5000);
 
     checkSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return;
+        
+        console.log("Auth state change event:", event);
         setLoading(true);
         
         if (event === 'SIGNED_IN' && session) {
           console.log("Auth state change - SIGNED_IN:", session.user.id);
           const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
+          if (profile && mounted) {
             console.log("Setting user with role:", profile.role);
             setUser(profile);
             
-            // Redirect based on role
-            if (profile.role === UserRole.ADMIN) {
-              navigate('/admin');
-            } else if (profile.role === UserRole.SUPERVISOR) {
-              navigate('/expenses');
-            } else {
-              navigate('/dashboard');
+            // Redirect based on role - only if on login page or root
+            const currentPath = window.location.pathname;
+            if (currentPath === '/' || currentPath === '/login') {
+              if (profile.role === UserRole.ADMIN) {
+                navigate('/admin');
+              } else if (profile.role === UserRole.SUPERVISOR) {
+                navigate('/expenses');
+              } else {
+                navigate('/dashboard');
+              }
+            }
+          } else {
+            // Important: Still set loading to false if profile not found
+            console.error("No user profile found after sign-in");
+            if (mounted) {
+              setLoading(false);
             }
           }
-        } else if (event === 'SIGNED_OUT') {
+        } else if (event === 'SIGNED_OUT' && mounted) {
           setUser(null);
           navigate('/');
+          setLoading(false);
+        } else {
+          // Handle other auth events by ensuring loading state is reset
+          if (mounted) {
+            setLoading(false);
+          }
         }
-        
-        setLoading(false);
       }
     );
 
     return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [navigate]);
@@ -123,7 +165,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.log("Found user profile with role:", profile.role);
           setUser(profile);
 
-          // Redirect based on role - forcing navigation
+          // Redirect based on role
           console.log("Redirecting based on role:", profile.role);
           if (profile.role === UserRole.ADMIN) {
             console.log("Redirecting to /admin");

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
@@ -28,8 +28,20 @@ const SupervisorSites: React.FC = () => {
   const [activeTab, setActiveTab] = useState('active');
 
   useEffect(() => {
-    fetchSites();
-  }, [user]);
+    let mounted = true;
+    
+    // Only fetch if user is available and component is mounted
+    if (user && mounted) {
+      fetchSites();
+    } else {
+      // If no user, make sure loading is set to false
+      setLoading(false);
+    }
+    
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]); // Only re-fetch if user ID changes, not the entire user object
 
   useEffect(() => {
     if (sites.length > 0) {
@@ -38,9 +50,26 @@ const SupervisorSites: React.FC = () => {
   }, [searchQuery, sites, activeTab]);
 
   const fetchSites = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
+    
+    // Add fetch timeout safety
+    const fetchTimeout = setTimeout(() => {
+      console.warn('Sites data fetch timeout after 10 seconds');
+      setLoading(false);
+      toast({
+        title: 'Network request timeout',
+        description: 'Please try again or refresh the page.',
+        variant: 'destructive',
+      });
+      setSites([]);
+      setFilteredSites([]);
+    }, 10000); // 10 second timeout
+    
     try {
       let query = supabase
         .from('sites')
@@ -60,6 +89,14 @@ const SupervisorSites: React.FC = () => {
           description: error.message,
           variant: 'destructive',
         });
+        setSites([]);
+        setFilteredSites([]);
+        return;
+      }
+
+      if (!data) {
+        setSites([]);
+        setFilteredSites([]);
         return;
       }
 
@@ -81,6 +118,8 @@ const SupervisorSites: React.FC = () => {
       }));
 
       setSites(transformedSites);
+      // Also set filtered sites to ensure something is visible immediately
+      setFilteredSites(transformedSites);
     } catch (error) {
       console.error('Error in fetchSites:', error);
       toast({
@@ -88,7 +127,10 @@ const SupervisorSites: React.FC = () => {
         description: 'Failed to fetch sites. Please try again.',
         variant: 'destructive',
       });
+      setSites([]);
+      setFilteredSites([]);
     } finally {
+      clearTimeout(fetchTimeout);
       setLoading(false);
     }
   };
@@ -332,54 +374,68 @@ const SupervisorSites: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageTitle 
-        title="Site Transactions" 
-        subtitle="History of all site transactions" 
-      />
-
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="relative max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search sites..."
-            className="py-2 pl-10 pr-4 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+      {!user ? (
+        <div className="text-center py-12">
+          <div className="animate-pulse">
+            <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-medium mb-2">Loading...</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Please wait while we authenticate your session
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <PageTitle 
+            title="Site Transactions" 
+            subtitle="History of all site transactions" 
           />
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-9">
-            <Filter className="h-4 w-4 mr-2" />
-            Filter
-          </Button>
-          {user?.role !== UserRole.VIEWER && (
-            <Button size="sm" className="h-9" onClick={() => setShowNewSiteForm(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Site
-            </Button>
-          )}
-        </div>
-      </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="relative max-w-md">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search sites..."
+                className="py-2 pl-10 pr-4 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="active">Active Sites</TabsTrigger>
-          <TabsTrigger value="completed">Completed Sites</TabsTrigger>
-          <TabsTrigger value="all">All Sites</TabsTrigger>
-        </TabsList>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" className="h-9">
+                <Filter className="h-4 w-4 mr-2" />
+                Filter
+              </Button>
+              {user?.role !== UserRole.VIEWER && (
+                <Button size="sm" className="h-9" onClick={() => setShowNewSiteForm(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Site
+                </Button>
+              )}
+            </div>
+          </div>
 
-        <TabsContent value="active" className="mt-0">
-          {renderSitesList()}
-        </TabsContent>
-        <TabsContent value="completed" className="mt-0">
-          {renderSitesList()}
-        </TabsContent>
-        <TabsContent value="all" className="mt-0">
-          {renderSitesList()}
-        </TabsContent>
-      </Tabs>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="active">Active Sites</TabsTrigger>
+              <TabsTrigger value="completed">Completed Sites</TabsTrigger>
+              <TabsTrigger value="all">All Sites</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="active" className="mt-0">
+              {renderSitesList()}
+            </TabsContent>
+            <TabsContent value="completed" className="mt-0">
+              {renderSitesList()}
+            </TabsContent>
+            <TabsContent value="all" className="mt-0">
+              {renderSitesList()}
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
     </div>
   );
 };

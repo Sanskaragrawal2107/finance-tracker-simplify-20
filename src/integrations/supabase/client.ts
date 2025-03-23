@@ -23,12 +23,10 @@ export const refreshSchemaCache = async () => {
     return true;
   } catch (error) {
     console.error('Error refreshing schema cache:', error);
+    // Avoid crashing the app by returning failure but allowing operation to continue
     return false;
   }
 };
-
-// Initialize the schema cache refresh
-refreshSchemaCache();
 
 // Function to calculate total paid invoices for a site
 export const calculatePaidInvoicesTotalForSite = async (siteId: string): Promise<number> => {

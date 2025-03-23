@@ -61,9 +61,24 @@ const Expenses: React.FC = () => {
   const [hasFetchedData, setHasFetchedData] = useState(false);
 
   const fetchSites = useCallback(async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    
     if (hasFetchedData && !selectedSiteId && !location.state) return;
     
     setIsLoading(true);
+    
+    // Add fetch timeout safety
+    const fetchTimeout = setTimeout(() => {
+      console.warn('Sites data fetch timeout after 10 seconds');
+      setIsLoading(false);
+      toast.error('Network request timeout. Please try again.');
+      setSites([]);
+      setHasFetchedData(true);
+    }, 10000); // 10 second timeout
+    
     try {
       let query = supabase.from('sites').select('*');
       
@@ -77,7 +92,11 @@ const Expenses: React.FC = () => {
       const { data, error } = await query;
       
       if (error) {
-        throw error;
+        console.error('Error fetching sites:', error);
+        toast.error('Failed to load sites');
+        setSites([]);
+        setHasFetchedData(true);
+        return;
       }
       
       if (data) {
@@ -100,11 +119,17 @@ const Expenses: React.FC = () => {
         
         setSites(transformedSites);
         setHasFetchedData(true);
+      } else {
+        setSites([]);
+        setHasFetchedData(true);
       }
     } catch (error) {
       console.error('Error fetching sites:', error);
       toast.error('Failed to load sites');
+      setSites([]);
+      setHasFetchedData(true);
     } finally {
+      clearTimeout(fetchTimeout);
       setIsLoading(false);
     }
   }, [user, selectedSupervisorId, hasFetchedData, selectedSiteId, location.state]);
@@ -116,18 +141,21 @@ const Expenses: React.FC = () => {
       if (user.role === UserRole.SUPERVISOR) {
         setSelectedSupervisorId(user.id);
       }
+      
+      const locationState = location.state as { supervisorId?: string, newSite?: boolean } | null;
+      if (locationState?.supervisorId && user?.role === UserRole.ADMIN) {
+        setSelectedSupervisorId(locationState.supervisorId);
+      }
+      
+      if (locationState?.newSite && user?.role === UserRole.ADMIN) {
+        setIsSiteFormOpen(true);
+      }
+      
+      fetchSites();
+    } else {
+      setIsLoading(false);
+      setUserRole(null);
     }
-    
-    const locationState = location.state as { supervisorId?: string, newSite?: boolean } | null;
-    if (locationState?.supervisorId && user?.role === UserRole.ADMIN) {
-      setSelectedSupervisorId(locationState.supervisorId);
-    }
-    
-    if (locationState?.newSite && user?.role === UserRole.ADMIN) {
-      setIsSiteFormOpen(true);
-    }
-    
-    fetchSites();
   }, [location, user, fetchSites]);
 
   useEffect(() => {
@@ -138,15 +166,27 @@ const Expenses: React.FC = () => {
   }, [selectedSiteId]);
 
   const fetchSiteExpenses = async (siteId: string) => {
+    if (!siteId || !user) {
+      setExpenses([]);
+      return;
+    }
+    
     try {
+      console.log(`Fetching expenses for site ${siteId}`);
       const { data, error } = await supabase
         .from('expenses')
         .select('*')
         .eq('site_id', siteId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching expenses:', error);
+        toast.error('Failed to load expenses for this site');
+        setExpenses([]);
+        return;
+      }
       
       if (data) {
+        console.log(`Successfully fetched ${data.length} expenses`);
         const transformedExpenses: Expense[] = data.map(expense => ({
           id: expense.id,
           siteId: expense.site_id,
@@ -162,6 +202,7 @@ const Expenses: React.FC = () => {
         
         setExpenses(transformedExpenses);
       } else {
+        console.log('No expenses found for this site');
         setExpenses([]);
       }
     } catch (error) {
@@ -172,15 +213,27 @@ const Expenses: React.FC = () => {
   };
 
   const fetchSiteAdvances = async (siteId: string) => {
+    if (!siteId || !user) {
+      setAdvances([]);
+      return;
+    }
+    
     try {
+      console.log(`Fetching advances for site ${siteId}`);
       const { data, error } = await supabase
         .from('advances')
         .select('*')
         .eq('site_id', siteId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching advances:', error);
+        toast.error('Failed to load advances for this site');
+        setAdvances([]);
+        return;
+      }
       
       if (data) {
+        console.log(`Successfully fetched ${data.length} advances`);
         const transformedAdvances: Advance[] = data.map(advance => ({
           id: advance.id,
           siteId: advance.site_id,
@@ -197,6 +250,7 @@ const Expenses: React.FC = () => {
         
         setAdvances(transformedAdvances);
       } else {
+        console.log('No advances found for this site');
         setAdvances([]);
       }
     } catch (error) {
@@ -207,15 +261,27 @@ const Expenses: React.FC = () => {
   };
 
   const fetchSiteFundsReceived = async (siteId: string) => {
+    if (!siteId || !user) {
+      setFundsReceived([]);
+      return;
+    }
+    
     try {
+      console.log(`Fetching funds received for site ${siteId}`);
       const { data, error } = await supabase
         .from('funds_received')
         .select('*')
         .eq('site_id', siteId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching funds received:', error);
+        toast.error('Failed to load funds received for this site');
+        setFundsReceived([]);
+        return;
+      }
       
       if (data) {
+        console.log(`Successfully fetched ${data.length} funds received entries`);
         const transformedFunds: FundsReceived[] = data.map(fund => ({
           id: fund.id,
           siteId: fund.site_id,
@@ -228,6 +294,7 @@ const Expenses: React.FC = () => {
         
         setFundsReceived(transformedFunds);
       } else {
+        console.log('No funds received found for this site');
         setFundsReceived([]);
       }
     } catch (error) {
@@ -238,15 +305,27 @@ const Expenses: React.FC = () => {
   };
 
   const fetchSiteInvoices = async (siteId: string) => {
+    if (!siteId || !user) {
+      setInvoices([]);
+      return;
+    }
+    
     try {
+      console.log(`Fetching invoices for site ${siteId}`);
       const { data, error } = await supabase
         .from('site_invoices')
         .select('*')
         .eq('site_id', siteId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching invoices:', error);
+        toast.error('Failed to load invoices for this site');
+        setInvoices([]);
+        return;
+      }
       
       if (data) {
+        console.log(`Successfully fetched ${data.length} invoices`);
         const transformedInvoices: Invoice[] = data.map(invoice => {
           // Parse material_items as MaterialItem[]
           let materialItems: MaterialItem[] = [];
@@ -764,19 +843,36 @@ const Expenses: React.FC = () => {
     
     console.log('Refreshing all data for site:', siteId);
     
+    // Use individual try-catch blocks to ensure partial failure doesn't block everything
     try {
-      await Promise.all([
-        fetchSiteExpenses(siteId),
-        fetchSiteAdvances(siteId),
-        fetchSiteFundsReceived(siteId),
-        fetchSiteInvoices(siteId)
-      ]);
-      
-      console.log('All site data refreshed successfully');
+      await fetchSiteExpenses(siteId);
     } catch (error) {
-      console.error('Error refreshing site data:', error);
-      toast.error('There was a problem loading some site data');
+      console.error('Error refreshing expenses:', error);
+      setExpenses([]);
     }
+    
+    try {
+      await fetchSiteAdvances(siteId);
+    } catch (error) {
+      console.error('Error refreshing advances:', error);
+      setAdvances([]);
+    }
+    
+    try {
+      await fetchSiteFundsReceived(siteId);
+    } catch (error) {
+      console.error('Error refreshing funds received:', error);
+      setFundsReceived([]);
+    }
+    
+    try {
+      await fetchSiteInvoices(siteId);
+    } catch (error) {
+      console.error('Error refreshing invoices:', error);
+      setInvoices([]);
+    }
+    
+    console.log('All site data refresh attempts completed');
   };
 
   const handleEntrySuccess = (entryType) => {
@@ -792,166 +888,180 @@ const Expenses: React.FC = () => {
 
   return (
     <div className="container py-6 space-y-6 max-w-7xl">
-      <PageTitle
-        title="Sites & Expenses"
-        description="Manage your construction sites and expenses"
-      />
-      
-      {/* Filter and Search Controls */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-        <div className="flex flex-col md:flex-row md:items-center gap-4 w-full md:w-auto">
-          <div className="relative max-w-md w-full">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-            <input 
-              type="text" 
-              placeholder="Search sites..." 
-              className="py-2 pl-10 pr-4 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+      {!user ? (
+        <div className="text-center py-12">
+          <div className="animate-pulse">
+            <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-medium mb-2">Loading...</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Please wait while we authenticate your session
+            </p>
           </div>
-          
-          {userRole === UserRole.ADMIN && (
-            <div className="w-full md:w-64">
-              <Select 
-                value={selectedSupervisorId || ''} 
-                onValueChange={(value) => setSelectedSupervisorId(value || null)}
-              >
-                <SelectTrigger className="w-full">
-                  <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="All Supervisors" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All Supervisors</SelectItem>
-                  {supervisors.map((supervisor) => (
-                    <SelectItem key={supervisor.id} value={supervisor.id}>
-                      {supervisor.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          
-          {userRole === UserRole.ADMIN && (
-            <div className="w-full md:w-64">
-              <Select 
-                value={filterStatus} 
-                onValueChange={(value: 'all' | 'active' | 'completed') => setFilterStatus(value)}
-              >
-                <SelectTrigger className="w-full">
-                  <CheckSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="All Sites" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sites</SelectItem>
-                  <SelectItem value="active">Active Sites</SelectItem>
-                  <SelectItem value="completed">Completed Sites</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </div>
-        
-        <div className="flex flex-wrap gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-10">
-                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-                Filter
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80">
-              <div className="space-y-4">
-                <h4 className="font-medium">Filter Sites</h4>
-                <div className="space-y-2">
-                  <h5 className="text-sm font-medium">Status</h5>
-                  <div className="flex flex-col space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="filter-all" 
-                        checked={filterStatus === 'all'}
-                        onCheckedChange={() => setFilterStatus('all')}
-                      />
-                      <Label htmlFor="filter-all">All Sites</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="filter-active" 
-                        checked={filterStatus === 'active'}
-                        onCheckedChange={() => setFilterStatus('active')}
-                      />
-                      <Label htmlFor="filter-active">Active Sites</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="filter-completed" 
-                        checked={filterStatus === 'completed'}
-                        onCheckedChange={() => setFilterStatus('completed')}
-                      />
-                      <Label htmlFor="filter-completed">Completed Sites</Label>
+      ) : (
+        <>
+          <PageTitle
+            title="Sites & Expenses"
+            subtitle="Manage your construction sites and expenses"
+          />
+          
+          {/* Filter and Search Controls */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <div className="flex flex-col md:flex-row md:items-center gap-4 w-full md:w-auto">
+              <div className="relative max-w-md w-full">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+                <input 
+                  type="text" 
+                  placeholder="Search sites..." 
+                  className="py-2 pl-10 pr-4 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              
+              {userRole === UserRole.ADMIN && (
+                <div className="w-full md:w-64">
+                  <Select 
+                    value={selectedSupervisorId || ''} 
+                    onValueChange={(value) => setSelectedSupervisorId(value || null)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <User className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="All Supervisors" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All Supervisors</SelectItem>
+                      {supervisors.map((supervisor) => (
+                        <SelectItem key={supervisor.id} value={supervisor.id}>
+                          {supervisor.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {userRole === UserRole.ADMIN && (
+                <div className="w-full md:w-64">
+                  <Select 
+                    value={filterStatus} 
+                    onValueChange={(value: 'all' | 'active' | 'completed') => setFilterStatus(value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <CheckSquare className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="All Sites" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sites</SelectItem>
+                      <SelectItem value="active">Active Sites</SelectItem>
+                      <SelectItem value="completed">Completed Sites</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-10">
+                    <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                    Filter
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Filter Sites</h4>
+                    <div className="space-y-2">
+                      <h5 className="text-sm font-medium">Status</h5>
+                      <div className="flex flex-col space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox 
+                            id="filter-all" 
+                            checked={filterStatus === 'all'}
+                            onCheckedChange={() => setFilterStatus('all')}
+                          />
+                          <Label htmlFor="filter-all">All Sites</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox 
+                            id="filter-active" 
+                            checked={filterStatus === 'active'}
+                            onCheckedChange={() => setFilterStatus('active')}
+                          />
+                          <Label htmlFor="filter-active">Active Sites</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox 
+                            id="filter-completed" 
+                            checked={filterStatus === 'completed'}
+                            onCheckedChange={() => setFilterStatus('completed')}
+                          />
+                          <Label htmlFor="filter-completed">Completed Sites</Label>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-      
-      {userRole === UserRole.ADMIN && selectedSupervisorId && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-md flex items-center">
-          <Users className="h-5 w-5 mr-2 text-blue-500" />
-          <span className="font-medium">
-            Viewing sites for: {getSelectedSupervisorName()}
-          </span>
-        </div>
-      )}
-      
-      {selectedSiteId ? (
-        <SiteDetail
-          site={sites.find(site => site.id === selectedSiteId) || null}
-          expenses={expenses}
-          advances={advances}
-          fundsReceived={fundsReceived}
-          invoices={invoices}
-          userRole={userRole as UserRole}
-          isAdminView={userRole === UserRole.ADMIN}
-          onBack={() => setSelectedSiteId(null)}
-          onEditSuccess={fetchSites}
-          onEntrySuccess={handleEntrySuccess}
-        />
-      ) : (
-        <div className="overflow-y-auto flex-1 pr-2">
-          {sites.length > 0 ? (
-            <SitesList 
-              sites={filteredSites}
-              onSelectSite={(siteId) => setSelectedSiteId(siteId)}
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          
+          {userRole === UserRole.ADMIN && selectedSupervisorId && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-md flex items-center">
+              <Users className="h-5 w-5 mr-2 text-blue-500" />
+              <span className="font-medium">
+                Viewing sites for: {getSelectedSupervisorName()}
+              </span>
+            </div>
+          )}
+          
+          {selectedSiteId ? (
+            <SiteDetail
+              site={sites.find(site => site.id === selectedSiteId) || null}
+              expenses={expenses}
+              advances={advances}
+              fundsReceived={fundsReceived}
+              invoices={invoices}
+              userRole={userRole as UserRole}
+              isAdminView={userRole === UserRole.ADMIN}
+              onBack={() => setSelectedSiteId(null)}
+              onEditSuccess={fetchSites}
+              onEntrySuccess={handleEntrySuccess}
             />
           ) : (
-            <CustomCard>
-              <div className="p-12 text-center">
-                <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <h3 className="text-lg font-medium mb-2">No Sites Added Yet</h3>
-                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                  {userRole === UserRole.ADMIN 
-                    ? "Create sites from the admin dashboard to start tracking expenses."
-                    : "No sites have been assigned to you yet."}
-                </p>
-              </div>
-            </CustomCard>
+            <div className="overflow-y-auto flex-1 pr-2">
+              {sites.length > 0 ? (
+                <SitesList 
+                  sites={filteredSites}
+                  onSelectSite={(siteId) => setSelectedSiteId(siteId)}
+                />
+              ) : (
+                <CustomCard>
+                  <div className="p-12 text-center">
+                    <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <h3 className="text-lg font-medium mb-2">No Sites Added Yet</h3>
+                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                      {userRole === UserRole.ADMIN 
+                        ? "Create sites from the admin dashboard to start tracking expenses."
+                        : "No sites have been assigned to you yet."}
+                    </p>
+                  </div>
+                </CustomCard>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      <SiteForm
-        isOpen={isSiteFormOpen}
-        onClose={() => setIsSiteFormOpen(false)}
-        onSubmit={handleCreateSite}
-        supervisorId={userRole === UserRole.ADMIN && selectedSupervisorId 
-          ? selectedSupervisorId 
-          : user?.id}
-      />
+          <SiteForm
+            isOpen={isSiteFormOpen}
+            onClose={() => setIsSiteFormOpen(false)}
+            onSubmit={handleCreateSite}
+            supervisorId={userRole === UserRole.ADMIN && selectedSupervisorId 
+              ? selectedSupervisorId 
+              : user?.id}
+          />
+        </>
+      )}
     </div>
   );
 };

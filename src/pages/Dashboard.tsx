@@ -1,152 +1,166 @@
-import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { supabase } from '@/integrations/supabase/client';
-import { SupervisorTransaction } from '@/lib/types';
-import CustomCard from '@/components/ui/CustomCard';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { IndianRupee } from 'lucide-react';
+import React from 'react';
+import PageTitle from '@/components/common/PageTitle';
+import BalanceCard from '@/components/dashboard/BalanceCard';
+import StatCard from '@/components/dashboard/StatCard';
+import HODebitsCard from '@/components/dashboard/HODebitsCard';
+import ExpenseChart from '@/components/dashboard/ExpenseChart';
+import RecentActivity from '@/components/dashboard/RecentActivity';
+import { BarChart3, IndianRupee, FileText, Wallet, Building2, ArrowRight } from 'lucide-react';
+import { Activity, ActivityType, BalanceSummary, ChartDataPoint } from '@/lib/types';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 
-interface SupervisorTransactionHistoryProps {
-  siteId: string;
-  className?: string;
-}
+const balanceData: BalanceSummary = {
+  totalBalance: 1254850,
+  fundsReceived: 2500000,
+  totalExpenditure: 850000,
+  totalAdvances: 395150,
+  debitsToWorker: 0,
+  invoicesPaid: 0,
+  pendingInvoices: 250000,
+};
 
-const SupervisorTransactionHistory: React.FC<SupervisorTransactionHistoryProps> = ({ siteId, className }) => {
-  const [transactions, setTransactions] = useState<SupervisorTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
+const hoDebitsTotal = 750000;
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [siteId]);
+const expenseChartData: ChartDataPoint[] = [
+  { name: 'Jan', value: 45000 },
+  { name: 'Feb', value: 52000 },
+  { name: 'Mar', value: 48000 },
+  { name: 'Apr', value: 61000 },
+  { name: 'May', value: 55000 },
+  { name: 'Jun', value: 67000 },
+  { name: 'Jul', value: 72000 },
+];
 
-  const fetchTransactions = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch transactions where this site is either the payer or receiver
-      const { data: transactionsData, error } = await supabase
-        .from('supervisor_transactions')
-        .select(`
-          *,
-          payer_supervisor:payer_supervisor_id(name),
-          receiver_supervisor:receiver_supervisor_id(name)
-        `)
-        .or(`payer_site_id.eq.${siteId},receiver_site_id.eq.${siteId}`)
-        .order('date', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching supervisor transactions:', error);
-        return;
-      }
-      
-      if (!transactionsData) {
-        setTransactions([]);
-        return;
-      }
+const categoryChartData: ChartDataPoint[] = [
+  { name: 'Material', value: 42 },
+  { name: 'Labor', value: 28 },
+  { name: 'Transport', value: 15 },
+  { name: 'Office', value: 8 },
+  { name: 'Misc', value: 7 },
+];
 
-      // Transform the data to match our SupervisorTransaction interface
-      const formattedTransactions: SupervisorTransaction[] = transactionsData.map(transaction => ({
-        id: transaction.id,
-        date: new Date(transaction.date),
-        payerSupervisorId: transaction.payer_supervisor_id,
-        payerSupervisorName: transaction.payer_supervisor?.name || 'Unknown',
-        receiverSupervisorId: transaction.receiver_supervisor_id,
-        receiverSupervisorName: transaction.receiver_supervisor?.name || 'Unknown',
-        payerSiteId: transaction.payer_site_id,
-        receiverSiteId: transaction.receiver_site_id,
-        amount: transaction.amount,
-        transactionType: transaction.transaction_type as 'funds_received' | 'advance_paid',
-        createdAt: new Date(transaction.created_at),
-      }));
-      
-      setTransactions(formattedTransactions);
-    } catch (error) {
-      console.error('Error in fetchTransactions:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+const recentActivities: Activity[] = [
+  {
+    id: '1',
+    type: ActivityType.FUNDS,
+    description: 'Funds received from Head Office',
+    amount: 500000,
+    date: new Date('2023-07-05'),
+    user: 'Admin',
+  },
+  {
+    id: '2',
+    type: ActivityType.EXPENSE,
+    description: 'Purchased cement and sand',
+    amount: 85000,
+    date: new Date('2023-07-04'),
+    user: 'Supervisor',
+  },
+  {
+    id: '3',
+    type: ActivityType.ADVANCE,
+    description: 'Advance to Raj Construction',
+    amount: 150000,
+    date: new Date('2023-07-03'),
+    user: 'Admin',
+  },
+  {
+    id: '4',
+    type: ActivityType.INVOICE,
+    description: 'Invoice from Steel Suppliers Ltd',
+    amount: 245000,
+    date: new Date('2023-07-02'),
+    user: 'Supervisor',
+  },
+  {
+    id: '5',
+    type: ActivityType.PAYMENT,
+    description: 'Payment to United Cement',
+    amount: 120000,
+    date: new Date('2023-07-01'),
+    user: 'Admin',
+  },
+];
+
+const Dashboard: React.FC = () => {
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   return (
-    <CustomCard className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg font-semibold">Transaction History</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="all">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="all">All Transactions</TabsTrigger>
-            <TabsTrigger value="recent">Recent</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="all">
-            {loading ? (
-              <p className="text-center py-4 text-sm text-muted-foreground">Loading transactions...</p>
-            ) : transactions.length === 0 ? (
-              <p className="text-center py-4 text-sm text-muted-foreground">No transactions found</p>
-            ) : (
-              <div className="space-y-3 mt-2">
-                {transactions.map((transaction) => (
-                  <div 
-                    key={transaction.id} 
-                    className="flex justify-between items-center p-3 border rounded-md text-sm hover:bg-muted/50"
-                  >
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {transaction.transactionType === 'funds_received' 
-                          ? `Funds from ${transaction.payerSupervisorName}` 
-                          : `Advance to ${transaction.receiverSupervisorName}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{format(transaction.date, 'dd MMM yyyy')}</p>
-                    </div>
-                    <div className={`font-medium ${transaction.transactionType === 'funds_received' && siteId === transaction.receiverSiteId ? 'text-green-600' : 'text-red-600'}`}>
-                      <div className="flex items-center">
-                        <IndianRupee className="h-3 w-3 mr-1" />
-                        {transaction.amount.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="recent">
-            {loading ? (
-              <p className="text-center py-4 text-sm text-muted-foreground">Loading transactions...</p>
-            ) : transactions.length === 0 ? (
-              <p className="text-center py-4 text-sm text-muted-foreground">No transactions found</p>
-            ) : (
-              <div className="space-y-3 mt-2">
-                {transactions.slice(0, 5).map((transaction) => (
-                  <div 
-                    key={transaction.id} 
-                    className="flex justify-between items-center p-3 border rounded-md text-sm hover:bg-muted/50"
-                  >
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {transaction.transactionType === 'funds_received' 
-                          ? `Funds from ${transaction.payerSupervisorName}` 
-                          : `Advance to ${transaction.receiverSupervisorName}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{format(transaction.date, 'dd MMM yyyy')}</p>
-                    </div>
-                    <div className={`font-medium ${transaction.transactionType === 'funds_received' && siteId === transaction.receiverSiteId ? 'text-green-600' : 'text-red-600'}`}>
-                      <div className="flex items-center">
-                        <IndianRupee className="h-3 w-3 mr-1" />
-                        {transaction.amount.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </CustomCard>
+    <div className="space-y-6 animate-fade-in pb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <PageTitle 
+          title="Dashboard" 
+          subtitle="Overview of your financial data and recent activities"
+          className="mb-0"
+        />
+        
+        <Button 
+          onClick={() => navigate('/expenses')}
+          className="self-start sm:self-center"
+        >
+          Go to Sites & Expenses
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <BalanceCard 
+          balanceData={balanceData} 
+          className="md:col-span-1"
+        />
+        
+        <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+          <StatCard 
+            title="Total Expenditure" 
+            value={balanceData.totalExpenditure} 
+            icon={BarChart3}
+            valuePrefix="₹"
+            trend={{ value: 12, isPositive: false, label: "from last month" }}
+          />
+          <StatCard 
+            title="Total Advances" 
+            value={balanceData.totalAdvances || 0} 
+            icon={Wallet}
+            valuePrefix="₹"
+            trend={{ value: 5, isPositive: true, label: "from last month" }}
+          />
+          <StatCard 
+            title="Pending Invoices" 
+            value={balanceData.pendingInvoices || 0} 
+            icon={FileText}
+            valuePrefix="₹"
+            trend={{ value: 3, isPositive: false, label: "from last month" }}
+          />
+          <HODebitsCard 
+            totalDebits={hoDebitsTotal}
+            trend={{ value: 8, isPositive: false, label: "from last month" }}
+          />
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <ExpenseChart 
+          data={expenseChartData} 
+          title="Monthly Expenses"
+          className="md:col-span-2"
+        />
+        <RecentActivity 
+          activities={recentActivities} 
+          className="md:col-span-1"
+        />
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+        <ExpenseChart 
+          data={categoryChartData} 
+          title="Expense Categories (%)"
+        />
+      </div>
+    </div>
   );
 };
 
-export default SupervisorTransactionHistory;
+export default Dashboard;

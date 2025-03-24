@@ -43,13 +43,11 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
         
         setLocalBalanceData({
           fundsReceived: data.funds_received || 0,
-          fundsReceivedFromSupervisor: data.funds_received_from_supervisor || 0,
           totalExpenditure: data.total_expenses_paid || 0,
           totalAdvances: data.total_advances_paid || 0,
           debitsToWorker: data.debit_to_worker || 0,
           invoicesPaid: data.invoices_paid || 0,
           pendingInvoices: localBalanceData.pendingInvoices || 0, // Keep existing value as it's not in the summary table
-          advancePaidToSupervisor: data.advance_paid_to_supervisor || 0,
           totalBalance: data.current_balance || 0
         });
       }
@@ -72,13 +70,11 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
 
   const safeBalanceData = {
     fundsReceived: localBalanceData.fundsReceived || 0,
-    fundsReceivedFromSupervisor: localBalanceData.fundsReceivedFromSupervisor || 0,
     totalExpenditure: localBalanceData.totalExpenditure || 0,
     totalAdvances: localBalanceData.totalAdvances || 0,
     debitsToWorker: localBalanceData.debitsToWorker || 0,
     invoicesPaid: localBalanceData.invoicesPaid || 0,
     pendingInvoices: localBalanceData.pendingInvoices || 0,
-    advancePaidToSupervisor: localBalanceData.advancePaidToSupervisor || 0,
     totalBalance: localBalanceData.totalBalance || 0
   };
 
@@ -114,11 +110,6 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
         </div>
         
         <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Funds Received from Supervisors:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.fundsReceivedFromSupervisor.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
           <p className="text-sm opacity-80 uppercase">Total Expenses paid by supervisor:</p>
           <p className="text-lg font-semibold">₹{safeBalanceData.totalExpenditure.toLocaleString()}</p>
         </div>
@@ -126,11 +117,6 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
         <div className="flex justify-between items-center">
           <p className="text-sm opacity-80 uppercase">Total Advances paid by supervisor:</p>
           <p className="text-lg font-semibold">₹{safeBalanceData.totalAdvances.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Advance Paid to Supervisors:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.advancePaidToSupervisor.toLocaleString()}</p>
         </div>
         
         <div className="flex justify-between items-center">

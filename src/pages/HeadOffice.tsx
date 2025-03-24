@@ -1,280 +1,268 @@
-import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { supabase } from '@/integrations/supabase/client';
-import { HeadOfficeTransaction } from '@/lib/types';
-import CustomCard from '@/components/ui/CustomCard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Calendar } from 'lucide-react';
-import { Calendar as CalendarIcon } from "lucide-react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
-import { useToast } from "@/components/ui/use-toast"
-import { CalendarDateRangePicker } from "@/components/ui/calendar"
-import { DateRange } from "react-day-picker"
 
-const HeadOffice = () => {
-  const [transactions, setTransactions] = useState<HeadOfficeTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [date, setDate] = useState<DateRange | undefined>({
-    from: new Date(),
-    to: new Date(),
-  })
-  const [supervisorId, setSupervisorId] = useState('');
-  const [supervisorName, setSupervisorName] = useState('');
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
-  const { toast } = useToast()
+import React, { useState, useEffect } from 'react';
+import PageTitle from '@/components/common/PageTitle';
+import CustomCard from '@/components/ui/CustomCard';
+import { Search, Filter, Plus, Download, ChevronLeft, ChevronRight, Trash2, Edit2, AlertCircle } from 'lucide-react';
+import { format } from 'date-fns';
+import { HeadOfficeTransaction, FundsReceived, UserRole } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
+import { fetchSiteFundsReceived, deleteFundsReceived } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+// Mock data for demonstration
+const transactions: HeadOfficeTransaction[] = [
+  {
+    id: '1',
+    date: new Date('2023-07-15'),
+    supervisorId: '101',
+    supervisorName: 'Rajesh Kumar',
+    amount: 500000,
+    description: 'Monthly allocation for Site A',
+    createdAt: new Date('2023-07-15'),
+  },
+  {
+    id: '2',
+    date: new Date('2023-06-15'),
+    supervisorId: '101',
+    supervisorName: 'Rajesh Kumar',
+    amount: 450000,
+    description: 'Monthly allocation for Site A',
+    createdAt: new Date('2023-06-15'),
+  },
+  {
+    id: '3',
+    date: new Date('2023-05-15'),
+    supervisorId: '101',
+    supervisorName: 'Rajesh Kumar',
+    amount: 500000,
+    description: 'Monthly allocation for Site A',
+    createdAt: new Date('2023-05-15'),
+  },
+  {
+    id: '4',
+    date: new Date('2023-07-12'),
+    supervisorId: '102',
+    supervisorName: 'Sunil Verma',
+    amount: 350000,
+    description: 'Monthly allocation for Site B',
+    createdAt: new Date('2023-07-12'),
+  },
+  {
+    id: '5',
+    date: new Date('2023-06-12'),
+    supervisorId: '102',
+    supervisorName: 'Sunil Verma',
+    amount: 350000,
+    description: 'Monthly allocation for Site B',
+    createdAt: new Date('2023-06-12'),
+  },
+  {
+    id: '6',
+    date: new Date('2023-07-10'),
+    supervisorId: '103',
+    supervisorName: 'Amit Singh',
+    amount: 350000,
+    description: 'Monthly allocation for Site C',
+    createdAt: new Date('2023-07-10'),
+  },
+];
+
+const HeadOffice: React.FC = () => {
+  const { user } = useAuth();
+  const [allFunds, setAllFunds] = useState<FundsReceived[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedItemToDelete, setSelectedItemToDelete] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
-    fetchTransactions();
-  }, []);
+    // Load all funds received data when component mounts
+    if (user?.id && user?.role === UserRole.ADMIN) {
+      loadAllFundsReceived();
+    }
+  }, [user]);
 
-  const fetchTransactions = async () => {
+  const loadAllFundsReceived = async () => {
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('head_office_transactions')
-        .select('*')
-        .order('date', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching head office transactions:', error);
-        return;
-      }
-
-      if (!data) {
-        setTransactions([]);
-        return;
-      }
-
-      const formattedTransactions: HeadOfficeTransaction[] = data.map(transaction => ({
-        id: transaction.id,
-        date: new Date(transaction.date),
-        supervisorId: transaction.supervisor_id,
-        supervisorName: transaction.supervisor_name,
-        amount: transaction.amount,
-        description: transaction.description || '',
-        createdAt: new Date(transaction.created_at),
-      }));
-
-      setTransactions(formattedTransactions);
+      setIsLoading(true);
+      // In a real implementation, we would fetch all funds from all sites
+      // For now, this is a placeholder
+      const data = await fetchAllFundsReceived();
+      setAllFunds(data);
     } catch (error) {
-      console.error('Error in fetchTransactions:', error);
+      console.error('Error loading funds received:', error);
+      toast.error('Failed to load transactions');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const addDebit = async (debit: Omit<HeadOfficeTransaction, 'id' | 'createdAt' | 'date'>) => {
-    try {
-      const { data, error } = await supabase
-        .from('head_office_transactions')
-        .insert([
-          {
-            date: date?.from?.toISOString(),
-            supervisor_id: debit.supervisorId,
-            supervisor_name: debit.supervisorName,
-            amount: debit.amount,
-            description: debit.description,
-          },
-        ]);
+  // Placeholder function - in a real implementation, this would fetch from all sites
+  const fetchAllFundsReceived = async (): Promise<FundsReceived[]> => {
+    // Return the mock data for now
+    return transactions.map(t => ({
+      id: t.id,
+      siteId: '',
+      amount: t.amount,
+      date: t.date,
+      method: 'Bank Transfer',
+      reference: `Ref-${t.id}`,
+      createdAt: t.createdAt
+    }));
+  };
 
-      if (error) {
-        console.error('Error adding head office transaction:', error);
-        return { success: false, error };
+  const handleDelete = async () => {
+    if (!selectedItemToDelete || !user?.id) return;
+    
+    try {
+      console.log(`Attempting to delete fund with ID: ${selectedItemToDelete}`);
+      
+      // Make sure we have a valid ID before attempting to delete
+      if (!selectedItemToDelete || selectedItemToDelete.trim() === '') {
+        throw new Error('Invalid transaction ID');
       }
-
-      fetchTransactions();
-      return { success: true, data };
-    } catch (error: any) {
-      console.error('Error adding head office transaction:', error);
-      return { success: false, error: { message: error.message } };
-    }
-  };
-
-  const handleAddTransaction = async () => {
-    if (!date?.from || !supervisorId || !supervisorName || !amount) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please fill in all fields."
-      })
-      return;
-    }
-
-    try {
-      const result = await addDebit({
-        supervisorId,
-        supervisorName,
-        amount: parseFloat(amount),
-        description,
-      });
-
+      
+      const result = await deleteFundsReceived(selectedItemToDelete, user.id);
+      console.log('Delete result:', result);
+      
       if (result.success) {
-        toast({
-          title: "Success",
-          description: "Transaction added successfully",
-        })
-        setSupervisorId('');
-        setSupervisorName('');
-        setAmount('');
-        setDescription('');
+        // Update local state to remove the deleted item
+        setAllFunds(prevFunds => prevFunds.filter(fund => fund.id !== selectedItemToDelete));
+        toast.success('Transaction deleted successfully');
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.error?.message || 'Failed to add transaction'
-        })
+        // If we get here, it means the API call was successful but returned success: false
+        throw new Error('Failed to delete transaction: ' + (result.message || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error adding transaction:', error);
+      console.error('Error deleting transaction:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete transaction');
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setSelectedItemToDelete(null);
     }
+  };
+
+  const confirmDelete = (id: string) => {
+    console.log(`Confirming deletion of fund with ID: ${id}`);
+    setSelectedItemToDelete(id);
+    setIsDeleteDialogOpen(true);
   };
 
   return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-2xl font-bold mb-4">Head Office Transactions</h1>
-
-      <CustomCard className="mb-6">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-semibold">Add Transaction</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-[280px] justify-start text-left font-normal",
-                        !date?.from && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date?.from ? (
-                        date.to ? (
-                          `${format(date.from, "dd/MM/yyyy")} - ${format(date.to, "dd/MM/yyyy")}`
-                        ) : (
-                          format(date.from, "dd/MM/yyyy")
-                        )
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="center" side="bottom">
-                    <CalendarDateRangePicker
-                      date={date}
-                      onDateChange={setDate}
-                      numberOfMonths={1}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="supervisorId">Supervisor ID</Label>
-                <Input
-                  id="supervisorId"
-                  value={supervisorId}
-                  onChange={(e) => setSupervisorId(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="supervisorName">Supervisor Name</Label>
-                <Input
-                  id="supervisorName"
-                  value={supervisorName}
-                  onChange={(e) => setSupervisorName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-            <Button onClick={handleAddTransaction}>Add Transaction</Button>
-          </div>
-        </CardContent>
-      </CustomCard>
-
+    <div className="space-y-8 animate-fade-in">
+      <PageTitle 
+        title="Head Office Funds" 
+        subtitle="Track funds received from the head office"
+      />
+      
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="relative max-w-md">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+          <input 
+            type="text" 
+            placeholder="Search transactions..." 
+            className="py-2 pl-10 pr-4 border rounded-md w-full md:w-80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+          />
+        </div>
+        
+        <div className="flex flex-wrap gap-2">
+          <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors">
+            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+            Filter
+          </button>
+          <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors">
+            <Download className="h-4 w-4 mr-2 text-muted-foreground" />
+            Export
+          </button>
+          <button className="inline-flex items-center px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:bg-primary/90 transition-colors">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Transaction
+          </button>
+        </div>
+      </div>
+      
       <CustomCard>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-semibold">Transaction History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="text-center py-4 text-sm text-muted-foreground">Loading transactions...</p>
-          ) : transactions.length === 0 ? (
-            <p className="text-center py-4 text-sm text-muted-foreground">No transactions found</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Supervisor ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Supervisor Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Description
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {format(transaction.date, 'dd MMM yyyy')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {transaction.supervisorId}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {transaction.supervisorName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {transaction.amount.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4">
-                        {transaction.description}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="pb-3 pl-4 font-medium text-muted-foreground">Date</th>
+                <th className="pb-3 font-medium text-muted-foreground">Supervisor</th>
+                <th className="pb-3 font-medium text-muted-foreground">Amount</th>
+                <th className="pb-3 font-medium text-muted-foreground">Description</th>
+                <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((transaction) => (
+                <tr key={transaction.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                  <td className="py-4 pl-4 text-sm">{format(transaction.date, 'MMM dd, yyyy')}</td>
+                  <td className="py-4 text-sm">{transaction.supervisorName}</td>
+                  <td className="py-4 text-sm font-medium">₹{transaction.amount.toLocaleString()}</td>
+                  <td className="py-4 text-sm">{transaction.description}</td>
+                  <td className="py-4 pr-4 text-right">
+                    <div className="flex items-center justify-end space-x-2">
+                      <button className="p-1 rounded-md hover:bg-muted transition-colors">
+                        <Download className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                      {user?.role === UserRole.ADMIN && (
+                        <button 
+                          className="p-1 rounded-md hover:bg-red-100 transition-colors text-red-600"
+                          onClick={() => confirmDelete(transaction.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        <div className="flex items-center justify-between mt-4 border-t pt-4">
+          <p className="text-sm text-muted-foreground">Showing 1-6 of 6 entries</p>
+          <div className="flex items-center space-x-2">
+            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
+              <ChevronLeft className="h-5 w-5 text-muted-foreground" />
+            </button>
+            <button className="px-3 py-1 rounded-md bg-primary text-primary-foreground text-sm">1</button>
+            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
       </CustomCard>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
+              Confirm Deletion
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this transaction? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-500 text-white hover:bg-red-600">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

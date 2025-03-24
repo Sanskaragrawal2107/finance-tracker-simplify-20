@@ -1,4 +1,3 @@
-
 // User related types
 export enum UserRole {
   ADMIN = "admin",
@@ -105,7 +104,7 @@ export interface Expense {
   createdBy: string;
   createdAt: Date;
   siteId?: string; // Reference to the site
-  supervisorId?: string;
+  supervisorId: string;
 }
 
 export interface Advance {
@@ -174,35 +173,34 @@ export interface Invoice {
   invoiceNumber?: string; // Added for compatibility
   amount?: number;       // Added for compatibility
   status: PaymentStatus;
-  paymentBy?: string;    // Added for compatibility
 }
 
-// Balance Summary interface with new fields
+// Balance Summary interface
 export interface BalanceSummary {
   fundsReceived: number;
-  fundsReceivedFromSupervisor: number; // New field
   totalExpenditure: number;
   totalAdvances: number;
   debitsToWorker: number;
   invoicesPaid: number;
   pendingInvoices: number;
-  advancePaidToSupervisor: number; // New field
   totalBalance: number;
 }
 
-// New interface for supervisor transactions
-export interface SupervisorTransaction {
-  id: string;
+export interface ChartDataPoint {
+  name: string;
+  value: number;
+}
+
+export interface CategorySummary {
+  category: ExpenseCategory;
+  total: number;
+  percentage: number;
+}
+
+export interface DailyExpenseSummary {
   date: Date;
-  payerSupervisorId: string;
-  payerSupervisorName: string;
-  receiverSupervisorId: string;
-  receiverSupervisorName: string;
-  payerSiteId: string;
-  receiverSiteId: string;
-  amount: number;
-  transactionType: 'funds_received' | 'advance_paid';
-  createdAt: Date;
+  total: number;
+  categories: CategorySummary[];
 }
 
 // For recent activity feed
@@ -230,10 +228,4 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   created_at: Date;
-}
-
-// Chart data point for expense charts
-export interface ChartDataPoint {
-  name: string;
-  value: number;
 }

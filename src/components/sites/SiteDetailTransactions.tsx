@@ -1,10 +1,20 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Expense, Advance, FundsReceived, Invoice, UserRole, BankDetails, MaterialItem, Site, RecipientType } from '@/lib/types';
 import CustomCard from '@/components/ui/CustomCard';
 import InvoiceDetails from '@/components/invoices/InvoiceDetails';
-import { supabase } from '@/integrations/supabase/client';
+import { 
+  fetchSiteInvoices, 
+  fetchSiteExpenses,
+  fetchSiteAdvances,
+  fetchSiteFundsReceived,
+  deleteExpense, 
+  deleteAdvance, 
+  deleteFundsReceived, 
+  deleteInvoice 
+} from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ArrowUpRight, Check, Clock, User, Briefcase, UserCog, IndianRupee, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +44,6 @@ interface SiteDetailTransactionsProps {
   advances?: Advance[];
   fundsReceived?: FundsReceived[];
   onTransactionsUpdate?: () => void;
-  onEntrySuccess?: (entryType: string) => void;
 }
 
 const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
@@ -49,8 +58,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   expenses = [],
   advances = [],
   fundsReceived = [],
-  onTransactionsUpdate,
-  onEntrySuccess
+  onTransactionsUpdate
 }) => {
   console.info('SiteDetailTransactions props:', { 
     siteId, 
@@ -81,6 +89,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   const [selectedItemToDelete, setSelectedItemToDelete] = useState<{id: string, type: 'expense' | 'advance' | 'funds' | 'invoice'} | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
+  // Load all transaction data when component mounts or siteId changes
   useEffect(() => {
     if (!siteId) {
       console.error('No siteId provided to load transactions');
@@ -90,6 +99,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     loadAllTransactions();
   }, [siteId]);
 
+  // Update local state when props change
   useEffect(() => {
     console.log('Expenses prop updated with', expenses.length, 'items');
     setLocalExpenses(expenses);
@@ -125,53 +135,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     
     try {
       console.log('Fetching invoices for site:', siteId);
-      const { data, error } = await supabase
-        .from('site_invoices')
-        .select('*')
-        .eq('site_id', siteId);
-        
-      if (error) throw error;
-      
-      if (!data) {
-        setInvoices([]);
-        return;
-      }
-      
-      const transformedInvoices: Invoice[] = data.map(invoice => ({
-        id: invoice.id,
-        date: new Date(invoice.date),
-        partyId: invoice.party_id,
-        partyName: invoice.party_name,
-        material: invoice.material || '',
-        quantity: invoice.quantity,
-        rate: invoice.rate,
-        gstPercentage: invoice.gst_percentage,
-        grossAmount: invoice.gross_amount,
-        netAmount: invoice.net_amount,
-        materialItems: invoice.material_items ? invoice.material_items as MaterialItem[] : [],
-        bankDetails: invoice.bank_details || {
-          accountNumber: '',
-          bankName: '',
-          ifscCode: '',
-          email: '',
-          mobile: ''
-        },
-        billUrl: invoice.bill_url,
-        invoiceImageUrl: invoice.invoice_image_url || '',
-        paymentStatus: invoice.payment_status as PaymentStatus,
-        createdBy: invoice.created_by,
-        createdAt: new Date(invoice.created_at),
-        approverType: invoice.approver_type as "ho" | "supervisor",
-        siteId: invoice.site_id,
-        vendorName: invoice.vendor_name || invoice.party_name,
-        invoiceNumber: invoice.invoice_number || '',
-        amount: invoice.net_amount,
-        status: invoice.payment_status as PaymentStatus,
-        paymentBy: ''
-      }));
-      
-      setInvoices(transformedInvoices);
-      console.log('Invoices loaded successfully:', transformedInvoices.length);
+      const invoicesData = await fetchSiteInvoices(siteId);
+      console.log('Invoices data received:', invoicesData.length, 'items');
+      setInvoices(invoicesData as Invoice[]);
     } catch (error) {
       console.error('Error loading invoices:', error);
       setError('Failed to load invoices. Please try again.');
@@ -190,33 +156,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     
     try {
       console.log('Fetching expenses for site:', siteId);
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('site_id', siteId);
-        
-      if (error) throw error;
-      
-      if (!data) {
-        setLocalExpenses([]);
-        return;
-      }
-      
-      const transformedExpenses: Expense[] = data.map(expense => ({
-        id: expense.id,
-        date: new Date(expense.date),
-        description: expense.description,
-        category: expense.category,
-        amount: expense.amount,
-        status: expense.status as ApprovalStatus,
-        createdBy: expense.created_by,
-        createdAt: new Date(expense.created_at),
-        siteId: expense.site_id,
-        supervisorId: expense.supervisor_id
-      }));
-      
-      setLocalExpenses(transformedExpenses);
-      console.log('Expenses loaded successfully:', transformedExpenses.length);
+      const expensesData = await fetchSiteExpenses(siteId);
+      console.log('Expenses data received:', expensesData.length, 'items');
+      setLocalExpenses(expensesData as Expense[]);
     } catch (error) {
       console.error('Error loading expenses:', error);
     } finally {
@@ -234,35 +176,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     
     try {
       console.log('Fetching advances for site:', siteId);
-      const { data, error } = await supabase
-        .from('advances')
-        .select('*')
-        .eq('site_id', siteId);
-        
-      if (error) throw error;
-      
-      if (!data) {
-        setLocalAdvances([]);
-        return;
-      }
-      
-      const transformedAdvances: Advance[] = data.map(advance => ({
-        id: advance.id,
-        date: new Date(advance.date),
-        recipientId: advance.recipient_id,
-        recipientName: advance.recipient_name,
-        recipientType: advance.recipient_type as RecipientType,
-        purpose: advance.purpose as AdvancePurpose,
-        amount: advance.amount,
-        remarks: advance.remarks,
-        status: advance.status as ApprovalStatus,
-        createdBy: advance.created_by,
-        createdAt: new Date(advance.created_at),
-        siteId: advance.site_id
-      }));
-      
-      setLocalAdvances(transformedAdvances);
-      console.log('Advances loaded successfully:', transformedAdvances.length);
+      const advancesData = await fetchSiteAdvances(siteId);
+      console.log('Advances data received:', advancesData.length, 'items');
+      setLocalAdvances(advancesData as Advance[]);
     } catch (error) {
       console.error('Error loading advances:', error);
     } finally {
@@ -280,30 +196,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     
     try {
       console.log('Fetching funds received for site:', siteId);
-      const { data, error } = await supabase
-        .from('funds_received')
-        .select('*')
-        .eq('site_id', siteId);
-        
-      if (error) throw error;
-      
-      if (!data) {
-        setLocalFundsReceived([]);
-        return;
-      }
-      
-      const transformedFunds: FundsReceived[] = data.map(fund => ({
-        id: fund.id,
-        date: new Date(fund.date),
-        amount: fund.amount,
-        siteId: fund.site_id,
-        createdAt: new Date(fund.created_at),
-        reference: fund.reference,
-        method: fund.method
-      }));
-      
-      setLocalFundsReceived(transformedFunds);
-      console.log('Funds received loaded successfully:', transformedFunds.length);
+      const fundsReceivedData = await fetchSiteFundsReceived(siteId);
+      console.log('Funds received data received:', fundsReceivedData.length, 'items');
+      setLocalFundsReceived(fundsReceivedData as FundsReceived[]);
     } catch (error) {
       console.error('Error loading funds received:', error);
     } finally {
@@ -341,7 +236,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         return <User className="h-4 w-4 mr-1 text-muted-foreground" />;
       case RecipientType.SUBCONTRACTOR:
         return <Briefcase className="h-4 w-4 mr-1 text-muted-foreground" />;
-      case "supervisor" as RecipientType:
+      case RecipientType.SUPERVISOR:
         return <UserCog className="h-4 w-4 mr-1 text-muted-foreground" />;
       default:
         return null;
@@ -368,76 +263,56 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
       setIsLoading(prev => ({ ...prev, [selectedItemToDelete.type + 's']: true }));
       
       console.log(`Starting deletion process for ${selectedItemToDelete.type} with ID: ${selectedItemToDelete.id}`);
-      let success = false;
+      let result;
       
       switch (selectedItemToDelete.type) {
         case 'expense':
           console.log(`Deleting expense ${selectedItemToDelete.id}`);
-          const { error: expenseError } = await supabase
-            .from('expenses')
-            .delete()
-            .eq('id', selectedItemToDelete.id);
-            
-          if (expenseError) throw expenseError;
-          
-          setLocalExpenses(prevExpenses => 
-            prevExpenses.filter(expense => expense.id !== selectedItemToDelete.id)
-          );
-          success = true;
+          result = await deleteExpense(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalExpenses(prevExpenses => 
+              prevExpenses.filter(expense => expense.id !== selectedItemToDelete.id)
+            );
+            console.log('Expense deleted successfully from frontend state');
+          }
           break;
-          
         case 'advance':
           console.log(`Deleting advance ${selectedItemToDelete.id}`);
-          const { error: advanceError } = await supabase
-            .from('advances')
-            .delete()
-            .eq('id', selectedItemToDelete.id);
-            
-          if (advanceError) throw advanceError;
-          
-          setLocalAdvances(prevAdvances => 
-            prevAdvances.filter(advance => advance.id !== selectedItemToDelete.id)
-          );
-          success = true;
+          result = await deleteAdvance(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setLocalAdvances(prevAdvances => 
+              prevAdvances.filter(advance => advance.id !== selectedItemToDelete.id)
+            );
+            console.log('Advance deleted successfully from frontend state');
+          }
           break;
-          
         case 'funds':
           console.log(`Deleting funds received ${selectedItemToDelete.id}`);
-          const { error: fundsError } = await supabase
-            .from('funds_received')
-            .delete()
-            .eq('id', selectedItemToDelete.id);
-            
-          if (fundsError) throw fundsError;
-          
-          setLocalFundsReceived(prevFunds => 
-            prevFunds.filter(fund => fund.id !== selectedItemToDelete.id)
-          );
-          success = true;
+          result = await deleteFundsReceived(selectedItemToDelete.id, user.id);
+          console.log('Funds received deletion result:', result);
+          if (result.success) {
+            setLocalFundsReceived(prevFunds => 
+              prevFunds.filter(fund => fund.id !== selectedItemToDelete.id)
+            );
+            console.log('Funds received deleted successfully from frontend state');
+          }
           break;
-          
         case 'invoice':
           console.log(`Deleting invoice ${selectedItemToDelete.id}`);
-          const { error: invoiceError } = await supabase
-            .from('site_invoices')
-            .delete()
-            .eq('id', selectedItemToDelete.id);
-            
-          if (invoiceError) throw invoiceError;
-          
-          setInvoices(prevInvoices => 
-            prevInvoices.filter(invoice => invoice.id !== selectedItemToDelete.id)
-          );
-          success = true;
+          result = await deleteInvoice(selectedItemToDelete.id, user.id);
+          if (result.success) {
+            setInvoices(prevInvoices => 
+              prevInvoices.filter(invoice => invoice.id !== selectedItemToDelete.id)
+            );
+            console.log('Invoice deleted successfully from frontend state');
+          }
           break;
       }
       
-      if (success) {
-        toast.success('Transaction deleted successfully');
-        if (onTransactionsUpdate) {
-          console.log('Calling onTransactionsUpdate to refresh parent component data');
-          onTransactionsUpdate();
-        }
+      toast.success('Transaction deleted successfully');
+      if (onTransactionsUpdate) {
+        console.log('Calling onTransactionsUpdate to refresh parent component data');
+        onTransactionsUpdate();
       }
     } catch (error) {
       console.error('Error deleting transaction:', error);
@@ -455,6 +330,8 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   };
 
   const handleEdit = (id: string, type: 'expense' | 'advance' | 'funds' | 'invoice') => {
+    // Navigation to edit forms will be handled by the parent component
+    // For now, just log the action
     console.log(`Edit ${type} with ID: ${id}`);
     toast.info(`Edit functionality for ${type} will be implemented soon`);
   };

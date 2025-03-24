@@ -4,27 +4,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { 
-  CalendarIcon, 
-  Loader2, 
-  Check, 
-  ChevronsUpDown, 
-  Plus 
-} from "lucide-react";
+import { CalendarIcon, Plus, User, Briefcase, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/use-auth";
-import { 
-  AdvancePurpose, 
-  ApprovalStatus, 
-  RecipientType 
-} from "@/lib/types";
-import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -38,6 +24,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -46,66 +39,40 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Advance, AdvancePurpose, RecipientType, ApprovalStatus } from "@/lib/types";
+import SearchableDropdown from '../expenses/SearchableDropdown';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/use-auth';
 
 interface AdvanceFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (advance: Partial<Advance>) => void;
-  siteId?: string;
+  siteId: string;
 }
 
-interface Advance {
+// Defining the interface locally to avoid conflicts
+interface ContractorOption {
   id: string;
-  date: Date;
-  recipientId?: string;
-  recipientName: string;
-  recipientType: RecipientType;
-  purpose: AdvancePurpose;
-  amount: number;
-  remarks?: string;
-  status: ApprovalStatus;
-  createdBy: string;
-  createdAt: Date;
-  siteId?: string;
-}
-
-// Options for recipient types
-interface Option {
-  value: string;
-  label: string;
+  name: string;
 }
 
 const formSchema = z.object({
   date: z.date({
     required_error: "Date is required",
   }),
-  recipientName: z.string({
-    required_error: "Recipient name is required",
-  }).min(2, {
-    message: "Recipient name must be at least 2 characters",
-  }),
   recipientType: z.nativeEnum(RecipientType, {
-    required_error: "Recipient type is required",
+    required_error: "Please select recipient type",
+  }),
+  recipientName: z.string().min(2, {
+    message: "Name must be at least 2 characters",
   }),
   purpose: z.nativeEnum(AdvancePurpose, {
     required_error: "Purpose is required",
   }),
-  amount: z.coerce.number({
+  amount: z.number({
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }).positive({
@@ -116,57 +83,83 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-// Predefined options for different recipient types
-const recipientTypeOptions: Option[] = [
-  { value: RecipientType.WORKER, label: 'Worker' },
-  { value: RecipientType.SUBCONTRACTOR, label: 'Subcontractor' },
-  // Removed Supervisor option as requested
-];
-
-const purposeOptions: Option[] = [
-  { value: AdvancePurpose.ADVANCE, label: 'Advance' },
-  { value: AdvancePurpose.SAFETY_SHOES, label: 'Safety Shoes' },
-  { value: AdvancePurpose.TOOLS, label: 'Tools' },
-  { value: AdvancePurpose.OTHER, label: 'Other' },
-];
-
 const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [recipientOptions, setRecipientOptions] = useState<ContractorOption[]>([]);
+  const [showRemarks, setShowRemarks] = useState(false);
+  const [contractors, setContractors] = useState<ContractorOption[]>([]);
   const { user } = useAuth();
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       date: new Date(),
-      recipientName: '',
       recipientType: undefined,
+      recipientName: "",
       purpose: undefined,
       amount: undefined,
-      remarks: '',
+      remarks: "",
     },
   });
 
-  // Reset form when dialog opens
   useEffect(() => {
-    if (isOpen) {
-      form.reset({
-        date: new Date(),
-        recipientName: '',
-        recipientType: undefined,
-        purpose: undefined,
-        amount: undefined,
-        remarks: '',
-      });
+    const fetchContractors = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('contractors')
+          .select('id, name');
+        
+        if (error) {
+          console.error('Error fetching contractors:', error);
+          toast.error('Failed to load contractors');
+          return;
+        }
+        
+        if (data) {
+          console.log('Fetched contractors:', data);
+          setContractors(data);
+        }
+      } catch (error) {
+        console.error('Error fetching contractors:', error);
+        toast.error('Failed to load contractors');
+      }
+    };
+    
+    fetchContractors();
+  }, []);
+
+  useEffect(() => {
+    const recipientType = form.watch("recipientType");
+    
+    if (recipientType === RecipientType.SUBCONTRACTOR) {
+      setRecipientOptions(contractors);
+    } else {
+      setRecipientOptions([]);
     }
-  }, [isOpen, form]);
+
+    if (form.getValues("recipientName")) {
+      form.setValue("recipientName", "");
+    }
+  }, [form.watch("recipientType"), contractors]);
+
+  useEffect(() => {
+    const purpose = form.watch("purpose");
+    setShowRemarks(purpose === AdvancePurpose.OTHER);
+  }, [form.watch("purpose")]);
+
+  const handleCalendarSelect = (date: Date | undefined) => {
+    if (date) {
+      form.setValue("date", date);
+      setIsCalendarOpen(false);
+    }
+  };
 
   const handleSubmit = async (values: FormValues) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-
     try {
-      // Get current user ID from auth session
+      if (isSubmitting) return;
+      setIsSubmitting(true);
+      
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || user?.id;
       
@@ -174,27 +167,21 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         toast.error("User authentication error. Please sign in again.");
         throw new Error("User authentication error. Please sign in again.");
       }
-
-      if (!siteId) {
-        toast.error("Site ID is required. Please select a site first.");
-        throw new Error("Site ID is required");
-      }
-
-      // Prepare data for supabase
+      
       const advanceData = {
-        date: values.date.toISOString(),
+        site_id: siteId,
+        date: values.date instanceof Date ? values.date.toISOString() : new Date().toISOString(),
         recipient_name: values.recipientName,
         recipient_type: values.recipientType,
         purpose: values.purpose,
         amount: values.amount,
-        remarks: values.remarks || null,
-        site_id: siteId,
+        remarks: values.remarks || "",
         created_by: userId,
         created_at: new Date().toISOString(),
-        status: ApprovalStatus.APPROVED
+        status: ApprovalStatus.PENDING,
       };
-
-      console.log("Submitting advance data:", advanceData);
+      
+      console.log("Submitting advance:", advanceData);
       
       const { error } = await supabase
         .from('advances')
@@ -206,62 +193,67 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         throw error;
       }
       
-      onSubmit({
-        date: values.date,
-        recipientName: values.recipientName,
-        recipientType: values.recipientType,
-        purpose: values.purpose,
-        amount: values.amount,
-        remarks: values.remarks,
-        siteId
-      });
+      toast.success("Advance submitted successfully");
       
-      form.reset();
+      const advanceWithDateObj: Partial<Advance> = {
+        date: new Date(advanceData.date),
+        recipientName: advanceData.recipient_name,
+        recipientType: advanceData.recipient_type,
+        purpose: advanceData.purpose,
+        amount: advanceData.amount,
+        remarks: advanceData.remarks,
+        status: advanceData.status,
+        createdBy: advanceData.created_by,
+        createdAt: new Date(advanceData.created_at),
+        siteId: advanceData.site_id,
+      };
+      
+      onSubmit(advanceWithDateObj);
       onClose();
-      toast.success("Advance added successfully");
     } catch (error) {
       console.error('Error submitting advance:', error);
-      toast.error('Failed to add advance: ' + (error instanceof Error ? error.message : "Unknown error"));
+      toast.error('Failed to submit advance: ' + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const shouldDisableForm = isSubmitting;
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle>ADD NEW ADVANCE</DialogTitle>
+          <DialogTitle>New Advance</DialogTitle>
           <DialogDescription>
-            Enter the details of the advance payment.
+            Enter the details for the new advance payment.
           </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            {/* Date picker field */}
             <FormField
               control={form.control}
               name="date"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>DATE</FormLabel>
-                  <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                  <FormLabel>Date</FormLabel>
+                  <Popover 
+                    open={isCalendarOpen}
+                    onOpenChange={setIsCalendarOpen}
+                  >
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
                           variant={"outline"}
                           className={cn(
-                            "w-full pl-3 text-left font-normal uppercase",
+                            "w-full pl-3 text-left font-normal",
                             !field.value && "text-muted-foreground"
                           )}
-                          disabled={shouldDisableForm}
                         >
                           {field.value ? (
-                            format(field.value, "PPP").toUpperCase()
+                            format(field.value, "PPP")
                           ) : (
-                            <span>SELECT A DATE</span>
+                            <span>Select a date</span>
                           )}
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
@@ -271,10 +263,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={(date) => {
-                          field.onChange(date);
-                          setDatePickerOpen(false);
-                        }}
+                        onSelect={handleCalendarSelect}
                         initialFocus
                         className="pointer-events-auto"
                       />
@@ -285,48 +274,74 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
               )}
             />
 
+            {/* Recipient Type field - REMOVED SUPERVISOR OPTION AS REQUESTED */}
             <FormField
               control={form.control}
-              name="recipientName"
+              name="recipientType"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>RECIPIENT NAME</FormLabel>
+                <FormItem className="space-y-3">
+                  <FormLabel>Recipient Type</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Enter recipient name"
-                      {...field}
-                      disabled={shouldDisableForm}
-                    />
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      className="flex flex-wrap space-x-0 sm:space-x-4 gap-y-2"
+                    >
+                      <FormItem className="flex items-center space-x-2 space-y-0">
+                        <FormControl>
+                          <RadioGroupItem value={RecipientType.WORKER} />
+                        </FormControl>
+                        <FormLabel className="font-normal cursor-pointer flex items-center">
+                          <User className="h-4 w-4 mr-1" />
+                          Worker
+                        </FormLabel>
+                      </FormItem>
+                      <FormItem className="flex items-center space-x-2 space-y-0">
+                        <FormControl>
+                          <RadioGroupItem value={RecipientType.SUBCONTRACTOR} />
+                        </FormControl>
+                        <FormLabel className="font-normal cursor-pointer flex items-center">
+                          <Briefcase className="h-4 w-4 mr-1" />
+                          Subcontractor
+                        </FormLabel>
+                      </FormItem>
+                    </RadioGroup>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
+            {/* Recipient Name field */}
             <FormField
               control={form.control}
-              name="recipientType"
+              name="recipientName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>RECIPIENT TYPE</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    disabled={shouldDisableForm}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select recipient type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {recipientTypeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Recipient Name</FormLabel>
+                  <FormControl>
+                    {form.watch("recipientType") === RecipientType.WORKER ? (
+                      <Input 
+                        placeholder="Enter worker name" 
+                        {...field} 
+                      />
+                    ) : form.watch("recipientType") === RecipientType.SUBCONTRACTOR ? (
+                      <SearchableDropdown
+                        options={recipientOptions}
+                        selectedVal={field.value}
+                        handleChange={(val) => field.onChange(val)}
+                        placeholder="Select subcontractor"
+                        emptyMessage="No subcontractors found"
+                        className="w-full"
+                      />
+                    ) : (
+                      <Input 
+                        placeholder="First select a recipient type" 
+                        disabled={true} 
+                        {...field}
+                      />
+                    )}
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -337,11 +352,11 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
               name="purpose"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>PURPOSE</FormLabel>
+                  <FormLabel>Purpose</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    disabled={shouldDisableForm}
+                    value={field.value}
+                    defaultValue=""
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -349,11 +364,10 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {purposeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value={AdvancePurpose.ADVANCE}>Advance</SelectItem>
+                      <SelectItem value={AdvancePurpose.SAFETY_SHOES}>Safety Shoes</SelectItem>
+                      <SelectItem value={AdvancePurpose.TOOLS}>Tools</SelectItem>
+                      <SelectItem value={AdvancePurpose.OTHER}>Other</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -361,12 +375,32 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
               )}
             />
 
+            {showRemarks && (
+              <FormField
+                control={form.control}
+                name="remarks"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Remarks</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Enter remarks for this advance..." 
+                        className="resize-none" 
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="amount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>AMOUNT (₹)</FormLabel>
+                  <FormLabel>Amount (₹)</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -376,25 +410,6 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                         const value = e.target.value;
                         field.onChange(value ? parseFloat(value) : undefined);
                       }}
-                      disabled={shouldDisableForm}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="remarks"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>REMARKS (OPTIONAL)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Enter any additional information"
-                      {...field}
-                      disabled={shouldDisableForm}
                     />
                   </FormControl>
                   <FormMessage />
@@ -404,16 +419,19 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
 
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
-                CANCEL
+                Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    SUBMITTING...
+                    Submitting...
                   </>
                 ) : (
-                  "SUBMIT"
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Advance
+                  </>
                 )}
               </Button>
             </DialogFooter>

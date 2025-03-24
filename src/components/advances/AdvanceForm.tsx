@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -52,7 +53,8 @@ interface AdvanceFormProps {
   siteId: string;
 }
 
-interface Option {
+// Defining the interface locally to avoid conflicts
+interface ContractorOption {
   id: string;
   name: string;
 }
@@ -84,9 +86,9 @@ type FormValues = z.infer<typeof formSchema>;
 const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [recipientOptions, setRecipientOptions] = useState<Option[]>([]);
+  const [recipientOptions, setRecipientOptions] = useState<ContractorOption[]>([]);
   const [showRemarks, setShowRemarks] = useState(false);
-  const [contractors, setContractors] = useState<Option[]>([]);
+  const [contractors, setContractors] = useState<ContractorOption[]>([]);
   const { user } = useAuth();
   
   const form = useForm<FormValues>({
@@ -176,7 +178,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         remarks: values.remarks || "",
         created_by: userId,
         created_at: new Date().toISOString(),
-        status: "pending",
+        status: ApprovalStatus.PENDING,
       };
       
       console.log("Submitting advance:", advanceData);
@@ -194,9 +196,16 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       toast.success("Advance submitted successfully");
       
       const advanceWithDateObj: Partial<Advance> = {
-        ...advanceData,
         date: new Date(advanceData.date),
+        recipientName: advanceData.recipient_name,
+        recipientType: advanceData.recipient_type,
+        purpose: advanceData.purpose,
+        amount: advanceData.amount,
+        remarks: advanceData.remarks,
+        status: advanceData.status,
+        createdBy: advanceData.created_by,
         createdAt: new Date(advanceData.created_at),
+        siteId: advanceData.site_id,
       };
       
       onSubmit(advanceWithDateObj);
@@ -221,6 +230,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            {/* Date picker field */}
             <FormField
               control={form.control}
               name="date"
@@ -264,6 +274,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
               )}
             />
 
+            {/* Recipient Type field - REMOVED SUPERVISOR OPTION AS REQUESTED */}
             <FormField
               control={form.control}
               name="recipientType"
@@ -301,6 +312,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
               )}
             />
 
+            {/* Recipient Name field */}
             <FormField
               control={form.control}
               name="recipientName"

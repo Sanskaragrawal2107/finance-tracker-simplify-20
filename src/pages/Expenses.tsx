@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
-import { Search, Filter, Building, User, Users, CheckSquare } from 'lucide-react';
+import { Search, Filter, Building, User, Users, CheckSquare, Plus } from 'lucide-react';
 import { 
   Expense, 
   ExpenseCategory, 
@@ -16,7 +16,8 @@ import {
   RecipientType,
   PaymentStatus,
   MaterialItem,
-  BankDetails
+  BankDetails,
+  SupervisorTransactionType
 } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -29,6 +30,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { SupervisorTransactionForm } from '@/components/transactions/SupervisorTransactionForm';
 
 import { supervisors } from '@/data/supervisors';
 
@@ -59,6 +61,8 @@ const Expenses: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'completed'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [hasFetchedData, setHasFetchedData] = useState(false);
+  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
+  const [selectedTransactionType, setSelectedTransactionType] = useState<SupervisorTransactionType | null>(null);
 
   const fetchSites = useCallback(async () => {
     if (!user) {
@@ -70,7 +74,6 @@ const Expenses: React.FC = () => {
     
     setIsLoading(true);
     
-    // Add fetch timeout safety
     const fetchTimeout = setTimeout(() => {
       console.warn('Sites data fetch timeout after 10 seconds');
       setIsLoading(false);
@@ -326,65 +329,7 @@ const Expenses: React.FC = () => {
       
       if (data) {
         console.log(`Successfully fetched ${data.length} invoices`);
-        const transformedInvoices: Invoice[] = data.map(invoice => {
-          // Parse material_items as MaterialItem[]
-          let materialItems: MaterialItem[] = [];
-          if (invoice.material_items) {
-            try {
-              if (typeof invoice.material_items === 'string') {
-                materialItems = JSON.parse(invoice.material_items);
-              } else if (Array.isArray(invoice.material_items)) {
-                materialItems = invoice.material_items as unknown as MaterialItem[];
-              }
-            } catch (e) {
-              console.error('Error parsing material items:', e);
-            }
-          }
-
-          // Parse bank_details as BankDetails
-          let bankDetails: BankDetails = {
-            bankName: '',
-            accountNumber: '',
-            ifscCode: ''
-          };
-          
-          if (invoice.bank_details) {
-            try {
-              if (typeof invoice.bank_details === 'string') {
-                bankDetails = JSON.parse(invoice.bank_details);
-              } else if (typeof invoice.bank_details === 'object') {
-                bankDetails = invoice.bank_details as unknown as BankDetails;
-              }
-            } catch (e) {
-              console.error('Error parsing bank details:', e);
-            }
-          }
-
-          return {
-            id: invoice.id,
-            date: new Date(invoice.date),
-            partyId: invoice.party_id || '',
-            partyName: invoice.party_name || '',
-            vendorName: invoice.party_name || '',
-            invoiceNumber: invoice.id.slice(0, 8), // Generate invoice number from ID if not available
-            material: invoice.material || '',
-            quantity: Number(invoice.quantity) || 0,
-            rate: Number(invoice.rate) || 0,
-            gstPercentage: Number(invoice.gst_percentage) || 0,
-            grossAmount: Number(invoice.gross_amount) || 0,
-            netAmount: Number(invoice.net_amount) || 0,
-            amount: Number(invoice.net_amount) || 0,
-            materialItems,
-            bankDetails,
-            billUrl: invoice.bill_url || '',
-            paymentStatus: invoice.payment_status || 'pending',
-            status: invoice.payment_status || 'pending',
-            createdBy: invoice.created_by || '',
-            createdAt: new Date(invoice.created_at),
-            approverType: invoice.approver_type || '',
-            siteId: invoice.site_id
-          };
-        });
+        const transformedInvoices: Invoice[] = mapInvoices(data);
         
         setInvoices(transformedInvoices);
         console.log('Fetched invoices:', transformedInvoices);
@@ -403,7 +348,7 @@ const Expenses: React.FC = () => {
       ...site,
       startDate: site.startDate instanceof Date ? site.startDate : new Date(site.startDate),
       completionDate: site.completionDate ? 
-        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completionDate)) 
+        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completion_date)) 
         : undefined
     };
   };
@@ -523,7 +468,6 @@ const Expenses: React.FC = () => {
         
         setExpenses(prevExpenses => [expenseWithId, ...prevExpenses]);
         toast.success("Expense added successfully");
-        // Re-fetch expenses to ensure the list is up-to-date
         fetchSiteExpenses(selectedSiteId);
       }
     } catch (error: any) {
@@ -576,7 +520,6 @@ const Expenses: React.FC = () => {
         
         setAdvances(prevAdvances => [advanceWithId, ...prevAdvances]);
         toast.success("Advance added successfully");
-        // Re-fetch advances to ensure the list is up-to-date
         fetchSiteAdvances(selectedSiteId);
       }
     } catch (error: any) {
@@ -622,12 +565,12 @@ const Expenses: React.FC = () => {
         
         setFundsReceived(prevFunds => [fundWithId, ...prevFunds]);
         
-        // Update the site's funds directly
-        const updatedFunds = (sites.find(site => site.id === selectedSiteId)?.funds || 0) + Number(fundWithId.amount);
+        const currentFunds = sites.find(site => site.id === selectedSiteId)?.funds || 0;
+        const newFundsTotal = currentFunds + Number(data.amount);
         
         const { error: updateError } = await supabase
           .from('sites')
-          .update({ funds: updatedFunds })
+          .update({ funds: newFundsTotal })
           .eq('id', selectedSiteId);
           
         if (updateError) {
@@ -636,7 +579,7 @@ const Expenses: React.FC = () => {
           setSites(prevSites =>
             prevSites.map(site =>
               site.id === selectedSiteId
-                ? { ...site, funds: updatedFunds }
+                ? { ...site, funds: newFundsTotal }
                 : site
             )
           );
@@ -644,7 +587,6 @@ const Expenses: React.FC = () => {
         
         toast.success("Funds received recorded successfully");
         
-        // Re-fetch data to ensure everything is up-to-date
         fetchSites();
         fetchSiteFundsReceived(selectedSiteId);
       }
@@ -735,13 +677,10 @@ const Expenses: React.FC = () => {
       const site = sites.find(s => s.id === siteId);
       
       if (site) {
-        // Calculate total expenses
         const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
         
-        // Calculate total funds received
         const totalFunds = fundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
         
-        // Calculate total advances (excluding debit to worker)
         const totalAdvances = advances.reduce((sum, advance) => {
           if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;
@@ -749,7 +688,6 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
-        // Calculate total debit to worker advances
         const totalDebitToWorker = advances.reduce((sum, advance) => {
           if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;
@@ -757,12 +695,10 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
-        // Calculate supervisor invoices (only those paid by supervisor)
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.payment_by === 'supervisor')
+          .filter(invoice => invoice.approverType === 'supervisor')
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
-        // Calculate total balance
         const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;
         
         return {
@@ -771,7 +707,7 @@ const Expenses: React.FC = () => {
           totalAdvances,
           debitsToWorker: totalDebitToWorker,
           invoicesPaid: supervisorInvoiceTotal,
-          pendingInvoices: 0, // This will be implemented later
+          pendingInvoices: 0,
           totalBalance: totalBalance
         };
       }
@@ -843,7 +779,6 @@ const Expenses: React.FC = () => {
     
     console.log('Refreshing all data for site:', siteId);
     
-    // Use individual try-catch blocks to ensure partial failure doesn't block everything
     try {
       await fetchSiteExpenses(siteId);
     } catch (error) {
@@ -886,6 +821,34 @@ const Expenses: React.FC = () => {
     }
   };
 
+  const mapInvoices = (data: any[]) => {
+    return data.map(invoice => ({
+      id: invoice.id,
+      date: new Date(invoice.date),
+      partyId: invoice.party_id,
+      partyName: invoice.party_name,
+      vendorName: invoice.party_name,
+      invoiceNumber: invoice.party_id,
+      material: invoice.material,
+      quantity: invoice.quantity,
+      rate: invoice.rate,
+      gstPercentage: invoice.gst_percentage,
+      grossAmount: invoice.gross_amount,
+      netAmount: invoice.net_amount,
+      materialItems: invoice.material_items ? JSON.parse(invoice.material_items) : [],
+      bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details) : {},
+      billUrl: invoice.bill_url || '',
+      invoiceImageUrl: invoice.invoice_image_url || '',
+      paymentStatus: invoice.payment_status,
+      createdBy: invoice.created_by || '',
+      createdAt: new Date(invoice.created_at),
+      approverType: invoice.approver_type || "ho",
+      siteId: invoice.site_id,
+      status: invoice.payment_status,
+      payment_by: invoice.payment_by || ''
+    }));
+  };
+
   return (
     <div className="container py-6 space-y-6 max-w-7xl">
       {!user ? (
@@ -905,7 +868,6 @@ const Expenses: React.FC = () => {
             subtitle="Manage your construction sites and expenses"
           />
           
-          {/* Filter and Search Controls */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
             <div className="flex flex-col md:flex-row md:items-center gap-4 w-full md:w-auto">
               <div className="relative max-w-md w-full">
@@ -1060,6 +1022,37 @@ const Expenses: React.FC = () => {
               ? selectedSupervisorId 
               : user?.id}
           />
+
+          {showSupervisorTransactionForm && (
+            <SupervisorTransactionForm
+              onSuccess={() => {
+                setShowSupervisorTransactionForm(false);
+                fetchSites();
+              }}
+              onClose={() => setShowSupervisorTransactionForm(false)}
+              transactionType={selectedTransactionType}
+            />
+          )}
+
+          {user?.role !== UserRole.VIEWER && (
+            <>
+              <Button size="sm" className="h-9" onClick={() => setIsSiteFormOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Site
+              </Button>
+              <Button 
+                size="sm" 
+                className="h-9" 
+                onClick={() => {
+                  setSelectedTransactionType(SupervisorTransactionType.ADVANCE_PAID);
+                  setShowSupervisorTransactionForm(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Advance Paid to Supervisor
+              </Button>
+            </>
+          )}
         </>
       )}
     </div>

@@ -1,268 +1,316 @@
-
 import React, { useState, useEffect } from 'react';
-import PageTitle from '@/components/common/PageTitle';
-import CustomCard from '@/components/ui/CustomCard';
-import { Search, Filter, Plus, Download, ChevronLeft, ChevronRight, Trash2, Edit2, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { HeadOfficeTransaction, FundsReceived, UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import { fetchSiteFundsReceived, deleteFundsReceived } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { format } from 'date-fns';
+import { HeadOfficeTransaction, UserRole } from '@/lib/types';
+import PageTitle from '@/components/common/PageTitle';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { CalendarIcon } from 'lucide-react';
 
-// Mock data for demonstration
-const transactions: HeadOfficeTransaction[] = [
-  {
-    id: '1',
-    date: new Date('2023-07-15'),
-    supervisorId: '101',
-    supervisorName: 'Rajesh Kumar',
-    amount: 500000,
-    description: 'Monthly allocation for Site A',
-    createdAt: new Date('2023-07-15'),
-  },
-  {
-    id: '2',
-    date: new Date('2023-06-15'),
-    supervisorId: '101',
-    supervisorName: 'Rajesh Kumar',
-    amount: 450000,
-    description: 'Monthly allocation for Site A',
-    createdAt: new Date('2023-06-15'),
-  },
-  {
-    id: '3',
-    date: new Date('2023-05-15'),
-    supervisorId: '101',
-    supervisorName: 'Rajesh Kumar',
-    amount: 500000,
-    description: 'Monthly allocation for Site A',
-    createdAt: new Date('2023-05-15'),
-  },
-  {
-    id: '4',
-    date: new Date('2023-07-12'),
-    supervisorId: '102',
-    supervisorName: 'Sunil Verma',
-    amount: 350000,
-    description: 'Monthly allocation for Site B',
-    createdAt: new Date('2023-07-12'),
-  },
-  {
-    id: '5',
-    date: new Date('2023-06-12'),
-    supervisorId: '102',
-    supervisorName: 'Sunil Verma',
-    amount: 350000,
-    description: 'Monthly allocation for Site B',
-    createdAt: new Date('2023-06-12'),
-  },
-  {
-    id: '6',
-    date: new Date('2023-07-10'),
-    supervisorId: '103',
-    supervisorName: 'Amit Singh',
-    amount: 350000,
-    description: 'Monthly allocation for Site C',
-    createdAt: new Date('2023-07-10'),
-  },
-];
-
-const HeadOffice: React.FC = () => {
+const HeadOffice = () => {
   const { user } = useAuth();
-  const [allFunds, setAllFunds] = useState<FundsReceived[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedItemToDelete, setSelectedItemToDelete] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [transactions, setTransactions] = useState<HeadOfficeTransaction[]>([]);
+  const [isAddingTransaction, setIsAddingTransaction] = useState(false);
+  const [newTransaction, setNewTransaction] = useState({
+    date: new Date(),
+    supervisorId: '',
+    supervisorName: '',
+    amount: '',
+    description: '',
+  });
+  const [supervisors, setSupervisors] = useState<{ id: string; name: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalFundsDistributed, setTotalFundsDistributed] = useState(0);
 
   useEffect(() => {
-    // Load all funds received data when component mounts
-    if (user?.id && user?.role === UserRole.ADMIN) {
-      loadAllFundsReceived();
+    if (user) {
+      fetchTransactions();
+      fetchSupervisors();
     }
   }, [user]);
 
-  const loadAllFundsReceived = async () => {
+  const fetchTransactions = async () => {
     try {
       setIsLoading(true);
-      // In a real implementation, we would fetch all funds from all sites
-      // For now, this is a placeholder
-      const data = await fetchAllFundsReceived();
-      setAllFunds(data);
-    } catch (error) {
-      console.error('Error loading funds received:', error);
-      toast.error('Failed to load transactions');
+      
+      try {
+        const { data, error } = await supabase
+          .from('supervisor_transactions') // Changed from head_office_transactions
+          .select('*')
+          .order('date', { ascending: false });
+          
+        if (error) throw error;
+        
+        if (data) {
+          const formattedTransactions: HeadOfficeTransaction[] = data.map(transaction => ({
+            id: transaction.id,
+            date: new Date(transaction.date),
+            supervisorId: transaction.receiver_supervisor_id,
+            supervisorName: transaction.receiver_supervisor_name || 'Unknown',
+            amount: transaction.amount,
+            description: transaction.description || '',
+            createdAt: new Date(transaction.created_at)
+          }));
+          
+          setTransactions(formattedTransactions);
+          
+          // Calculate total funds distributed
+          const total = formattedTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+          setTotalFundsDistributed(total);
+        }
+      } catch (error) {
+        console.error('Error fetching transactions:', error);
+        toast.error('Failed to load transactions');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Placeholder function - in a real implementation, this would fetch from all sites
-  const fetchAllFundsReceived = async (): Promise<FundsReceived[]> => {
-    // Return the mock data for now
-    return transactions.map(t => ({
-      id: t.id,
-      siteId: '',
-      amount: t.amount,
-      date: t.date,
-      method: 'Bank Transfer',
-      reference: `Ref-${t.id}`,
-      createdAt: t.createdAt
-    }));
-  };
-
-  const handleDelete = async () => {
-    if (!selectedItemToDelete || !user?.id) return;
-    
+  const fetchSupervisors = async () => {
     try {
-      console.log(`Attempting to delete fund with ID: ${selectedItemToDelete}`);
-      
-      // Make sure we have a valid ID before attempting to delete
-      if (!selectedItemToDelete || selectedItemToDelete.trim() === '') {
-        throw new Error('Invalid transaction ID');
-      }
-      
-      const result = await deleteFundsReceived(selectedItemToDelete, user.id);
-      console.log('Delete result:', result);
-      
-      if (result.success) {
-        // Update local state to remove the deleted item
-        setAllFunds(prevFunds => prevFunds.filter(fund => fund.id !== selectedItemToDelete));
-        toast.success('Transaction deleted successfully');
-      } else {
-        // If we get here, it means the API call was successful but returned success: false
-        throw new Error('Failed to delete transaction: ' + (result.message || 'Unknown error'));
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('role', 'supervisor');
+
+      if (error) throw error;
+
+      if (data) {
+        setSupervisors(data);
       }
     } catch (error) {
-      console.error('Error deleting transaction:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to delete transaction');
-    } finally {
-      setIsDeleteDialogOpen(false);
-      setSelectedItemToDelete(null);
+      console.error('Error fetching supervisors:', error);
+      toast.error('Failed to load supervisors');
     }
   };
 
-  const confirmDelete = (id: string) => {
-    console.log(`Confirming deletion of fund with ID: ${id}`);
-    setSelectedItemToDelete(id);
-    setIsDeleteDialogOpen(true);
+  const handleAddTransaction = async () => {
+    try {
+      if (!newTransaction.supervisorId || !newTransaction.amount || isNaN(Number(newTransaction.amount)) || Number(newTransaction.amount) <= 0) {
+        toast.error('Please fill in all required fields with valid values');
+        return;
+      }
+
+      const selectedSupervisor = supervisors.find(s => s.id === newTransaction.supervisorId);
+      if (!selectedSupervisor) {
+        toast.error('Invalid supervisor selected');
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('supervisor_transactions')
+          .insert({
+            date: newTransaction.date.toISOString(),
+            payer_supervisor_id: user?.id || '',
+            payer_supervisor_name: user?.name || 'Head Office',
+            receiver_supervisor_id: newTransaction.supervisorId,
+            receiver_supervisor_name: selectedSupervisor.name,
+            amount: Number(newTransaction.amount),
+            description: newTransaction.description,
+            transaction_type: 'funds_received'
+          });
+
+        if (error) throw error;
+
+        toast.success('Transaction added successfully');
+        setIsAddingTransaction(false);
+        setNewTransaction({
+          date: new Date(),
+          supervisorId: '',
+          supervisorName: '',
+          amount: '',
+          description: '',
+        });
+        fetchTransactions();
+      } catch (error) {
+        console.error('Error adding transaction:', error);
+        toast.error('Failed to add transaction');
+      }
+    } catch (error) {
+      console.error('Error in handleAddTransaction:', error);
+      toast.error('An unexpected error occurred');
+    }
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <PageTitle 
-        title="Head Office Funds" 
-        subtitle="Track funds received from the head office"
+    <div className="container py-6 space-y-6">
+      <PageTitle
+        title="Head Office"
+        subtitle="Manage funds distribution to supervisors"
       />
-      
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="relative max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-          <input 
-            type="text" 
-            placeholder="Search transactions..." 
-            className="py-2 pl-10 pr-4 border rounded-md w-full md:w-80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-          />
-        </div>
-        
-        <div className="flex flex-wrap gap-2">
-          <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors">
-            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-            Filter
-          </button>
-          <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors">
-            <Download className="h-4 w-4 mr-2 text-muted-foreground" />
-            Export
-          </button>
-          <button className="inline-flex items-center px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:bg-primary/90 transition-colors">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Transaction
-          </button>
-        </div>
-      </div>
-      
-      <CustomCard>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="pb-3 pl-4 font-medium text-muted-foreground">Date</th>
-                <th className="pb-3 font-medium text-muted-foreground">Supervisor</th>
-                <th className="pb-3 font-medium text-muted-foreground">Amount</th>
-                <th className="pb-3 font-medium text-muted-foreground">Description</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((transaction) => (
-                <tr key={transaction.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                  <td className="py-4 pl-4 text-sm">{format(transaction.date, 'MMM dd, yyyy')}</td>
-                  <td className="py-4 text-sm">{transaction.supervisorName}</td>
-                  <td className="py-4 text-sm font-medium">₹{transaction.amount.toLocaleString()}</td>
-                  <td className="py-4 text-sm">{transaction.description}</td>
-                  <td className="py-4 pr-4 text-right">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button className="p-1 rounded-md hover:bg-muted transition-colors">
-                        <Download className="h-4 w-4 text-muted-foreground" />
-                      </button>
-                      {user?.role === UserRole.ADMIN && (
-                        <button 
-                          className="p-1 rounded-md hover:bg-red-100 transition-colors text-red-600"
-                          onClick={() => confirmDelete(transaction.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        
-        <div className="flex items-center justify-between mt-4 border-t pt-4">
-          <p className="text-sm text-muted-foreground">Showing 1-6 of 6 entries</p>
-          <div className="flex items-center space-x-2">
-            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
-              <ChevronLeft className="h-5 w-5 text-muted-foreground" />
-            </button>
-            <button className="px-3 py-1 rounded-md bg-primary text-primary-foreground text-sm">1</button>
-            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-      </CustomCard>
 
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
-              Confirm Deletion
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this transaction? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-500 text-white hover:bg-red-600">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <div className="flex flex-col md:flex-row gap-4">
+        <Card className="w-full md:w-1/3">
+          <CardHeader>
+            <CardTitle>Total Funds Distributed</CardTitle>
+            <CardDescription>Total amount sent to supervisors</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              ₹{totalFundsDistributed.toLocaleString('en-IN')}
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={() => setIsAddingTransaction(true)}>
+              Add New Transaction
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Supervisor</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Description</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-4">
+                  Loading transactions...
+                </TableCell>
+              </TableRow>
+            ) : transactions.length > 0 ? (
+              transactions.map((transaction) => (
+                <TableRow key={transaction.id}>
+                  <TableCell>{format(transaction.date, 'PPP')}</TableCell>
+                  <TableCell>{transaction.supervisorName}</TableCell>
+                  <TableCell>₹{transaction.amount.toLocaleString('en-IN')}</TableCell>
+                  <TableCell>{transaction.description || '-'}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-4">
+                  No transactions found
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={isAddingTransaction} onOpenChange={setIsAddingTransaction}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Transaction</DialogTitle>
+            <DialogDescription>
+              Send funds to a supervisor. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="date">Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !newTransaction.date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {newTransaction.date ? format(newTransaction.date, "PPP") : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={newTransaction.date}
+                    onSelect={(date) => setNewTransaction({ ...newTransaction, date: date || new Date() })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="supervisor">Supervisor</Label>
+              <select
+                id="supervisor"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={newTransaction.supervisorId}
+                onChange={(e) => setNewTransaction({ ...newTransaction, supervisorId: e.target.value })}
+              >
+                <option value="">Select a supervisor</option>
+                {supervisors.map((supervisor) => (
+                  <option key={supervisor.id} value={supervisor.id}>
+                    {supervisor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                value={newTransaction.amount}
+                onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value })}
+                placeholder="Enter amount"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description (Optional)</Label>
+              <Textarea
+                id="description"
+                value={newTransaction.description}
+                onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
+                placeholder="Enter description"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddingTransaction(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddTransaction}>Save Transaction</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

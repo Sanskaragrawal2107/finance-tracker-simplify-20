@@ -47,6 +47,8 @@ type SupervisorTransactionFormValues = z.infer<typeof supervisorTransactionSchem
 
 interface SupervisorTransactionFormProps {
   onSuccess?: () => void;
+  onClose?: () => void;
+  transactionType?: 'funds_received_from_supervisor' | 'advance_paid_to_supervisor';
 }
 
 interface Supervisor {
@@ -60,7 +62,7 @@ interface Site {
   location: string;
 }
 
-export function SupervisorTransactionForm({ onSuccess }: SupervisorTransactionFormProps) {
+export function SupervisorTransactionForm({ onSuccess, onClose, transactionType }: SupervisorTransactionFormProps) {
   const { user } = useAuth();
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -71,7 +73,7 @@ export function SupervisorTransactionForm({ onSuccess }: SupervisorTransactionFo
     defaultValues: {
       date: new Date(),
       amount: '',
-      transaction_type: 'advance_paid_to_supervisor',
+      transaction_type: transactionType || 'advance_paid_to_supervisor',
     },
   });
 
@@ -147,6 +149,7 @@ export function SupervisorTransactionForm({ onSuccess }: SupervisorTransactionFo
       toast.success('Transaction added successfully');
       form.reset();
       onSuccess?.();
+      onClose?.();
     } catch (error) {
       console.error('Error adding transaction:', error);
       toast.error('Failed to add transaction');

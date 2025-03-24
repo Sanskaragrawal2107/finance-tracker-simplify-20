@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -131,6 +132,24 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
         posNo: values.posNo.toUpperCase(),
         location: values.location.toUpperCase(),
       };
+      
+      // Check for duplicate site (name + POS number combination)
+      const { data: existingSites, error: checkError } = await supabase
+        .from('sites')
+        .select('id')
+        .eq('name', uppercaseValues.name)
+        .eq('pos_no', uppercaseValues.posNo);
+      
+      if (checkError) {
+        console.error('Error checking for duplicate sites:', checkError);
+        toast.error('Failed to check for duplicate sites: ' + checkError.message);
+        return;
+      }
+      
+      if (existingSites && existingSites.length > 0) {
+        toast.error('A site with this name and P.O. number already exists');
+        return;
+      }
       
       const { data, error } = await supabase
         .from('sites')

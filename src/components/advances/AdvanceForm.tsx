@@ -3,7 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, User, Briefcase, UserCog, Loader2 } from "lucide-react";
+import { CalendarIcon, Plus, User, Briefcase, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,11 @@ interface AdvanceFormProps {
   siteId: string;
 }
 
+interface Option {
+  id: string;
+  name: string;
+}
+
 const formSchema = z.object({
   date: z.date({
     required_error: "Date is required",
@@ -79,10 +84,9 @@ type FormValues = z.infer<typeof formSchema>;
 const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [recipientOptions, setRecipientOptions] = useState<{ id: string; name: string; }[]>([]);
+  const [recipientOptions, setRecipientOptions] = useState<Option[]>([]);
   const [showRemarks, setShowRemarks] = useState(false);
-  const [supervisors, setSupervisors] = useState<{ id: string; name: string; }[]>([]);
-  const [contractors, setContractors] = useState<{ id: string; name: string; }[]>([]);
+  const [contractors, setContractors] = useState<Option[]>([]);
   const { user } = useAuth();
   
   const form = useForm<FormValues>({
@@ -97,35 +101,6 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
     },
   });
 
-  // Fetch supervisors from the database
-  useEffect(() => {
-    const fetchSupervisors = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, name')
-          .eq('role', 'supervisor');
-        
-        if (error) {
-          console.error('Error fetching supervisors:', error);
-          toast.error('Failed to load supervisors');
-          return;
-        }
-        
-        if (data) {
-          console.log('Fetched supervisors:', data);
-          setSupervisors(data);
-        }
-      } catch (error) {
-        console.error('Error fetching supervisors:', error);
-        toast.error('Failed to load supervisors');
-      }
-    };
-    
-    fetchSupervisors();
-  }, []);
-
-  // Fetch contractors from the database
   useEffect(() => {
     const fetchContractors = async () => {
       try {
@@ -155,9 +130,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
   useEffect(() => {
     const recipientType = form.watch("recipientType");
     
-    if (recipientType === RecipientType.SUPERVISOR) {
-      setRecipientOptions(supervisors);
-    } else if (recipientType === RecipientType.SUBCONTRACTOR) {
+    if (recipientType === RecipientType.SUBCONTRACTOR) {
       setRecipientOptions(contractors);
     } else {
       setRecipientOptions([]);
@@ -166,7 +139,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
     if (form.getValues("recipientName")) {
       form.setValue("recipientName", "");
     }
-  }, [form.watch("recipientType"), supervisors, contractors]);
+  }, [form.watch("recipientType"), contractors]);
 
   useEffect(() => {
     const purpose = form.watch("purpose");
@@ -182,11 +155,9 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
 
   const handleSubmit = async (values: FormValues) => {
     try {
-      // Prevent multiple submissions
       if (isSubmitting) return;
       setIsSubmitting(true);
       
-      // Get current user ID from auth
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || user?.id;
       
@@ -221,7 +192,14 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       }
       
       toast.success("Advance submitted successfully");
-      onSubmit(advanceData as Partial<Advance>);
+      
+      const advanceWithDateObj: Partial<Advance> = {
+        ...advanceData,
+        date: new Date(advanceData.date),
+        createdAt: new Date(advanceData.created_at),
+      };
+      
+      onSubmit(advanceWithDateObj);
       onClose();
     } catch (error) {
       console.error('Error submitting advance:', error);
@@ -316,15 +294,6 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                           Subcontractor
                         </FormLabel>
                       </FormItem>
-                      <FormItem className="flex items-center space-x-2 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value={RecipientType.SUPERVISOR} />
-                        </FormControl>
-                        <FormLabel className="font-normal cursor-pointer flex items-center">
-                          <UserCog className="h-4 w-4 mr-1" />
-                          Supervisor
-                        </FormLabel>
-                      </FormItem>
                     </RadioGroup>
                   </FormControl>
                   <FormMessage />
@@ -351,15 +320,6 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                         handleChange={(val) => field.onChange(val)}
                         placeholder="Select subcontractor"
                         emptyMessage="No subcontractors found"
-                        className="w-full"
-                      />
-                    ) : form.watch("recipientType") === RecipientType.SUPERVISOR ? (
-                      <SearchableDropdown
-                        options={recipientOptions}
-                        selectedVal={field.value}
-                        handleChange={(val) => field.onChange(val)}
-                        placeholder="Select supervisor"
-                        emptyMessage="No supervisors found"
                         className="w-full"
                       />
                     ) : (

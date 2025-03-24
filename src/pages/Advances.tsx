@@ -1,73 +1,13 @@
-import React from 'react';
+
+import React, { useState, useEffect } from 'react';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
 import { Search, Filter, Plus, FileText, Upload, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Advance, AdvancePurpose, ApprovalStatus, RecipientType } from '@/lib/types';
-
-// Mock data for demonstration
-const advances: Advance[] = [
-  {
-    id: '1',
-    date: new Date('2023-07-05'),
-    recipientId: '101',
-    recipientName: 'Raj Construction',
-    recipientType: RecipientType.SUBCONTRACTOR,
-    purpose: AdvancePurpose.ADVANCE,
-    amount: 150000,
-    status: ApprovalStatus.APPROVED,
-    createdBy: 'Admin',
-    createdAt: new Date('2023-07-05'),
-  },
-  {
-    id: '2',
-    date: new Date('2023-07-04'),
-    recipientId: '102',
-    recipientName: 'Suresh Electrical',
-    recipientType: RecipientType.SUBCONTRACTOR,
-    purpose: AdvancePurpose.ADVANCE,
-    amount: 75000,
-    status: ApprovalStatus.APPROVED,
-    createdBy: 'Supervisor',
-    createdAt: new Date('2023-07-04'),
-  },
-  {
-    id: '3',
-    date: new Date('2023-07-03'),
-    recipientId: '201',
-    recipientName: 'Labor Group A',
-    recipientType: RecipientType.WORKER,
-    purpose: AdvancePurpose.TOOLS,
-    amount: 45000,
-    status: ApprovalStatus.APPROVED,
-    createdBy: 'Admin',
-    createdAt: new Date('2023-07-03'),
-  },
-  {
-    id: '4',
-    date: new Date('2023-07-02'),
-    recipientId: '103',
-    recipientName: 'Premium Transport',
-    recipientType: RecipientType.SUBCONTRACTOR,
-    purpose: AdvancePurpose.OTHER,
-    amount: 35000,
-    status: ApprovalStatus.PENDING,
-    createdBy: 'Supervisor',
-    createdAt: new Date('2023-07-02'),
-  },
-  {
-    id: '5',
-    date: new Date('2023-07-01'),
-    recipientId: '202',
-    recipientName: 'Labor Group B',
-    recipientType: RecipientType.WORKER,
-    purpose: AdvancePurpose.TOOLS,
-    amount: 30000,
-    status: ApprovalStatus.PENDING,
-    createdBy: 'Supervisor',
-    createdAt: new Date('2023-07-01'),
-  },
-];
 
 const getPurposeColor = (purpose: AdvancePurpose) => {
   switch (purpose) {
@@ -111,6 +51,65 @@ const getRecipientTypeColor = (type: RecipientType) => {
 };
 
 const Advances: React.FC = () => {
+  const [advances, setAdvances] = useState<Advance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchAdvances();
+  }, []);
+
+  const fetchAdvances = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('advances')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        // Transform the data to match our Advance interface
+        const transformedAdvances: Advance[] = data.map((item) => ({
+          id: item.id,
+          date: new Date(item.date),
+          recipientName: item.recipient_name,
+          recipientType: item.recipient_type as RecipientType,
+          purpose: item.purpose as AdvancePurpose,
+          amount: item.amount,
+          remarks: item.remarks || undefined,
+          status: item.status as ApprovalStatus,
+          createdBy: item.created_by || '',
+          createdAt: new Date(item.created_at),
+          siteId: item.site_id,
+        }));
+
+        setAdvances(transformedAdvances);
+      }
+    } catch (error) {
+      console.error('Error fetching advances:', error);
+      toast.error('Failed to fetch advances');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredAdvances = advances.filter((advance) => {
+    if (!searchQuery) return true;
+    
+    const query = searchQuery.toLowerCase();
+    return (
+      advance.recipientName.toLowerCase().includes(query) ||
+      advance.purpose.toLowerCase().includes(query) ||
+      advance.recipientType.toLowerCase().includes(query) ||
+      advance.amount.toString().includes(query)
+    );
+  });
+
   return (
     <div className="space-y-8 animate-fade-in">
       <PageTitle 
@@ -125,6 +124,8 @@ const Advances: React.FC = () => {
             type="text" 
             placeholder="Search advances..." 
             className="py-2 pl-10 pr-4 border rounded-md w-full md:w-80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         
@@ -159,45 +160,59 @@ const Advances: React.FC = () => {
                 <th className="pb-3 font-medium text-muted-foreground">Purpose</th>
                 <th className="pb-3 font-medium text-muted-foreground">Amount</th>
                 <th className="pb-3 font-medium text-muted-foreground">Status</th>
-                <th className="pb-3 font-medium text-muted-foreground">Created By</th>
                 <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {advances.map((advance) => (
-                <tr key={advance.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                  <td className="py-4 pl-4 text-sm">{format(advance.date, 'MMM dd, yyyy')}</td>
-                  <td className="py-4 text-sm">{advance.recipientName}</td>
-                  <td className="py-4 text-sm">
-                    <span className={`${getRecipientTypeColor(advance.recipientType)} px-2 py-1 rounded-full text-xs font-medium`}>
-                      {advance.recipientType}
-                    </span>
-                  </td>
-                  <td className="py-4 text-sm">
-                    <span className={`${getPurposeColor(advance.purpose)} px-2 py-1 rounded-full text-xs font-medium`}>
-                      {advance.purpose}
-                    </span>
-                  </td>
-                  <td className="py-4 text-sm font-medium">₹{advance.amount.toLocaleString()}</td>
-                  <td className="py-4 text-sm">
-                    <span className={`${getStatusColor(advance.status)} px-2 py-1 rounded-full text-xs font-medium`}>
-                      {advance.status}
-                    </span>
-                  </td>
-                  <td className="py-4 text-sm">{advance.createdBy}</td>
-                  <td className="py-4 pr-4 text-right">
-                    <button className="p-1 rounded-md hover:bg-muted transition-colors">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                    </button>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    Loading advances...
                   </td>
                 </tr>
-              ))}
+              ) : filteredAdvances.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    No advances found
+                  </td>
+                </tr>
+              ) : (
+                filteredAdvances.map((advance) => (
+                  <tr key={advance.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                    <td className="py-4 pl-4 text-sm">{format(advance.date, 'MMM dd, yyyy')}</td>
+                    <td className="py-4 text-sm">{advance.recipientName}</td>
+                    <td className="py-4 text-sm">
+                      <span className={`${getRecipientTypeColor(advance.recipientType)} px-2 py-1 rounded-full text-xs font-medium`}>
+                        {advance.recipientType}
+                      </span>
+                    </td>
+                    <td className="py-4 text-sm">
+                      <span className={`${getPurposeColor(advance.purpose)} px-2 py-1 rounded-full text-xs font-medium`}>
+                        {advance.purpose}
+                      </span>
+                    </td>
+                    <td className="py-4 text-sm font-medium">₹{advance.amount.toLocaleString()}</td>
+                    <td className="py-4 text-sm">
+                      <span className={`${getStatusColor(advance.status)} px-2 py-1 rounded-full text-xs font-medium`}>
+                        {advance.status}
+                      </span>
+                    </td>
+                    <td className="py-4 pr-4 text-right">
+                      <button className="p-1 rounded-md hover:bg-muted transition-colors">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
         
         <div className="flex items-center justify-between mt-4 border-t pt-4">
-          <p className="text-sm text-muted-foreground">Showing 1-5 of 5 entries</p>
+          <p className="text-sm text-muted-foreground">
+            Showing {filteredAdvances.length} of {advances.length} entries
+          </p>
           <div className="flex items-center space-x-2">
             <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
               <ChevronLeft className="h-5 w-5 text-muted-foreground" />

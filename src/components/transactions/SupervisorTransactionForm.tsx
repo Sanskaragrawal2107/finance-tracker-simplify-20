@@ -146,30 +146,6 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
 
       if (transactionError) throw transactionError;
       
-      // Update payer site financial summary
-      const { error: payerSummaryError } = await supabase
-        .from('site_financial_summary')
-        .update({
-          advance_paid_to_supervisor: supabase.rpc('increment', { 
-            x: Number(data.amount) 
-          })
-        })
-        .eq('site_id', payerSiteId);
-
-      if (payerSummaryError) throw payerSummaryError;
-      
-      // Update receiver site financial summary
-      const { error: receiverSummaryError } = await supabase
-        .from('site_financial_summary')
-        .update({ 
-          funds_received_from_supervisor: supabase.rpc('increment', { 
-            x: Number(data.amount) 
-          })
-        })
-        .eq('site_id', data.receiver_site_id);
-
-      if (receiverSummaryError) throw receiverSummaryError;
-
       toast.success('Transaction added successfully');
       form.reset();
       onSuccess?.();

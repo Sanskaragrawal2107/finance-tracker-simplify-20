@@ -31,3 +31,39 @@ GROUP BY s.id, s.name, s.location, s.supervisor_id, u.name;
 
 -- Grant access to the view
 GRANT SELECT ON site_financial_summary TO authenticated; 
+
+-- Create trigger to update financial summary after supervisor transactions
+CREATE OR REPLACE FUNCTION update_supervisor_financial_summary()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.transaction_type = 'advance_paid' THEN
+        -- Update payer's site (reduce funds)
+        UPDATE site_financial_summary
+        SET advance_paid_to_supervisor = advance_paid_to_supervisor + NEW.amount
+        WHERE site_id = NEW.payer_site_id;
+        
+        -- Update receiver's site (add funds)
+        UPDATE site_financial_summary
+        SET funds_received_from_supervisor = funds_received_from_supervisor + NEW.amount
+        WHERE site_id = NEW.receiver_site_id;
+    ELSIF NEW.transaction_type = 'funds_received' THEN
+        -- Update payer's site (reduce funds)
+        UPDATE site_financial_summary
+        SET funds_received_from_supervisor = funds_received_from_supervisor + NEW.amount
+        WHERE site_id = NEW.payer_site_id;
+        
+        -- Update receiver's site (add funds)
+        UPDATE site_financial_summary
+        SET advance_paid_to_supervisor = advance_paid_to_supervisor + NEW.amount
+        WHERE site_id = NEW.receiver_site_id;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for supervisor transaction inserts
+CREATE TRIGGER update_supervisor_financial_summary_trigger
+AFTER INSERT ON supervisor_transactions
+FOR EACH ROW
+EXECUTE FUNCTION update_supervisor_financial_summary();

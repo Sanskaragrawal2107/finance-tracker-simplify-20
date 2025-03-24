@@ -13,6 +13,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/use-auth';
+import { SupervisorTransactionType } from '@/lib/types';
 
 interface SupervisorTransaction {
   id: string;
@@ -79,12 +80,14 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
     }
   };
 
-  const getTransactionTypeColor = (type: SupervisorTransaction['transaction_type']) => {
+  const getTransactionTypeColor = (type: 'funds_received' | 'advance_paid') => {
     switch (type) {
       case 'funds_received':
         return 'bg-green-100 text-green-800';
       case 'advance_paid':
         return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 

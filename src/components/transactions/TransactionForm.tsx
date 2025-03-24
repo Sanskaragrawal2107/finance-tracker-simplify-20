@@ -45,7 +45,7 @@ interface TransactionFormProps {
   onSuccess?: () => void;
 }
 
-export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
+const TransactionForm: React.FC<TransactionFormProps> = ({ siteId, onSuccess }: TransactionFormProps) => {
   const { user } = useAuth();
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
@@ -57,17 +57,52 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
     },
   });
 
-  const onSubmit = async (data: TransactionFormValues) => {
+  const handleTransactionSubmit = async (values: TransactionFormValues) => {
     try {
-      const { error } = await supabase.from('transactions').insert({
-        site_id: siteId,
-        date: data.date.toISOString(),
-        amount: Number(data.amount),
-        type: data.type,
-        description: data.description,
-        created_by: user?.id,
-      });
-
+      let error;
+      
+      switch (values.type) {
+        case 'expense':
+          const expenseResult = await supabase.from('expenses').insert({
+            date: values.date.toISOString(),
+            description: values.description,
+            category: values.category,
+            amount: Number(values.amount),
+            site_id: values.siteId,
+            created_by: user?.id
+          });
+          error = expenseResult.error;
+          break;
+          
+        case 'advance':
+          const advanceResult = await supabase.from('advances').insert({
+            date: values.date.toISOString(),
+            recipient_name: values.recipientName || '',
+            recipient_type: values.recipientType || 'worker',
+            purpose: values.purpose || 'advance',
+            amount: Number(values.amount),
+            site_id: values.siteId,
+            created_by: user?.id,
+            status: 'pending'
+          });
+          error = advanceResult.error;
+          break;
+          
+        case 'funds_received':
+          const fundsResult = await supabase.from('funds_received').insert({
+            date: values.date.toISOString(),
+            amount: Number(values.amount),
+            site_id: values.siteId,
+            method: values.method,
+            reference: values.reference
+          });
+          error = fundsResult.error;
+          break;
+          
+        default:
+          throw new Error('Invalid transaction type');
+      }
+      
       if (error) throw error;
 
       toast.success('Transaction added successfully');
@@ -81,7 +116,7 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(handleTransactionSubmit)} className="space-y-4">
         <FormField
           control={form.control}
           name="date"
@@ -189,4 +224,6 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
       </form>
     </Form>
   );
-} 
+};
+
+export default TransactionForm;

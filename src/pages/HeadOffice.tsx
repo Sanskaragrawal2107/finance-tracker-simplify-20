@@ -1,268 +1,402 @@
-
 import React, { useState, useEffect } from 'react';
-import PageTitle from '@/components/common/PageTitle';
-import CustomCard from '@/components/ui/CustomCard';
-import { Search, Filter, Plus, Download, ChevronLeft, ChevronRight, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
-import { HeadOfficeTransaction, FundsReceived, UserRole } from '@/lib/types';
-import { useAuth } from '@/hooks/use-auth';
-import { fetchSiteFundsReceived, deleteFundsReceived } from '@/integrations/supabase/client';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { toast } from 'sonner';
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { supabase } from '@/integrations/supabase/client';
+import {
+  Expense,
+  Advance,
+  FundsReceived,
+  Invoice,
+  UserRole,
+  PaymentMethod,
+  ExpenseCategory,
+  AdvancePurpose,
+  ApprovalStatus,
+  PaymentStatus,
+  RecipientType,
+  BankDetails,
+  MaterialItem,
+  HeadOfficeTransaction
+} from '@/lib/types';
+import { cn } from '@/lib/utils';
 
-// Mock data for demonstration
-const transactions: HeadOfficeTransaction[] = [
-  {
-    id: '1',
-    date: new Date('2023-07-15'),
-    supervisorId: '101',
-    supervisorName: 'Rajesh Kumar',
-    amount: 500000,
-    description: 'Monthly allocation for Site A',
-    createdAt: new Date('2023-07-15'),
-  },
-  {
-    id: '2',
-    date: new Date('2023-06-15'),
-    supervisorId: '101',
-    supervisorName: 'Rajesh Kumar',
-    amount: 450000,
-    description: 'Monthly allocation for Site A',
-    createdAt: new Date('2023-06-15'),
-  },
-  {
-    id: '3',
-    date: new Date('2023-05-15'),
-    supervisorId: '101',
-    supervisorName: 'Rajesh Kumar',
-    amount: 500000,
-    description: 'Monthly allocation for Site A',
-    createdAt: new Date('2023-05-15'),
-  },
-  {
-    id: '4',
-    date: new Date('2023-07-12'),
-    supervisorId: '102',
-    supervisorName: 'Sunil Verma',
-    amount: 350000,
-    description: 'Monthly allocation for Site B',
-    createdAt: new Date('2023-07-12'),
-  },
-  {
-    id: '5',
-    date: new Date('2023-06-12'),
-    supervisorId: '102',
-    supervisorName: 'Sunil Verma',
-    amount: 350000,
-    description: 'Monthly allocation for Site B',
-    createdAt: new Date('2023-06-12'),
-  },
-  {
-    id: '6',
-    date: new Date('2023-07-10'),
-    supervisorId: '103',
-    supervisorName: 'Amit Singh',
-    amount: 350000,
-    description: 'Monthly allocation for Site C',
-    createdAt: new Date('2023-07-10'),
-  },
-];
+const transactionSchema = z.object({
+  date: z.date({
+    required_error: "A date is required.",
+  }),
+  amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
+    message: "Amount must be a positive number.",
+  }),
+  description: z.string().optional(),
+  supervisorId: z.string({
+    required_error: "Please select a supervisor.",
+  }),
+});
+
+type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 const HeadOffice: React.FC = () => {
-  const { user } = useAuth();
-  const [allFunds, setAllFunds] = useState<FundsReceived[]>([]);
+  const [transactions, setTransactions] = useState<HeadOfficeTransaction[]>([]);
+  const [supervisors, setSupervisors] = useState<{ id: string; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedItemToDelete, setSelectedItemToDelete] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+
+  const form = useForm<TransactionFormValues>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      date: new Date(),
+      amount: '',
+      description: '',
+      supervisorId: '',
+    },
+  });
 
   useEffect(() => {
-    // Load all funds received data when component mounts
-    if (user?.id && user?.role === UserRole.ADMIN) {
-      loadAllFundsReceived();
-    }
-  }, [user]);
+    fetchTransactions();
+    fetchSupervisors();
+  }, []);
 
-  const loadAllFundsReceived = async () => {
+  const fetchTransactions = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      // In a real implementation, we would fetch all funds from all sites
-      // For now, this is a placeholder
-      const data = await fetchAllFundsReceived();
-      setAllFunds(data);
-    } catch (error) {
-      console.error('Error loading funds received:', error);
-      toast.error('Failed to load transactions');
+      const { data, error } = await supabase
+        .from('head_office_transactions')
+        .select('*, supervisor:supervisor_id(name)')
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching transactions:', error);
+        toast.error('Failed to load transactions');
+      } else {
+        // Map the Supabase data to the HeadOfficeTransaction type
+        const mappedTransactions: HeadOfficeTransaction[] = data.map((item: any) => ({
+          id: item.id,
+          date: new Date(item.date),
+          amount: item.amount,
+          description: item.description || '',
+          supervisorId: item.supervisor_id,
+          supervisorName: item.supervisor?.name || 'Unknown',
+          createdAt: new Date(item.created_at),
+        }));
+        setTransactions(mappedTransactions);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Placeholder function - in a real implementation, this would fetch from all sites
-  const fetchAllFundsReceived = async (): Promise<FundsReceived[]> => {
-    // Return the mock data for now
-    return transactions.map(t => ({
-      id: t.id,
-      siteId: '',
-      amount: t.amount,
-      date: t.date,
-      method: 'Bank Transfer',
-      reference: `Ref-${t.id}`,
-      createdAt: t.createdAt
-    }));
-  };
-
-  const handleDelete = async () => {
-    if (!selectedItemToDelete || !user?.id) return;
-    
+  const fetchSupervisors = async () => {
     try {
-      console.log(`Attempting to delete fund with ID: ${selectedItemToDelete}`);
-      
-      // Make sure we have a valid ID before attempting to delete
-      if (!selectedItemToDelete || selectedItemToDelete.trim() === '') {
-        throw new Error('Invalid transaction ID');
-      }
-      
-      const result = await deleteFundsReceived(selectedItemToDelete, user.id);
-      console.log('Delete result:', result);
-      
-      if (result.success) {
-        // Update local state to remove the deleted item
-        setAllFunds(prevFunds => prevFunds.filter(fund => fund.id !== selectedItemToDelete));
-        toast.success('Transaction deleted successfully');
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('role', 'supervisor');
+
+      if (error) {
+        console.error('Error fetching supervisors:', error);
+        toast.error('Failed to load supervisors');
       } else {
-        // If we get here, it means the API call was successful but returned success: false
-        throw new Error('Failed to delete transaction: ' + (result.message || 'Unknown error'));
+        setSupervisors(data || []);
       }
     } catch (error) {
-      console.error('Error deleting transaction:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to delete transaction');
+      console.error('Error fetching supervisors:', error);
+      toast.error('Failed to load supervisors');
+    }
+  };
+
+  const onSubmit = async (data: TransactionFormValues) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('head_office_transactions')
+        .insert({
+          date: data.date.toISOString(),
+          amount: Number(data.amount),
+          description: data.description,
+          supervisor_id: data.supervisorId,
+        });
+
+      if (error) {
+        console.error('Error adding transaction:', error);
+        toast.error('Failed to add transaction');
+      } else {
+        toast.success('Transaction added successfully');
+        form.reset();
+        fetchTransactions();
+      }
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      toast.error('Failed to add transaction');
     } finally {
-      setIsDeleteDialogOpen(false);
-      setSelectedItemToDelete(null);
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteTransaction = async (id: string, type: string) => {
+    if (!window.confirm(`Are you sure you want to delete this ${type}?`)) {
+      return;
+    }
+
+    try {
+      let result;
+
+      if (type === 'transaction') {
+        result = await supabase
+          .from('head_office_transactions')
+          .delete()
+          .eq('id', id);
+      } else {
+        toast.error('Invalid transaction type');
+        return;
+      }
+
+      // Check if the result has an error object with a message property
+      if (!result.success && result.error && 'message' in result.error) {
+        toast.error(result.error.message);
+        return;
+      }
+
+      if (!result.success) {
+        toast.error('Failed to delete transaction');
+        return;
+      }
+
+      toast.success('Transaction deleted successfully');
+      fetchTransactions();
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast.error('Failed to delete transaction');
     }
   };
 
   const confirmDelete = (id: string) => {
-    console.log(`Confirming deletion of fund with ID: ${id}`);
-    setSelectedItemToDelete(id);
+    setTransactionToDelete(id);
     setIsDeleteDialogOpen(true);
   };
 
+  const handleCancelDelete = () => {
+    setIsDeleteDialogOpen(false);
+    setTransactionToDelete(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (transactionToDelete) {
+      await handleDeleteTransaction(transactionToDelete, 'transaction');
+      setIsDeleteDialogOpen(false);
+      setTransactionToDelete(null);
+    }
+  };
+
   return (
-    <div className="space-y-8 animate-fade-in">
-      <PageTitle 
-        title="Head Office Funds" 
-        subtitle="Track funds received from the head office"
-      />
-      
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="relative max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-          <input 
-            type="text" 
-            placeholder="Search transactions..." 
-            className="py-2 pl-10 pr-4 border rounded-md w-full md:w-80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-          />
+    <div className="container mx-auto py-10">
+      <h1 className="text-3xl font-bold mb-6">Head Office Transactions</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Transaction Form */}
+        <div className="bg-white shadow-md rounded-md p-5">
+          <h2 className="text-xl font-semibold mb-4">Add Transaction</h2>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Date</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) =>
+                            date > new Date() || date < new Date("1900-01-01")
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="Enter amount" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter description" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="supervisorId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Supervisor</FormLabel>
+                    <FormControl>
+                      <select
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        {...field}
+                      >
+                        <option value="">Select a supervisor</option>
+                        {supervisors.map((supervisor) => (
+                          <option key={supervisor.id} value={supervisor.id}>
+                            {supervisor.name}
+                          </option>
+                        ))}
+                      </select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? 'Adding...' : 'Add Transaction'}
+              </Button>
+            </form>
+          </Form>
         </div>
-        
-        <div className="flex flex-wrap gap-2">
-          <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors">
-            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-            Filter
-          </button>
-          <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors">
-            <Download className="h-4 w-4 mr-2 text-muted-foreground" />
-            Export
-          </button>
-          <button className="inline-flex items-center px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:bg-primary/90 transition-colors">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Transaction
-          </button>
-        </div>
-      </div>
-      
-      <CustomCard>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="pb-3 pl-4 font-medium text-muted-foreground">Date</th>
-                <th className="pb-3 font-medium text-muted-foreground">Supervisor</th>
-                <th className="pb-3 font-medium text-muted-foreground">Amount</th>
-                <th className="pb-3 font-medium text-muted-foreground">Description</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((transaction) => (
-                <tr key={transaction.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                  <td className="py-4 pl-4 text-sm">{format(transaction.date, 'MMM dd, yyyy')}</td>
-                  <td className="py-4 text-sm">{transaction.supervisorName}</td>
-                  <td className="py-4 text-sm font-medium">₹{transaction.amount.toLocaleString()}</td>
-                  <td className="py-4 text-sm">{transaction.description}</td>
-                  <td className="py-4 pr-4 text-right">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button className="p-1 rounded-md hover:bg-muted transition-colors">
-                        <Download className="h-4 w-4 text-muted-foreground" />
-                      </button>
-                      {user?.role === UserRole.ADMIN && (
-                        <button 
-                          className="p-1 rounded-md hover:bg-red-100 transition-colors text-red-600"
+
+        {/* Transaction History */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Transaction History</h2>
+          {isLoading ? (
+            <p>Loading transactions...</p>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Supervisor</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell>{format(transaction.date, 'PPP')}</TableCell>
+                      <TableCell>₹{transaction.amount.toLocaleString()}</TableCell>
+                      <TableCell>{transaction.description}</TableCell>
+                      <TableCell>{transaction.supervisorName}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => confirmDelete(transaction.id)}
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                          Delete
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </div>
-        
-        <div className="flex items-center justify-between mt-4 border-t pt-4">
-          <p className="text-sm text-muted-foreground">Showing 1-6 of 6 entries</p>
-          <div className="flex items-center space-x-2">
-            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
-              <ChevronLeft className="h-5 w-5 text-muted-foreground" />
-            </button>
-            <button className="px-3 py-1 rounded-md bg-primary text-primary-foreground text-sm">1</button>
-            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-      </CustomCard>
+      </div>
 
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
-              Confirm Deletion
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this transaction? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-500 text-white hover:bg-red-600">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Dialog */}
+      <div className="relative z-50">
+        {isDeleteDialogOpen && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+              <div className="mt-3 text-center">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Confirm Delete
+                </h3>
+                <div className="mt-2 px-7 py-3">
+                  <p className="text-sm text-gray-500">
+                    Are you sure you want to delete this transaction? This action cannot be undone.
+                  </p>
+                </div>
+                <div className="items-center px-4 py-3">
+                  <Button
+                    variant="ghost"
+                    className="px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded-md"
+                    onClick={handleCancelDelete}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="ml-3 px-4 py-2 bg-red-500 text-white hover:bg-red-700 rounded-md"
+                    onClick={handleConfirmDelete}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

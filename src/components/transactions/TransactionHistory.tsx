@@ -14,44 +14,67 @@ import { toast } from 'sonner';
 
 interface Transaction {
   id: string;
-  date: string;
+  date: Date;
   amount: number;
-  type: 'expense' | 'advance' | 'funds_received' | 'invoice';
-  status: 'pending' | 'approved' | 'rejected';
-  description: string | null;
-  created_at: string;
+  type: string;
+  status: string;
+  description?: string;
+  recipient?: string;
 }
 
 interface TransactionHistoryProps {
   siteId: string;
 }
 
-export function TransactionHistory({ siteId }: TransactionHistoryProps) {
+export const TransactionHistory: React.FC<TransactionHistoryProps> = ({ siteId }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    async function fetchTransactions() {
+      try {
+        const [expenses, advances, funds] = await Promise.all([
+          supabase.from('expenses').select('*').order('date', { ascending: false }),
+          supabase.from('advances').select('*').order('date', { ascending: false }),
+          supabase.from('funds_received').select('*').order('date', { ascending: false })
+        ]);
+
+        const formattedTransactions: Transaction[] = [
+          ...(expenses.data || []).map((expense: any) => ({
+            id: expense.id,
+            date: new Date(expense.date),
+            amount: expense.amount,
+            type: 'expense',
+            status: expense.status || 'completed',
+            description: expense.description
+          })),
+          ...(advances.data || []).map((advance: any) => ({
+            id: advance.id,
+            date: new Date(advance.date),
+            amount: advance.amount,
+            type: 'advance',
+            status: advance.status,
+            recipient: advance.recipient_name
+          })),
+          ...(funds.data || []).map((fund: any) => ({
+            id: fund.id,
+            date: new Date(fund.date),
+            amount: fund.amount,
+            type: 'funds',
+            status: 'received'
+          }))
+        ];
+
+        setTransactions(formattedTransactions);
+      } catch (error) {
+        console.error('Error fetching transactions:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
     fetchTransactions();
   }, [siteId]);
-
-  const fetchTransactions = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('site_id', siteId)
-        .order('date', { ascending: false });
-
-      if (error) throw error;
-
-      setTransactions(data || []);
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      toast.error('Failed to load transactions');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getStatusColor = (status: Transaction['status']) => {
     switch (status) {
@@ -70,10 +93,8 @@ export function TransactionHistory({ siteId }: TransactionHistoryProps) {
         return 'bg-red-100 text-red-800';
       case 'advance':
         return 'bg-blue-100 text-blue-800';
-      case 'funds_received':
+      case 'funds':
         return 'bg-green-100 text-green-800';
-      case 'invoice':
-        return 'bg-purple-100 text-purple-800';
     }
   };
 
@@ -97,7 +118,7 @@ export function TransactionHistory({ siteId }: TransactionHistoryProps) {
           {transactions.map((transaction) => (
             <TableRow key={transaction.id}>
               <TableCell>
-                {format(new Date(transaction.date), 'PPP')}
+                {format(transaction.date, 'PPP')}
               </TableCell>
               <TableCell>
                 <Badge variant="outline" className={getTypeColor(transaction.type)}>
@@ -129,4 +150,4 @@ export function TransactionHistory({ siteId }: TransactionHistoryProps) {
       </Table>
     </div>
   );
-} 
+};

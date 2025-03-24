@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 
+// Extend the schema to include all required fields
 const transactionSchema = z.object({
   date: z.date({
     required_error: 'Date is required',
@@ -116,7 +117,7 @@ const TransactionForm = ({ siteId, onSuccess }: TransactionFormProps) => {
 
       toast.success('Transaction added successfully');
       form.reset();
-      onSuccess?.();
+      if (onSuccess) onSuccess();
     } catch (error) {
       console.error('Error adding transaction:', error);
       toast.error('Failed to add transaction');

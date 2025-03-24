@@ -56,10 +56,10 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
         .from('supervisor_transactions')
         .select(`
           *,
-          payer_supervisor:payer_supervisor_id(name),
-          receiver_supervisor:receiver_supervisor_id(name),
-          payer_site:payer_site_id(name, location),
-          receiver_site:receiver_site_id(name, location)
+          payer_supervisor:users!supervisor_transactions_payer_supervisor_id_fkey(name),
+          receiver_supervisor:users!supervisor_transactions_receiver_supervisor_id_fkey(name),
+          payer_site:sites!supervisor_transactions_payer_site_id_fkey(name, location),
+          receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name, location)
         `)
         .order('date', { ascending: false });
 
@@ -72,17 +72,26 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
       if (error) throw error;
 
       if (data) {
-        const formattedTransactions: SupervisorTransaction[] = data.map(transaction => ({
-          id: transaction.id,
-          date: transaction.date,
-          amount: transaction.amount,
-          transaction_type: transaction.transaction_type as SupervisorTransactionType,
-          payer_supervisor: transaction.payer_supervisor as { name: string },
-          receiver_supervisor: transaction.receiver_supervisor as { name: string },
-          payer_site: transaction.payer_site as { name: string, location: string },
-          receiver_site: transaction.receiver_site as { name: string, location: string },
-          created_at: transaction.created_at
-        }));
+        const formattedTransactions: SupervisorTransaction[] = data.map(transaction => {
+          // Cast the foreign tables to the required types to handle the Supabase types
+          const payerSupervisor = transaction.payer_supervisor as unknown as { name: string };
+          const receiverSupervisor = transaction.receiver_supervisor as unknown as { name: string };
+          const payerSite = transaction.payer_site as unknown as { name: string; location: string };
+          const receiverSite = transaction.receiver_site as unknown as { name: string; location: string };
+          
+          return {
+            id: transaction.id,
+            date: transaction.date,
+            amount: transaction.amount,
+            transaction_type: transaction.transaction_type as SupervisorTransactionType,
+            payer_supervisor: payerSupervisor,
+            receiver_supervisor: receiverSupervisor,
+            payer_site: payerSite,
+            receiver_site: receiverSite,
+            created_at: transaction.created_at
+          };
+        });
+        
         setTransactions(formattedTransactions);
       }
     } catch (error) {
@@ -95,9 +104,9 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
 
   const getTransactionTypeColor = (type: SupervisorTransactionType) => {
     switch (type) {
-      case 'funds_received':
+      case SupervisorTransactionType.FUNDS_RECEIVED:
         return 'bg-green-100 text-green-800';
-      case 'advance_paid':
+      case SupervisorTransactionType.ADVANCE_PAID:
         return 'bg-blue-100 text-blue-800';
       default:
         return 'bg-gray-100 text-gray-800';

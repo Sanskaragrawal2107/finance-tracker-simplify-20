@@ -13,6 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import SiteDetail from '@/components/sites/SiteDetail';
+import { SupervisorTransactionHistory } from '@/components/transactions/SupervisorTransactionHistory';
+import SupervisorTransactionForm from '@/components/transactions/SupervisorTransactionForm';
+import { SupervisorTransactionType } from '@/lib/types';
 
 const SupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -26,22 +29,22 @@ const SupervisorSites: React.FC = () => {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [showSiteDetail, setShowSiteDetail] = useState(false);
   const [activeTab, setActiveTab] = useState('active');
+  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
+  const [selectedTransactionType, setSelectedTransactionType] = useState<SupervisorTransactionType | null>(null);
 
   useEffect(() => {
     let mounted = true;
     
-    // Only fetch if user is available and component is mounted
     if (user && mounted) {
       fetchSites();
     } else {
-      // If no user, make sure loading is set to false
       setLoading(false);
     }
     
     return () => {
       mounted = false;
     };
-  }, [user?.id]); // Only re-fetch if user ID changes, not the entire user object
+  }, [user?.id]);
 
   useEffect(() => {
     if (sites.length > 0) {
@@ -57,7 +60,6 @@ const SupervisorSites: React.FC = () => {
 
     setLoading(true);
     
-    // Add fetch timeout safety
     const fetchTimeout = setTimeout(() => {
       console.warn('Sites data fetch timeout after 10 seconds');
       setLoading(false);
@@ -68,14 +70,13 @@ const SupervisorSites: React.FC = () => {
       });
       setSites([]);
       setFilteredSites([]);
-    }, 10000); // 10 second timeout
-    
+    }, 10000);
+
     try {
       let query = supabase
         .from('sites')
         .select('*, users!sites_supervisor_id_fkey(name)');
 
-      // If user is a supervisor, only show their sites
       if (user.role === UserRole.SUPERVISOR) {
         query = query.eq('supervisor_id', user.id);
       }
@@ -100,7 +101,6 @@ const SupervisorSites: React.FC = () => {
         return;
       }
 
-      // Transform the data to match our Site interface
       const transformedSites: Site[] = data.map((site) => ({
         id: site.id,
         name: site.name,
@@ -118,7 +118,6 @@ const SupervisorSites: React.FC = () => {
       }));
 
       setSites(transformedSites);
-      // Also set filtered sites to ensure something is visible immediately
       setFilteredSites(transformedSites);
     } catch (error) {
       console.error('Error in fetchSites:', error);
@@ -138,14 +137,12 @@ const SupervisorSites: React.FC = () => {
   const filterSites = () => {
     let filtered = [...sites];
 
-    // Filter by active/completed status
     if (activeTab === 'active') {
       filtered = filtered.filter((site) => !site.isCompleted);
     } else if (activeTab === 'completed') {
       filtered = filtered.filter((site) => site.isCompleted);
     }
 
-    // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -213,7 +210,7 @@ const SupervisorSites: React.FC = () => {
   const handleCloseSiteDetail = () => {
     setShowSiteDetail(false);
     setSelectedSite(null);
-    fetchSites(); // Refresh the list in case there were updates
+    fetchSites();
   };
 
   const renderSiteCard = (site: Site) => {
@@ -329,7 +326,6 @@ const SupervisorSites: React.FC = () => {
     );
   };
 
-  // If site detail view is open, show that instead
   if (showSiteDetail && selectedSite) {
     return (
       <SiteDetail 
@@ -340,7 +336,6 @@ const SupervisorSites: React.FC = () => {
     );
   }
 
-  // If new site form is open, show that
   if (showNewSiteForm) {
     return (
       <div className="space-y-6">
@@ -352,8 +347,6 @@ const SupervisorSites: React.FC = () => {
         <CustomCard>
           <form onSubmit={(e) => {
             e.preventDefault();
-            // This form would be implemented in an actual SiteForm component
-            // For now, this is just a placeholder
           }}>
             <div className="space-y-4 p-4">
               <p className="text-center text-muted-foreground">
@@ -409,10 +402,23 @@ const SupervisorSites: React.FC = () => {
                 Filter
               </Button>
               {user?.role !== UserRole.VIEWER && (
-                <Button size="sm" className="h-9" onClick={() => setShowNewSiteForm(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Site
-                </Button>
+                <>
+                  <Button size="sm" className="h-9" onClick={() => setShowNewSiteForm(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Site
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="h-9" 
+                    onClick={() => {
+                      setSelectedTransactionType(SupervisorTransactionType.ADVANCE_PAID);
+                      setShowSupervisorTransactionForm(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Advance Paid to Supervisor
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -422,6 +428,7 @@ const SupervisorSites: React.FC = () => {
               <TabsTrigger value="active">Active Sites</TabsTrigger>
               <TabsTrigger value="completed">Completed Sites</TabsTrigger>
               <TabsTrigger value="all">All Sites</TabsTrigger>
+              <TabsTrigger value="supervisorTransactions">Supervisor Transactions</TabsTrigger>
             </TabsList>
 
             <TabsContent value="active" className="mt-0">
@@ -433,7 +440,35 @@ const SupervisorSites: React.FC = () => {
             <TabsContent value="all" className="mt-0">
               {renderSitesList()}
             </TabsContent>
+            <TabsContent value="supervisorTransactions" className="mt-0">
+              <CustomCard>
+                <div className="p-4">
+                  <h2 className="text-lg font-semibold mb-4">Supervisor-to-Supervisor Transactions</h2>
+                  <SupervisorTransactionHistory />
+                </div>
+              </CustomCard>
+            </TabsContent>
           </Tabs>
+
+          {showSupervisorTransactionForm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+                <h2 className="text-xl font-bold mb-4">
+                  {selectedTransactionType === SupervisorTransactionType.ADVANCE_PAID
+                    ? 'Advance Paid to Supervisor'
+                    : 'Funds Received from Supervisor'}
+                </h2>
+                <SupervisorTransactionForm
+                  onSuccess={() => {
+                    setShowSupervisorTransactionForm(false);
+                    fetchSites();
+                  }}
+                  onClose={() => setShowSupervisorTransactionForm(false)}
+                  transactionType={selectedTransactionType || undefined}
+                />
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

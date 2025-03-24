@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
@@ -30,6 +29,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/use-auth';
+import SupervisorTransactionForm from '@/components/transactions/SupervisorTransactionForm';
+import { SupervisorTransactionHistory } from '@/components/transactions/SupervisorTransactionHistory';
 
 interface SiteDetailTransactionsProps {
   siteId: string;
@@ -84,12 +85,13 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     invoices: false,
   });
   const [error, setError] = useState<string | null>(null);
+  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
+  const [selectedTransactionType, setSelectedTransactionType] = useState<SupervisorTransactionType | null>(null);
 
   const { user } = useAuth();
   const [selectedItemToDelete, setSelectedItemToDelete] = useState<{id: string, type: 'expense' | 'advance' | 'funds' | 'invoice'} | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  // Load all transaction data when component mounts or siteId changes
   useEffect(() => {
     if (!siteId) {
       console.error('No siteId provided to load transactions');
@@ -99,7 +101,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     loadAllTransactions();
   }, [siteId]);
 
-  // Update local state when props change
   useEffect(() => {
     console.log('Expenses prop updated with', expenses.length, 'items');
     setLocalExpenses(expenses);
@@ -330,8 +331,6 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   };
 
   const handleEdit = (id: string, type: 'expense' | 'advance' | 'funds' | 'invoice') => {
-    // Navigation to edit forms will be handled by the parent component
-    // For now, just log the action
     console.log(`Edit ${type} with ID: ${id}`);
     toast.info(`Edit functionality for ${type} will be implemented soon`);
   };
@@ -654,7 +653,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
     <>
       <CustomCard className="mb-6">
         <Tabs defaultValue="expenses">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="expenses">
               Expenses {localExpenses.length > 0 && `(${localExpenses.length})`}
             </TabsTrigger>
@@ -666,6 +665,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
             </TabsTrigger>
             <TabsTrigger value="invoices">
               Invoices {invoices.length > 0 && `(${invoices.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="supervisorTransactions">
+              Supervisor Transactions
             </TabsTrigger>
           </TabsList>
           <TabsContent value="expenses" className="pt-4">
@@ -680,6 +682,30 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           <TabsContent value="invoices" className="pt-4">
             {renderInvoicesTab()}
           </TabsContent>
+          <TabsContent value="supervisorTransactions" className="pt-4">
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <Button 
+                  onClick={() => {
+                    setSelectedTransactionType(SupervisorTransactionType.ADVANCE_PAID);
+                    setShowSupervisorTransactionForm(true);
+                  }}
+                  className="mr-2"
+                >
+                  Advance Paid to Supervisor
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setSelectedTransactionType(SupervisorTransactionType.FUNDS_RECEIVED);
+                    setShowSupervisorTransactionForm(true);
+                  }}
+                >
+                  Funds Received from Supervisor
+                </Button>
+              </div>
+              <SupervisorTransactionHistory siteId={siteId} />
+            </div>
+          </TabsContent>
         </Tabs>
       </CustomCard>
 
@@ -689,6 +715,29 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           isOpen={isDetailsOpen}
           onClose={closeInvoiceDetails}
         />
+      )}
+
+      {showSupervisorTransactionForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">
+              {selectedTransactionType === SupervisorTransactionType.ADVANCE_PAID
+                ? 'Advance Paid to Supervisor'
+                : 'Funds Received from Supervisor'}
+            </h2>
+            <SupervisorTransactionForm
+              onSuccess={() => {
+                setShowSupervisorTransactionForm(false);
+                if (onTransactionsUpdate) {
+                  onTransactionsUpdate();
+                }
+              }}
+              onClose={() => setShowSupervisorTransactionForm(false)}
+              payerSiteId={siteId}
+              transactionType={selectedTransactionType || undefined}
+            />
+          </div>
+        </div>
       )}
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

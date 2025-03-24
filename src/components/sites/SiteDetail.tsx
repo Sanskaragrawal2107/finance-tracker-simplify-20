@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { ArrowLeft, Edit, CheckCircle, Circle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit, CheckCircle, Circle, Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -45,20 +45,39 @@ import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
 import StatsCard from '@/components/dashboard/StatsCard';
+import SupervisorTransactionForm from '@/components/transactions/SupervisorTransactionForm';
+import { SupervisorTransactionType } from '@/lib/types';
 
 interface SiteDetailProps {
   siteId: string;
-  onBack: () => void;
+  onBack?: () => void;
   userRole: UserRole;
+  isAdminView?: boolean;
+  expenses?: Expense[];
+  advances?: Advance[];
+  fundsReceived?: FundsReceived[];
+  invoices?: Invoice[];
+  onEditSuccess?: () => void;
+  onEntrySuccess?: (entryType: string) => void;
 }
 
-const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => {
+const SiteDetail: React.FC<SiteDetailProps> = ({
+  siteId,
+  onBack,
+  userRole,
+  isAdminView = false,
+  expenses = [],
+  advances = [],
+  fundsReceived = [],
+  invoices = [],
+  onEditSuccess,
+  onEntrySuccess
+}) => {
   const { user } = useAuth();
   const [site, setSite] = useState<Site | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [advances, setAdvances] = useState<Advance[]>([]);
-  const [fundsReceived, setFundsReceived] = useState<FundsReceived[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [siteExpenses, setSiteExpenses] = useState<Expense[]>([]);
+  const [siteAdvances, setSiteAdvances] = useState<Advance[]>([]);
+  const [siteFunds, setSiteFunds] = useState<FundsReceived[]>([]);
   const [siteSummary, setSiteSummary] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -66,8 +85,10 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => 
   const [completionDate, setCompletionDate] = useState<Date | null>(null);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showAdvanceForm, setShowAdvanceForm] = useState(false);
-  const [showFundsForm, setShowFundsForm] = useState(false);
+  const [showFundsReceivedForm, setShowFundsReceivedForm] = useState(false);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
+  const [selectedTransactionType, setSelectedTransactionType] = useState<SupervisorTransactionType | null>(null);
 
   const fetchSiteDetails = useCallback(async () => {
     setIsLoading(true);
@@ -162,6 +183,11 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => 
     fetchSiteDetails();
   };
 
+  const handleAddSupervisorTransaction = () => {
+    setSelectedTransactionType(SupervisorTransactionType.ADVANCE_PAID);
+    setShowSupervisorTransactionForm(true);
+  };
+
   if (isLoading) {
     return <div>Loading site details...</div>;
   }
@@ -177,7 +203,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => 
     fundsReceivedFromSupervisor: siteSummary ? siteSummary.funds_received_from_supervisor : 0,
     advancePaidToSupervisor: siteSummary ? siteSummary.advance_paid_to_supervisor : 0,
     invoicesPaid: siteSummary ? siteSummary.invoices_paid : 0,
-    pendingInvoices: 0, // You might need to calculate this from site invoices
+    pendingInvoices: 0,
     currentBalance: siteSummary ? siteSummary.current_balance : 0
   };
 
@@ -329,8 +355,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => 
           <CardFooter className="flex justify-end">
             <Button onClick={() => setShowExpenseForm(true)}>Add Expense</Button>
             <Button onClick={() => setShowAdvanceForm(true)}>Add Advance</Button>
-            <Button onClick={() => setShowFundsForm(true)}>Add Funds</Button>
+            <Button onClick={() => setShowFundsReceivedForm(true)}>Add Funds Received</Button>
             <Button onClick={() => setShowInvoiceForm(true)}>Add Invoice</Button>
+            <Button onClick={handleAddSupervisorTransaction}>Advance Paid to Supervisor</Button>
           </CardFooter>
         </Card>
 
@@ -369,14 +396,14 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => 
         />
       )}
 
-      {showFundsForm && (
+      {showFundsReceivedForm && (
         <FundsReceivedForm 
           siteId={site.id} 
           onSuccess={() => {
-            setShowFundsForm(false);
+            setShowFundsReceivedForm(false);
             refreshData('funds');
           }}
-          onClose={() => setShowFundsForm(false)} 
+          onClose={() => setShowFundsReceivedForm(false)} 
         />
       )}
 
@@ -389,6 +416,29 @@ const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => 
           }} 
           onClose={() => setShowInvoiceForm(false)}
         />
+      )}
+
+      {showSupervisorTransactionForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">
+              {selectedTransactionType === SupervisorTransactionType.ADVANCE_PAID
+                ? 'Advance Paid to Supervisor'
+                : 'Funds Received from Supervisor'}
+            </h2>
+            <SupervisorTransactionForm
+              onSuccess={() => {
+                setShowSupervisorTransactionForm(false);
+                if (onEntrySuccess) {
+                  onEntrySuccess('supervisorTransaction');
+                }
+              }}
+              onClose={() => setShowSupervisorTransactionForm(false)}
+              payerSiteId={siteId}
+              transactionType={selectedTransactionType || undefined}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

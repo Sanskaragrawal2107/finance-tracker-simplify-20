@@ -148,7 +148,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         gstPercentage: invoice.gst_percentage,
         grossAmount: invoice.gross_amount,
         netAmount: invoice.net_amount,
-        materialItems: invoice.material_items || [],
+        materialItems: invoice.material_items ? invoice.material_items as MaterialItem[] : [],
         bankDetails: invoice.bank_details || {
           accountNumber: '',
           bankName: '',
@@ -157,16 +157,17 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           mobile: ''
         },
         billUrl: invoice.bill_url,
-        invoiceImageUrl: invoice.invoice_image_url,
-        paymentStatus: invoice.payment_status,
+        invoiceImageUrl: invoice.invoice_image_url || '',
+        paymentStatus: invoice.payment_status as PaymentStatus,
         createdBy: invoice.created_by,
         createdAt: new Date(invoice.created_at),
-        approverType: invoice.approver_type,
+        approverType: invoice.approver_type as "ho" | "supervisor",
         siteId: invoice.site_id,
         vendorName: invoice.vendor_name || invoice.party_name,
         invoiceNumber: invoice.invoice_number || '',
         amount: invoice.net_amount,
-        status: invoice.payment_status
+        status: invoice.payment_status as PaymentStatus,
+        paymentBy: ''
       }));
       
       setInvoices(transformedInvoices);
@@ -207,7 +208,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         description: expense.description,
         category: expense.category,
         amount: expense.amount,
-        status: expense.status,
+        status: expense.status as ApprovalStatus,
         createdBy: expense.created_by,
         createdAt: new Date(expense.created_at),
         siteId: expense.site_id,
@@ -250,11 +251,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
         date: new Date(advance.date),
         recipientId: advance.recipient_id,
         recipientName: advance.recipient_name,
-        recipientType: advance.recipient_type,
-        purpose: advance.purpose,
+        recipientType: advance.recipient_type as RecipientType,
+        purpose: advance.purpose as AdvancePurpose,
         amount: advance.amount,
         remarks: advance.remarks,
-        status: advance.status,
+        status: advance.status as ApprovalStatus,
         createdBy: advance.created_by,
         createdAt: new Date(advance.created_at),
         siteId: advance.site_id
@@ -837,4 +838,3 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
 };
 
 export default SiteDetailTransactions;
-

@@ -1,732 +1,626 @@
 import React, { useState, useEffect } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { PaymentStatus, Invoice, MaterialItem } from '@/lib/types';
-import { Calendar as CalendarIcon, Upload, Loader2, Camera, Plus, Trash2, FileText, User, AlertTriangle } from 'lucide-react';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { supabase } from '@/integrations/supabase/client';
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import { useAuth } from "@/hooks/use-auth";
+import { ExpenseCategory, Invoice, BankDetails, MaterialItem, PaymentStatus } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/integrations/supabase/client';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from "@/components/ui/checkbox"
+import { IndianRupee } from 'lucide-react';
 
-type InvoiceFormProps = {
-  isOpen?: boolean;
-  onClose?: () => void;
-  onSubmit: (invoice: Omit<Invoice, 'id' | 'createdAt'>) => void;
-  initialData?: Partial<Invoice>;
+interface InvoiceFormProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (invoice: Partial<Invoice>) => void;
   siteId?: string;
-};
+  editInvoice?: Invoice;
+}
 
-const gstRates = [0, 5, 12, 18, 28];
-
-const InvoiceForm: React.FC<InvoiceFormProps> = ({
-  isOpen = true,
-  onClose,
-  onSubmit,
-  initialData,
-  siteId
-}) => {
-  const { toast } = useToast();
-  const isMobile = useIsMobile();
-  const [date, setDate] = useState<Date>(initialData?.date || new Date());
-  const [partyId, setPartyId] = useState<string>(initialData?.partyId || '');
-  const [partyName, setPartyName] = useState<string>(initialData?.partyName || '');
-  const [partyNameFixed, setPartyNameFixed] = useState<boolean>(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-
-  const [materialInput, setMaterialInput] = useState<string>('');
-  const [quantityInput, setQuantityInput] = useState<number>(0);
-  const [rateInput, setRateInput] = useState<number>(0);
-  const [gstPercentageInput, setGstPercentageInput] = useState<number>(18);
-
-  const [materialItems, setMaterialItems] = useState<MaterialItem[]>([]);
-  const [grandGrossAmount, setGrandGrossAmount] = useState<number>(0);
-  const [grandNetAmount, setGrandNetAmount] = useState<number>(0);
-  const [billFile, setBillFile] = useState<File | null>(null);
-  const [billUrl, setBillUrl] = useState<string>('');
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(initialData?.paymentStatus || PaymentStatus.PENDING);
-
-  const [accountNumber, setAccountNumber] = useState<string>(initialData?.bankDetails?.accountNumber || '');
-  const [bankName, setBankName] = useState<string>(initialData?.bankDetails?.bankName || '');
-  const [ifscCode, setIfscCode] = useState<string>(initialData?.bankDetails?.ifscCode || '');
-  const [email, setEmail] = useState<string>(initialData?.bankDetails?.email || '');
-  const [mobile, setMobile] = useState<string>(initialData?.bankDetails?.mobile || '');
-  const [ifscValidationMessage, setIfscValidationMessage] = useState<string>('');
-  const [isFetchingBankDetails, setIsFetchingBankDetails] = useState<boolean>(false);
-
-  const [approverType, setApproverType] = useState<"ho" | "supervisor">("ho");
-
+const InvoiceForm: React.FC<InvoiceFormProps> = ({ isOpen, onClose, onSubmit, siteId, editInvoice }) => {
   const { user } = useAuth();
-
-  const handlePartyNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!partyNameFixed) {
-      setPartyName(e.target.value);
-    }
-  };
-  const handlePartyNameBlur = () => {
-    if (partyName.trim() !== '') {
-      setPartyNameFixed(true);
-    }
-  };
+  const [formData, setFormData] = useState<Partial<Invoice>>({
+    date: new Date(),
+    partyId: '',
+    partyName: '',
+    material: '',
+    quantity: 1,
+    rate: 1,
+    gstPercentage: 0,
+    grossAmount: 0,
+    netAmount: 0,
+    materialItems: [],
+    bankDetails: {
+      accountNumber: '',
+      bankName: '',
+      ifscCode: '',
+      email: '',
+      mobile: ''
+    },
+    billUrl: '',
+    invoiceImageUrl: '',
+    paymentStatus: PaymentStatus.PENDING,
+    vendorName: '',
+    invoiceNumber: '',
+    amount: 0,
+    status: PaymentStatus.PENDING
+  });
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isMaterialItemsEnabled, setIsMaterialItemsEnabled] = useState(false);
+  const [materialItems, setMaterialItems] = useState<MaterialItem[]>([]);
+  const [newMaterialItem, setNewMaterialItem] = useState<Omit<MaterialItem, 'id'>>({
+    material: '',
+    quantity: 1,
+    rate: 1,
+    gstPercentage: 0,
+    amount: 0,
+  });
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedItemToDelete, setSelectedItemToDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    let totalGross = 0;
-    let totalNet = 0;
-    materialItems.forEach(item => {
-      if (item.amount !== null) {
-        totalGross += item.amount;
-        if (item.gstPercentage !== null) {
-          totalNet += item.amount + item.amount * (item.gstPercentage / 100);
-        }
-      }
-    });
-    setGrandGrossAmount(totalGross);
-    setGrandNetAmount(totalNet);
-
-    if (totalNet > 5000) {
-      setApproverType("ho");
+    if (editInvoice) {
+      setIsEditMode(true);
+      setFormData({
+        id: editInvoice.id,
+        date: editInvoice.date,
+        partyId: editInvoice.partyId,
+        partyName: editInvoice.partyName,
+        material: editInvoice.material,
+        quantity: editInvoice.quantity,
+        rate: editInvoice.rate,
+        gstPercentage: editInvoice.gstPercentage,
+        grossAmount: editInvoice.grossAmount,
+        netAmount: editInvoice.netAmount,
+        materialItems: editInvoice.materialItems,
+        bankDetails: editInvoice.bankDetails,
+        billUrl: editInvoice.billUrl,
+        invoiceImageUrl: editInvoice.invoiceImageUrl,
+        paymentStatus: editInvoice.paymentStatus,
+        vendorName: editInvoice.vendorName,
+        invoiceNumber: editInvoice.invoiceNumber,
+        amount: editInvoice.amount,
+        status: editInvoice.status
+      });
+      setMaterialItems(editInvoice.materialItems || []);
+      setIsMaterialItemsEnabled(editInvoice.materialItems && editInvoice.materialItems.length > 0);
+    } else {
+      setIsEditMode(false);
+      setFormData({
+        date: new Date(),
+        partyId: '',
+        partyName: '',
+        material: '',
+        quantity: 1,
+        rate: 1,
+        gstPercentage: 0,
+        grossAmount: 0,
+        netAmount: 0,
+        materialItems: [],
+        bankDetails: {
+          accountNumber: '',
+          bankName: '',
+          ifscCode: '',
+          email: '',
+          mobile: ''
+        },
+        billUrl: '',
+        invoiceImageUrl: '',
+        paymentStatus: PaymentStatus.PENDING,
+        vendorName: '',
+        invoiceNumber: '',
+        amount: 0,
+        status: PaymentStatus.PENDING
+      });
+      setMaterialItems([]);
+      setIsMaterialItemsEnabled(false);
     }
-  }, [materialItems]);
+  }, [editInvoice]);
+
+  useEffect(() => {
+    // Calculate gross amount whenever quantity, rate, or GST changes
+    const calculateAmounts = () => {
+      const itemAmount = (formData.quantity || 0) * (formData.rate || 0);
+      const gstAmount = itemAmount * ((formData.gstPercentage || 0) / 100);
+      const gross = itemAmount + gstAmount;
+      setFormData(prev => ({
+        ...prev,
+        grossAmount: gross,
+        netAmount: gross,
+        amount: gross
+      }));
+    };
+
+    calculateAmounts();
+  }, [formData.quantity, formData.rate, formData.gstPercentage]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleBankDetailsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      bankDetails: {
+        ...prev.bankDetails,
+        [name]: value
+      }
+    }));
+  };
+
+  const handleMaterialItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setNewMaterialItem(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
   const addMaterialItem = () => {
-    if (!materialInput.trim()) {
-      toast({
-        title: "Material name is required",
-        description: "Please enter a material name",
-        variant: "destructive"
-      });
-      return;
-    }
-    if (quantityInput <= 0) {
-      toast({
-        title: "Invalid quantity",
-        description: "Quantity must be greater than zero",
-        variant: "destructive"
-      });
-      return;
-    }
-    if (rateInput <= 0) {
-      toast({
-        title: "Invalid rate",
-        description: "Rate must be greater than zero",
-        variant: "destructive"
-      });
-      return;
-    }
-    const grossAmount = quantityInput * rateInput;
     const newItem: MaterialItem = {
-      id: Date.now().toString(),
-      material: materialInput,
-      quantity: quantityInput,
-      rate: rateInput,
-      gstPercentage: gstPercentageInput,
-      amount: grossAmount
+      id: uuidv4(),
+      material: newMaterialItem.material,
+      quantity: newMaterialItem.quantity,
+      rate: newMaterialItem.rate,
+      gstPercentage: newMaterialItem.gstPercentage,
+      amount: (newMaterialItem.quantity || 0) * (newMaterialItem.rate || 0) * (1 + (newMaterialItem.gstPercentage || 0) / 100),
     };
-    setMaterialItems([...materialItems, newItem]);
-
-    setMaterialInput('');
-    setQuantityInput(0);
-    setRateInput(0);
+    setMaterialItems(prev => [...prev, newItem]);
+    setNewMaterialItem({
+      material: '',
+      quantity: 1,
+      rate: 1,
+      gstPercentage: 0,
+      amount: 0,
+    });
   };
 
-  const removeMaterialItem = (index: number) => {
-    const updatedItems = [...materialItems];
-    updatedItems.splice(index, 1);
-    setMaterialItems(updatedItems);
+  const confirmDeleteItem = (id: string) => {
+    setSelectedItemToDelete(id);
+    setIsDeleteDialogOpen(true);
   };
 
-  const handleAccountNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '');
-    if (value.length <= 16) {
-      setAccountNumber(value);
+  const deleteMaterialItem = async () => {
+    if (!selectedItemToDelete) return;
+    setMaterialItems(prev => prev.filter(item => item.id !== selectedItemToDelete));
+    setSelectedItemToDelete(null);
+    setIsDeleteDialogOpen(false);
+  };
+
+  const toggleMaterialItems = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsMaterialItemsEnabled(e.target.checked);
+    if (!e.target.checked) {
+      setMaterialItems([]);
     }
   };
 
-  const validateIfsc = (code: string) => {
-    if (code.length !== 11) {
-      return false;
-    }
-    return code[4] === '0';
-  };
-
-  const handleIfscChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.toUpperCase();
-    setIfscCode(value);
-
-    if (value.length < 11) {
-      setIfscValidationMessage('');
-    }
-  };
-
-  const handleIfscBlur = async () => {
-    if (ifscCode.length !== 11) {
-      setIfscValidationMessage('IFSC code must be 11 characters');
-      return;
-    }
-
-    if (ifscCode[4] !== '0') {
-      setIfscValidationMessage('5th digit of IFSC code must be 0');
-      setBankName('');
-      return;
-    }
-
-    setIfscValidationMessage('');
-
+  const handleSubmit = async () => {
     try {
-      setIsFetchingBankDetails(true);
-      const response = await fetch(`https://ifsc.razorpay.com/${ifscCode}`);
-      if (response.ok) {
-        const data = await response.json();
-        setBankName(`${data.BANK}, ${data.BRANCH}, ${data.CITY}`);
-        toast({
-          title: "Bank details fetched",
-          description: "Bank details have been automatically filled"
-        });
-      } else {
-        setIfscValidationMessage('Invalid IFSC code');
-        setBankName('');
-      }
-    } catch (error) {
-      setIfscValidationMessage('Failed to fetch bank details');
-      console.error('Error fetching bank details:', error);
-    } finally {
-      setIsFetchingBankDetails(false);
-    }
-  };
+      setIsSubmitting(true);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setBillFile(e.target.files[0]);
-    }
-  };
-
-  const resetPartyName = () => {
-    setPartyNameFixed(false);
-    setPartyName('');
-  };
-
-  const handleCalendarSelect = (newDate: Date | undefined) => {
-    if (newDate) {
-      setDate(newDate);
-      setIsCalendarOpen(false);
-    }
-  };
-
-  const uploadFile = async (file: File) => {
-    try {
-      setIsUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${uuidv4()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { data, error } = await supabase.storage
-        .from('invoice-images')
-        .upload(filePath, file);
-
-      if (error) {
-        throw error;
-      }
-
-      // Get the public URL
-      const { data: publicUrlData } = supabase.storage
-        .from('invoice-images')
-        .getPublicUrl(filePath);
-
-      return publicUrlData.publicUrl;
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      toast({
-        title: "Upload failed",
-        description: "Could not upload file. Please try again.",
-        variant: "destructive"
-      });
-      return null;
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!partyId.trim()) {
-      toast({
-        title: "Missing Invoice Number",
-        description: "Please provide an Invoice Number",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (materialItems.length === 0) {
-      toast({
-        title: "No materials added",
-        description: "Please add at least one material item",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (approverType === "ho" && !validateIfsc(ifscCode)) {
-      toast({
-        title: "Invalid IFSC code",
-        description: "Please provide a valid IFSC code with 5th digit as '0'",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      // Get current user ID from auth
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id || user?.id;
-      
-      if (!userId) {
-        toast({
-          title: "Authentication Error",
-          description: "User authentication error. Please sign in again.",
-          variant: "destructive"
-        });
+      if (!formData.date || !formData.partyId || !formData.partyName || !formData.material) {
+        toast.error('Please fill in all required fields.');
         return;
       }
-      
-      let fileUrl = '';
-      if (billFile) {
-        fileUrl = await uploadFile(billFile) || '';
-      }
 
-      const primaryMaterial = materialItems[0];
-
-      const bankDetails = {
-        accountNumber: approverType === "ho" ? accountNumber : "",
-        bankName: approverType === "ho" ? bankName : "",
-        ifscCode: approverType === "ho" ? ifscCode : "",
-        email: approverType === "ho" ? email : "",
-        mobile: approverType === "ho" ? mobile : "",
-      };
-
-      const invoiceData: Partial<Invoice> = {
-        date,
-        partyId,
-        partyName,
-        material: materialItems.map(item => item.material).join(', '),
-        quantity: primaryMaterial.quantity || 0,
-        rate: primaryMaterial.rate || 0,
-        gstPercentage: primaryMaterial.gstPercentage || 18,
-        grossAmount: grandGrossAmount,
-        netAmount: grandNetAmount,
-        materialItems: materialItems,
-        bankDetails: bankDetails,
-        billUrl: fileUrl,
-        paymentStatus,
-        createdBy: userId,
-        approverType: approverType,
+      const invoice: Partial<Invoice> = {
+        date: formData.date,
+        partyId: formData.partyId,
+        partyName: formData.partyName,
+        material: formData.material,
+        quantity: formData.quantity || 1,
+        rate: formData.rate || 1,
+        gstPercentage: formData.gstPercentage || 0,
+        grossAmount: formData.grossAmount || 0,
+        netAmount: formData.netAmount || 0,
+        materialItems: isMaterialItemsEnabled ? materialItems : [],
+        bankDetails: formData.bankDetails || {
+          accountNumber: '',
+          bankName: '',
+          ifscCode: '',
+          email: '',
+          mobile: ''
+        },
+        billUrl: formData.billUrl,
+        invoiceImageUrl: formData.invoiceImageUrl,
+        paymentStatus: PaymentStatus.PENDING,
+        createdBy: user?.id || '',
         siteId: siteId,
-        status: paymentStatus
+        vendorName: formData.vendorName,
+        invoiceNumber: formData.invoiceNumber,
+        amount: formData.amount,
+        status: PaymentStatus.PENDING
       };
 
-      console.log("Saving invoice data:", invoiceData);
-
-      // Save to Supabase
-      if (siteId) {
-        try {
-          // Try to refresh schema cache
-          await supabase.from('site_invoices').select('id').limit(1);
-          
-          const invoiceSubmitData = {
-            site_id: siteId,
-            date: date.toISOString(),
-            party_id: partyId,
-            party_name: partyName,
-            material: materialItems.map(item => item.material).join(', '),
-            quantity: primaryMaterial.quantity || 0,
-            rate: primaryMaterial.rate || 0,
-            gst_percentage: primaryMaterial.gstPercentage || 18,
-            gross_amount: grandGrossAmount,
-            net_amount: grandNetAmount,
-            material_items: JSON.stringify(materialItems),
-            bank_details: JSON.stringify(bankDetails),
-            bill_url: fileUrl,
-            payment_status: paymentStatus,
-            created_by: userId,
-            approver_type: approverType,
-            created_at: new Date().toISOString(),
-            status: paymentStatus
-          };
-
-          console.log("Submitting invoice data:", invoiceSubmitData);
-          
-          const { data, error } = await supabase
-            .from('site_invoices')
-            .insert(invoiceSubmitData);
-
-          if (error) {
-            console.error('Error saving invoice:', error);
-            
-            // If the error is about the status column, try without it
-            if (error.message.includes('status')) {
-              const { status, ...dataWithoutStatus } = invoiceSubmitData;
-              
-              console.log("Retrying without status field:", dataWithoutStatus);
-              const { error: fallbackError } = await supabase
-                .from('site_invoices')
-                .insert(dataWithoutStatus);
-                
-              if (fallbackError) {
-                console.error("Error in fallback invoice insertion:", fallbackError);
-                toast({
-                  title: "Failed to save invoice",
-                  description: fallbackError.message,
-                  variant: "destructive"
-                });
-                return;
-              } else {
-                // Success with fallback
-                toast({
-                  title: "Invoice Created",
-                  description: "Invoice saved successfully",
-                  variant: "default"
-                });
-                
-                onSubmit(invoiceData);
-                
-                // Reset form after submission
-                setDate(new Date());
-                setPartyId('');
-                setPartyName('');
-                setPartyNameFixed(false);
-                setMaterialItems([]);
-                setGrandGrossAmount(0);
-                setGrandNetAmount(0);
-                setBillFile(null);
-                setBillUrl('');
-                setPaymentStatus(PaymentStatus.PENDING);
-                setAccountNumber('');
-                setBankName('');
-                setIfscCode('');
-                setEmail('');
-                setMobile('');
-                setApproverType("ho");
-                
-                if (onClose) onClose();
-                return;
-              }
-            } else {
-              toast({
-                title: "Failed to save invoice",
-                description: error.message,
-                variant: "destructive"
-              });
-              return;
-            }
-          }
-        } catch (schemaError) {
-          console.error("Schema or query error:", schemaError);
-          toast({
-            title: "Database Error",
-            description: "Database schema error. Please contact support.",
-            variant: "destructive"
-          });
-          return;
-        }
-      } else {
-        toast({
-          title: "Missing Site ID",
-          description: "Site ID is required to save an invoice",
-          variant: "destructive"
-        });
-        return;
-      }
+      onSubmit(invoice);
+      onClose();
+      toast.success('Invoice submitted successfully!');
     } catch (error) {
-      console.error('Error in form submission:', error);
-      toast({
-        title: "Error",
-        description: "Failed to submit the invoice. Please try again.",
-        variant: "destructive"
-      });
+      console.error('Error submitting invoice:', error);
+      toast.error('Failed to submit invoice. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  return isOpen ? (
-    <Dialog open={isOpen} onOpenChange={onClose ? () => onClose() : undefined}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-4 md:p-6">
-        <DialogHeader>
-          <DialogTitle>
-            {siteId ? "Add Site Invoice" : "Add Invoice"}
-          </DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="date">Invoice Date</Label>
-              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar 
-                    mode="single" 
-                    selected={date} 
-                    onSelect={handleCalendarSelect} 
-                    initialFocus 
-                    className={cn("p-3 pointer-events-auto")} 
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+  if (!isOpen) return null;
 
-            <div className="space-y-2 relative">
-              <Label htmlFor="party" className="flex items-center">
-                <User className="h-4 w-4 mr-1 text-muted-foreground" />
-                Party Name
-              </Label>
-              <div className="flex gap-2">
-                <Input id="party" value={partyName} onChange={handlePartyNameChange} onBlur={handlePartyNameBlur} placeholder="Enter party name" required disabled={partyNameFixed} className={partyNameFixed ? "bg-muted" : ""} />
-                {partyNameFixed && <Button type="button" variant="outline" size="icon" onClick={resetPartyName} className="flex-shrink-0">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>}
+  return (
+    <div className="fixed inset-0 z-50 overflow-auto bg-black/50">
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-2xl p-4">
+          <CardHeader>
+            <CardTitle>{isEditMode ? 'Edit Invoice' : 'Add Invoice'}</CardTitle>
+            <CardDescription>Enter invoice details below:</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="date">Date</Label>
+                <Input
+                  type="date"
+                  id="date"
+                  name="date"
+                  value={formData.date ? (formData.date as Date).toISOString().split('T')[0] : ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, date: new Date(e.target.value) }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="vendorName">Vendor Name</Label>
+                <Input
+                  type="text"
+                  id="vendorName"
+                  name="vendorName"
+                  value={formData.vendorName || ''}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <Label htmlFor="invoiceNumber">Invoice Number</Label>
+                <Input
+                  type="text"
+                  id="invoiceNumber"
+                  name="invoiceNumber"
+                  value={formData.invoiceNumber || ''}
+                  onChange={handleChange}
+                />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="partyId" className="flex items-center">
-                <FileText className="h-4 w-4 mr-1 text-muted-foreground" />
-                Invoice Number
-              </Label>
-              <Input id="partyId" value={partyId} onChange={e => setPartyId(e.target.value)} placeholder="Enter invoice number" required />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium">Materials</h3>
-            </div>
-            
-            <div className="p-3 sm:p-4 border rounded-md mb-4 bg-muted/30">
-              <h4 className="font-medium mb-3">Add New Material</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4">
-                <div className="space-y-2">
-                  <Label htmlFor="material-input">Material Name</Label>
-                  <Input id="material-input" value={materialInput} onChange={e => setMaterialInput(e.target.value)} placeholder="e.g., TMT Steel Bars" />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="quantity-input">Quantity</Label>
-                  <Input id="quantity-input" type="number" value={quantityInput || ''} onChange={e => setQuantityInput(Number(e.target.value))} min="0" step="0.01" />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="rate-input">Rate (₹)</Label>
-                  <Input id="rate-input" type="number" value={rateInput || ''} onChange={e => setRateInput(Number(e.target.value))} min="0" step="0.01" />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="gst-input">GST Percentage (%)</Label>
-                  <Select value={gstPercentageInput.toString()} onValueChange={value => setGstPercentageInput(Number(value))}>
-                    <SelectTrigger id="gst-input">
-                      <SelectValue placeholder="Select GST rate" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {gstRates.map(rate => <SelectItem key={rate} value={rate.toString()}>
-                          {rate}%
-                        </SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="partyId">Party ID</Label>
+                <Input
+                  type="text"
+                  id="partyId"
+                  name="partyId"
+                  value={formData.partyId || ''}
+                  onChange={handleChange}
+                />
               </div>
-              
-              <Button type="button" onClick={addMaterialItem} className="gap-1.5">
-                <Plus className="h-4 w-4" />
-                Add Material
-              </Button>
-            </div>
-            
-            {materialItems.length > 0 && <div className="mb-4">
-                <h4 className="font-medium mb-2">Material Items List</h4>
-                <div className="overflow-x-auto rounded-md border">
-                  <table className="w-full">
-                    <thead className="bg-muted text-left">
-                      <tr>
-                        <th className="py-2 px-2 sm:px-4 font-medium">#</th>
-                        <th className="py-2 px-2 sm:px-4 font-medium">Material</th>
-                        <th className="py-2 px-2 sm:px-4 font-medium text-right">Qty</th>
-                        <th className="py-2 px-2 sm:px-4 font-medium text-right">Rate (₹)</th>
-                        <th className="py-2 px-2 sm:px-4 font-medium text-right">GST %</th>
-                        <th className="py-2 px-2 sm:px-4 font-medium text-right">Amount (₹)</th>
-                        <th className="py-2 px-2 sm:px-4 font-medium text-center">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {materialItems.map((item, index) => <tr key={item.id} className="border-t">
-                          <td className="py-3 px-2 sm:px-4">{index + 1}</td>
-                          <td className="py-3 px-2 sm:px-4 max-w-[120px] sm:max-w-none truncate">{item.material}</td>
-                          <td className="py-3 px-2 sm:px-4 text-right">{item.quantity}</td>
-                          <td className="py-3 px-2 sm:px-4 text-right">{item.rate?.toLocaleString()}</td>
-                          <td className="py-3 px-2 sm:px-4 text-right">{item.gstPercentage}%</td>
-                          <td className="py-3 px-2 sm:px-4 text-right">{item.amount?.toLocaleString()}</td>
-                          <td className="py-3 px-2 sm:px-4 text-center">
-                            <Button type="button" variant="ghost" size="icon" onClick={() => removeMaterialItem(index)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </td>
-                        </tr>)}
-                    </tbody>
-                  </table>
-                </div>
-              </div>}
-            
-            <div className="bg-muted p-3 sm:p-4 rounded-md mt-4">
-              <div className="flex flex-col md:flex-row md:justify-end md:items-center gap-4">
-                <div className="space-y-2 md:w-1/4">
-                  <Label htmlFor="grandGross">Net Taxable Amount (₹)</Label>
-                  <Input id="grandGross" value={grandGrossAmount.toLocaleString()} readOnly className="bg-muted font-medium" />
-                </div>
-                
-                <div className="space-y-2 md:w-1/4">
-                  <Label htmlFor="grandNet" className="font-medium">Grand Net Total (₹)</Label>
-                  <Input id="grandNet" value={grandNetAmount.toLocaleString()} readOnly className="bg-muted font-bold text-primary" />
-                </div>
+              <div>
+                <Label htmlFor="partyName">Party Name</Label>
+                <Input
+                  type="text"
+                  id="partyName"
+                  name="partyName"
+                  value={formData.partyName || ''}
+                  onChange={handleChange}
+                />
               </div>
             </div>
-          </div>
 
-          <Separator />
-
-          <div>
-            <h3 className="text-lg font-medium mb-4">Payment made by</h3>
-            <div className="bg-muted/30 p-3 sm:p-4 rounded-md">
-              <RadioGroup value={approverType} onValueChange={value => setApproverType(value as "ho" | "supervisor")} className="flex flex-col md:flex-row gap-4">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="ho" id="ho" />
-                  <Label htmlFor="ho">Head Office</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="supervisor" id="supervisor" disabled={grandNetAmount > 5000} />
-                  <Label htmlFor="supervisor" className={grandNetAmount > 5000 ? "text-muted-foreground" : ""}>
-                    Supervisor
-                  </Label>
-                </div>
-              </RadioGroup>
-              
-              {grandNetAmount > 5000 && <div className="mt-3 flex items-center text-amber-600 text-sm">
-                  <AlertTriangle className="h-4 w-4 mr-1" />
-                  <span>Amounts over ₹5,000 must be approved by Head Office</span>
-                </div>}
-            </div>
-          </div>
-
-          <Separator />
-
-          {approverType === "ho" && (
             <div>
-              <h3 className="text-lg font-medium mb-4">Bank Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="accountNumber">Account Number (max 16 digits)</Label>
-                  <Input id="accountNumber" value={accountNumber} onChange={handleAccountNumberChange} placeholder="Enter Account Number (max 16 digits)" required maxLength={16} />
-                </div>
+              <Label htmlFor="material">Material</Label>
+              <Input
+                type="text"
+                id="material"
+                name="material"
+                value={formData.material || ''}
+                onChange={handleChange}
+              />
+            </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="ifscCode">IFSC Code</Label>
-                  <div className="relative">
-                    <Input id="ifscCode" value={ifscCode} onChange={handleIfscChange} onBlur={handleIfscBlur} placeholder="Enter IFSC Code (11 characters)" maxLength={11} required className={ifscValidationMessage ? "border-red-500" : ""} />
-                    {isFetchingBankDetails && <div className="absolute top-0 right-0 h-full flex items-center pr-3">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>}
-                    {ifscValidationMessage && <p className="text-red-500 text-sm mt-1">{ifscValidationMessage}</p>}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Must be 11 characters and 5th digit must be '0'
-                    </p>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="materialItemsEnabled"
+                checked={isMaterialItemsEnabled}
+                onCheckedChange={toggleMaterialItems}
+              />
+              <Label htmlFor="materialItemsEnabled">Enable Material Items</Label>
+            </div>
+
+            {isMaterialItemsEnabled && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div>
+                    <Label htmlFor="material">Material</Label>
+                    <Input
+                      type="text"
+                      id="material"
+                      name="material"
+                      value={newMaterialItem.material}
+                      onChange={handleMaterialItemChange}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="quantity">Quantity</Label>
+                    <Input
+                      type="number"
+                      id="quantity"
+                      name="quantity"
+                      value={newMaterialItem.quantity || ''}
+                      onChange={handleMaterialItemChange}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="rate">Rate</Label>
+                    <Input
+                      type="number"
+                      id="rate"
+                      name="rate"
+                      value={newMaterialItem.rate || ''}
+                      onChange={handleMaterialItemChange}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gstPercentage">GST (%)</Label>
+                    <Input
+                      type="number"
+                      id="gstPercentage"
+                      name="gstPercentage"
+                      value={newMaterialItem.gstPercentage || ''}
+                      onChange={handleMaterialItemChange}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="button" size="sm" onClick={addMaterialItem}>Add Item</Button>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="bankName">Bank Name & Branch</Label>
-                  <Input id="bankName" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank Name (auto-filled from IFSC)" required readOnly={bankName !== ''} className={bankName ? "bg-muted" : ""} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email (Optional)</Label>
-                  <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email Address" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="mobile">Mobile Number (Optional)</Label>
-                  <Input id="mobile" value={mobile} onChange={e => setMobile(e.target.value.replace(/\D/g, ''))} placeholder="Mobile Number" maxLength={10} />
-                </div>
-              </div>
-              <Separator className="mt-6" />
-            </div>
-          )}
-
-          <Separator />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="bill">Upload Bill</Label>
-              <div className="border border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors">
-                <input type="file" id="bill" className="hidden" accept=".pdf,.jpg,.jpeg,.png,image/*" onChange={handleFileChange} capture="environment" />
-                <label htmlFor="bill" className="cursor-pointer flex flex-col items-center">
-                  <div className="flex gap-2">
-                    <Upload className="h-6 w-6 text-muted-foreground" />
-                    <Camera className="h-6 w-6 text-muted-foreground" />
+                {materialItems.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Material</th>
+                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Quantity</th>
+                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Rate</th>
+                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">GST (%)</th>
+                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Amount</th>
+                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {materialItems.map((item) => (
+                          <tr key={item.id} className="border-b hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-sm">{item.material}</td>
+                            <td className="px-4 py-3 text-sm">{item.quantity}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <div className="flex items-center">
+                                <IndianRupee className="h-3 w-3 mr-1" />
+                                {item.rate?.toLocaleString()}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm">{item.gstPercentage}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <div className="flex items-center">
+                                <IndianRupee className="h-3 w-3 mr-1" />
+                                {item.amount?.toLocaleString()}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <Button type="button" variant="destructive" size="xs" onClick={() => confirmDeleteItem(item.id || '')}>Delete</Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <span className="text-sm text-muted-foreground mt-2">
-                    {billFile ? billFile.name : "Click to upload or take a photo"}
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Payment Status</Label>
-              <Select value={paymentStatus} onValueChange={value => setPaymentStatus(value as PaymentStatus)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={PaymentStatus.PENDING}>Pending</SelectItem>
-                  <SelectItem value={PaymentStatus.PAID}>Paid</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t">
-            {onClose && (
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
+                )}
+              </>
             )}
-            <Button type="submit" disabled={isUploading}>
-              {isUploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
-              ) : initialData ? "Update Invoice" : "Create Invoice"}
+
+            {!isMaterialItemsEnabled && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input
+                    type="number"
+                    id="quantity"
+                    name="quantity"
+                    value={formData.quantity || ''}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="rate">Rate</Label>
+                  <Input
+                    type="number"
+                    id="rate"
+                    name="rate"
+                    value={formData.rate || ''}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="gstPercentage">GST (%)</Label>
+                  <Input
+                    type="number"
+                    id="gstPercentage"
+                    name="gstPercentage"
+                    value={formData.gstPercentage || ''}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="grossAmount">Gross Amount</Label>
+                <Input
+                  type="number"
+                  id="grossAmount"
+                  name="grossAmount"
+                  value={formData.grossAmount || ''}
+                  readOnly
+                />
+              </div>
+              <div>
+                <Label htmlFor="netAmount">Net Amount</Label>
+                <Input
+                  type="number"
+                  id="netAmount"
+                  name="netAmount"
+                  value={formData.netAmount || ''}
+                  readOnly
+                />
+              </div>
+              <div>
+                <Label htmlFor="amount">Amount</Label>
+                <Input
+                  type="number"
+                  id="amount"
+                  name="amount"
+                  value={formData.amount || ''}
+                  readOnly
+                />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium">Bank Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="accountNumber">Account Number</Label>
+                  <Input
+                    type="text"
+                    id="accountNumber"
+                    name="accountNumber"
+                    value={formData.bankDetails?.accountNumber || ''}
+                    onChange={handleBankDetailsChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bankName">Bank Name</Label>
+                  <Input
+                    type="text"
+                    id="bankName"
+                    name="bankName"
+                    value={formData.bankDetails?.bankName || ''}
+                    onChange={handleBankDetailsChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ifscCode">IFSC Code</Label>
+                  <Input
+                    type="text"
+                    id="ifscCode"
+                    name="ifscCode"
+                    value={formData.bankDetails?.ifscCode || ''}
+                    onChange={handleBankDetailsChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.bankDetails?.email || ''}
+                    onChange={handleBankDetailsChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mobile">Mobile</Label>
+                  <Input
+                    type="tel"
+                    id="mobile"
+                    name="mobile"
+                    value={formData.bankDetails?.mobile || ''}
+                    onChange={handleBankDetailsChange}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="billUrl">Bill URL</Label>
+              <Input
+                type="url"
+                id="billUrl"
+                name="billUrl"
+                value={formData.billUrl || ''}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="invoiceImageUrl">Invoice Image URL</Label>
+              <Input
+                type="url"
+                id="invoiceImageUrl"
+                name="invoiceImageUrl"
+                value={formData.invoiceImageUrl || ''}
+                onChange={handleChange}
+              />
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-between">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancel
             </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  ) : null;
+            <Button type="button" onClick={handleSubmit} disabled={isSubmitting}>
+              {isEditMode ? 'Update Invoice' : 'Submit Invoice'}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this item? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteMaterialItem}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
 };
 
 export default InvoiceForm;

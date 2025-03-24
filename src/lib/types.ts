@@ -105,7 +105,7 @@ export interface Expense {
   createdBy: string;
   createdAt: Date;
   siteId?: string; // Reference to the site
-  supervisorId: string;
+  supervisorId?: string;
 }
 
 export interface Advance {
@@ -174,6 +174,7 @@ export interface Invoice {
   invoiceNumber?: string; // Added for compatibility
   amount?: number;       // Added for compatibility
   status: PaymentStatus;
+  paymentBy?: string;    // Added for compatibility
 }
 
 // Balance Summary interface with new fields

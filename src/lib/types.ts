@@ -1,3 +1,4 @@
+
 // User related types
 export enum UserRole {
   ADMIN = "admin",
@@ -90,7 +91,8 @@ export enum PaymentStatus {
 
 export enum RecipientType {
   WORKER = "worker",
-  SUBCONTRACTOR = "subcontractor"
+  SUBCONTRACTOR = "subcontractor",
+  SUPERVISOR = "supervisor"
 }
 
 export interface Expense {
@@ -227,4 +229,10 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   created_at: Date;
+}
+
+// Chart data point for expense charts
+export interface ChartDataPoint {
+  name: string;
+  value: number;
 }

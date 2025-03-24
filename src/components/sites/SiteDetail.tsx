@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
@@ -169,7 +168,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           </Button>
           <h2 className="text-2xl font-bold">{site.name}</h2>
           {site.isCompleted ? (
-            <Badge variant="success" className="ml-2">Completed</Badge>
+            <Badge variant="outline" className="ml-2 bg-green-100 text-green-800">Completed</Badge>
           ) : (
             <Badge variant="default" className="ml-2">Active</Badge>
           )}
@@ -332,9 +331,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
-            invoices={invoices}
             onEntrySuccess={onEntrySuccess}
             userRole={userRole}
+            siteId={site.id}
           />
         </TabsContent>
       </div>

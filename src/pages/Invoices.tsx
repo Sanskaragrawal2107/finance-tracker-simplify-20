@@ -100,21 +100,24 @@ const Invoices: React.FC = () => {
       partyId: invoice.party_id,
       partyName: invoice.party_name,
       material: invoice.material,
-      quantity: invoice.quantity,
-      rate: invoice.rate,
-      gstPercentage: invoice.gst_percentage,
-      grossAmount: invoice.gross_amount,
-      netAmount: invoice.net_amount,
-      materialItems: invoice.material_items ? JSON.parse(invoice.material_items) : [],
-      bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details) : {},
+      quantity: Number(invoice.quantity),
+      rate: Number(invoice.rate),
+      gstPercentage: Number(invoice.gst_percentage),
+      grossAmount: Number(invoice.gross_amount),
+      netAmount: Number(invoice.net_amount),
+      materialItems: invoice.material_items ? JSON.parse(invoice.material_items.toString()) : [],
+      bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details.toString()) : {},
       billUrl: invoice.bill_url || '',
       invoiceImageUrl: invoice.invoice_image_url || '',
-      paymentStatus: invoice.payment_status,
+      paymentStatus: invoice.payment_status as PaymentStatus,
       createdBy: invoice.created_by || '',
       createdAt: new Date(invoice.created_at),
-      approverType: invoice.approver_type || "ho",
+      approverType: (invoice.approver_type || 'ho') as ('ho' | 'supervisor'),
       siteId: invoice.site_id,
-      status: invoice.payment_status
+      status: invoice.payment_status as PaymentStatus,
+      vendorName: invoice.party_name,
+      invoiceNumber: invoice.id,
+      amount: Number(invoice.net_amount)
     }));
   };
 
@@ -407,7 +410,12 @@ const Invoices: React.FC = () => {
           <DialogDescription>
             Fill out the form below to create a new invoice
           </DialogDescription>
-          <InvoiceForm onSubmit={handleCreateInvoice} />
+          <InvoiceForm 
+            onSuccess={() => {
+              setShowInvoiceForm(false);
+              fetchInvoices();
+            }}
+          />
         </DialogContent>
       </Dialog>
 

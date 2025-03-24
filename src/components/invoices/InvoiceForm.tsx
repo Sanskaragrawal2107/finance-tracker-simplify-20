@@ -179,7 +179,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         console.error('Error uploading file:', error);
         toast.error('Failed to upload bill');
       } else {
-        const url = `${SUPABASE_URL}/storage/v1/object/public/${data.Key}`;
+        const { data: urlData } = await supabase.storage.from('site-assets').getPublicUrl(filePath);
+        const url = urlData.publicUrl;
         setBillUrl(url);
         form.setValue('billUrl', url);
         toast.success('Bill uploaded successfully');
@@ -207,7 +208,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         console.error('Error uploading file:', error);
         toast.error('Failed to upload invoice image');
       } else {
-        const url = `${SUPABASE_URL}/storage/v1/object/public/${data.Key}`;
+        const { data: urlData } = await supabase.storage.from('site-assets').getPublicUrl(filePath);
+        const url = urlData.publicUrl;
         setInvoiceImageUrl(url);
         form.setValue('invoiceImageUrl', url);
         toast.success('Invoice image uploaded successfully');
@@ -224,12 +226,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     try {
       setLoading(true);
       
-      // Prepare invoice data with all required fields
       const invoiceData = {
         date: values.date.toISOString(),
         party_id: values.partyId,
         party_name: values.partyName,
-        material: values.material, // Ensure this field is included as it's required
+        material: values.material,
         quantity: Number(values.quantity),
         rate: Number(values.rate),
         gst_percentage: Number(values.gstPercentage),
@@ -246,7 +247,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       };
       
       if (isEditMode && invoice) {
-        // Update existing invoice
         const { error } = await supabase
           .from('site_invoices')
           .update(invoiceData)
@@ -255,7 +255,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         if (error) throw error;
         toast.success('Invoice updated successfully');
       } else {
-        // Create new invoice
         const { error } = await supabase
           .from('site_invoices')
           .insert(invoiceData);

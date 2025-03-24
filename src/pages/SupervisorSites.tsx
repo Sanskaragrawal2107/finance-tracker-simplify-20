@@ -332,10 +332,10 @@ const SupervisorSites: React.FC = () => {
   // If site detail view is open, show that instead
   if (showSiteDetail && selectedSite) {
     return (
-      <SiteDetail
-        site={selectedSite}
-        onBack={handleCloseSiteDetail}
-        userRole={user?.role || UserRole.VIEWER}
+      <SiteDetail 
+        siteId={selectedSite.id}
+        onBack={() => setSelectedSite(null)}
+        userRole={UserRole.SUPERVISOR}
       />
     );
   }

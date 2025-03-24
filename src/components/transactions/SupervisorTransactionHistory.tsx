@@ -19,7 +19,7 @@ interface SupervisorTransaction {
   id: string;
   date: string;
   amount: number;
-  transaction_type: 'funds_received' | 'advance_paid';
+  transaction_type: SupervisorTransactionType;
   payer_supervisor: {
     name: string;
   };
@@ -71,7 +71,20 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
 
       if (error) throw error;
 
-      setTransactions(data || []);
+      if (data) {
+        const formattedTransactions: SupervisorTransaction[] = data.map(transaction => ({
+          id: transaction.id,
+          date: transaction.date,
+          amount: transaction.amount,
+          transaction_type: transaction.transaction_type as SupervisorTransactionType,
+          payer_supervisor: transaction.payer_supervisor as { name: string },
+          receiver_supervisor: transaction.receiver_supervisor as { name: string },
+          payer_site: transaction.payer_site as { name: string, location: string },
+          receiver_site: transaction.receiver_site as { name: string, location: string },
+          created_at: transaction.created_at
+        }));
+        setTransactions(formattedTransactions);
+      }
     } catch (error) {
       console.error('Error fetching supervisor transactions:', error);
       toast.error('Failed to load supervisor transactions');
@@ -80,7 +93,7 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
     }
   };
 
-  const getTransactionTypeColor = (type: 'funds_received' | 'advance_paid') => {
+  const getTransactionTypeColor = (type: SupervisorTransactionType) => {
     switch (type) {
       case 'funds_received':
         return 'bg-green-100 text-green-800';

@@ -1,404 +1,394 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { ArrowUpRight, Plus, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Edit, CheckCircle, Circle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  Expense,
-  Advance,
-  FundsReceived,
-  Site,
-  UserRole,
-  Invoice,
-  BalanceSummary
-} from '@/lib/types';
-import { supabase } from '@/integrations/supabase/client';
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { DatePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
+import { Expense, Site, UserRole, Advance, FundsReceived, Invoice } from '@/lib/types';
+import { TransactionHistory } from '@/components/transactions/TransactionHistory';
+import { SupervisorTransactionHistory } from '@/components/transactions/SupervisorTransactionHistory';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
 import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
-import SiteDetailTransactions from '@/components/sites/SiteDetailTransactions';
-import BalanceCard from '@/components/dashboard/BalanceCard';
 import StatsCard from '@/components/dashboard/StatsCard';
-import { SupervisorTransactionForm } from '@/components/transactions/SupervisorTransactionForm';
-import { SupervisorTransactionHistory } from '@/components/transactions/SupervisorTransactionHistory';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface SiteDetailProps {
-  siteId?: string;
+  siteId: string;
+  onBack: () => void;
+  userRole: UserRole;
 }
 
-const SiteDetail: React.FC<SiteDetailProps> = ({ siteId }) => {
+const SiteDetail: React.FC<SiteDetailProps> = ({ siteId, onBack, userRole }) => {
   const { user } = useAuth();
   const [site, setSite] = useState<Site | null>(null);
-  const [supervisor, setSupervisor] = useState<any | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [fundsReceived, setFundsReceived] = useState<FundsReceived[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [siteSummary, setSiteSummary] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
-  const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
-  const [isFundsReceivedFormOpen, setIsFundsReceivedFormOpen] = useState(false);
-  const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
-  const [balanceSummary, setBalanceSummary] = useState<BalanceSummary>({
-    fundsReceived: 0,
-    fundsReceivedFromSupervisor: 0,
-    totalExpenditure: 0,
-    totalAdvances: 0,
-    debitsToWorker: 0,
-    invoicesPaid: 0,
-    pendingInvoices: 0,
-    advancePaidToSupervisor: 0,
-    totalBalance: 0,
-  });
-  const [stats, setStats] = useState({
-    expensesCount: 0,
-    advancesCount: 0,
-    fundsReceivedCount: 0,
-  });
-  const [supervisorFormOpen, setSupervisorFormOpen] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [completionDate, setCompletionDate] = useState<Date | null>(null);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [showAdvanceForm, setShowAdvanceForm] = useState(false);
+  const [showFundsForm, setShowFundsForm] = useState(false);
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
 
-  const fetchSiteDetails = async () => {
-    if (!siteId) return;
-
+  const fetchSiteDetails = useCallback(async () => {
+    setIsLoading(true);
     try {
       const { data: siteData, error: siteError } = await supabase
         .from('sites')
         .select('*')
         .eq('id', siteId)
         .single();
+        
+      if (siteError) {
+        console.error('Error fetching site details:', siteError);
+        toast.error('Failed to load site details');
+        return;
+      }
+      
+      if (siteData) {
+        const transformedSite: Site = {
+          id: siteData.id,
+          name: siteData.name,
+          jobName: siteData.job_name,
+          posNo: siteData.pos_no,
+          location: siteData.location,
+          startDate: new Date(siteData.start_date),
+          completionDate: siteData.completion_date ? new Date(siteData.completion_date) : undefined,
+          supervisorId: siteData.supervisor_id,
+          supervisor: siteData.supervisor_id || 'Unassigned',
+          createdAt: new Date(siteData.created_at),
+          isCompleted: siteData.is_completed,
+          funds: siteData.funds || 0,
+          totalFunds: siteData.total_funds || 0
+        };
+        setSite(transformedSite);
+      } else {
+        setSite(null);
+      }
 
-      if (siteError) throw siteError;
-
-      setSite({
-        id: siteData.id,
-        name: siteData.name,
-        jobName: siteData.job_name,
-        posNo: siteData.pos_no,
-        location: siteData.location,
-        startDate: new Date(siteData.start_date),
-        completionDate: siteData.completion_date ? new Date(siteData.completion_date) : undefined,
-        supervisorId: siteData.supervisor_id,
-        supervisor: siteData.supervisor_id,
-        createdAt: new Date(siteData.created_at),
-        isCompleted: siteData.is_completed,
-        funds: siteData.funds,
-        totalFunds: siteData.total_funds,
-      });
-
-      const { data: supervisorData, error: supervisorError } = await supabase
-        .from('users')
-        .select('id, name, email, role')
-        .eq('id', siteData.supervisor_id)
-        .single();
-
-      if (supervisorError) throw supervisorError;
-
-      setSupervisor({
-        id: supervisorData.id,
-        name: supervisorData.name,
-        email: supervisorData.email,
-        role: supervisorData.role,
-      });
-    } catch (error) {
-      console.error("Error fetching site details:", error);
-      toast.error("Failed to load site details");
-    }
-  };
-
-  const fetchBalanceSummary = async () => {
-    if (!siteId) return;
-
-    try {
-      const { data, error } = await supabase
+      const { data: summaryData, error: summaryError } = await supabase
         .from('site_financial_summary')
         .select('*')
         .eq('site_id', siteId)
         .single();
 
-      if (error) throw error;
+      if (summaryError) {
+        console.error('Error fetching site financial summary:', summaryError);
+        toast.error('Failed to load site financial summary');
+      }
 
-      setBalanceSummary({
-        fundsReceived: data?.funds_received || 0,
-        fundsReceivedFromSupervisor: data?.funds_received_from_supervisor || 0,
-        totalExpenditure: data?.total_expenses || 0,
-        totalAdvances: data?.total_advances || 0,
-        debitsToWorker: data?.debit_to_worker || 0,
-        invoicesPaid: data?.invoices_paid || 0,
-        pendingInvoices: data?.pending_invoices || 0,
-        advancePaidToSupervisor: data?.advance_paid_to_supervisor || 0,
-        totalBalance: data?.current_balance || 0,
-      });
+      setSiteSummary(summaryData || null);
     } catch (error) {
-      console.error("Error fetching balance summary:", error);
-      toast.error("Failed to load balance summary");
-    }
-  };
-
-  const fetchStats = async () => {
-    if (!siteId) return;
-
-    try {
-      const [expensesResponse, advancesResponse, fundsReceivedResponse] = await Promise.all([
-        supabase
-          .from('expenses')
-          .select('count', { count: 'exact' })
-          .eq('site_id', siteId),
-        supabase
-          .from('advances')
-          .select('count', { count: 'exact' })
-          .eq('site_id', siteId),
-        supabase
-          .from('funds_received')
-          .select('count', { count: 'exact' })
-          .eq('site_id', siteId),
-      ]);
-
-      setStats({
-        expensesCount: expensesResponse.data ? expensesResponse.count || 0 : 0,
-        advancesCount: advancesResponse.data ? advancesResponse.count || 0 : 0,
-        fundsReceivedCount: fundsReceivedResponse.data
-          ? fundsReceivedResponse.count || 0
-          : 0,
-      });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-      toast.error("Failed to load stats");
-    }
-  };
-
-  const refreshBalanceSummary = async () => {
-    await fetchBalanceSummary();
-  };
-
-  useEffect(() => {
-    if (siteId) {
-      setIsLoading(true);
-      Promise.all([fetchSiteDetails(), fetchBalanceSummary(), fetchStats()])
-        .finally(() => setIsLoading(false));
+      console.error('Error fetching site details:', error);
+      toast.error('Failed to load site details');
+    } finally {
+      setIsLoading(false);
     }
   }, [siteId]);
 
-  const handleExpenseCreated = () => {
-    setIsExpenseFormOpen(false);
-    fetchBalanceSummary();
-    fetchStats();
+  useEffect(() => {
+    fetchSiteDetails();
+  }, [fetchSiteDetails]);
+
+  const handleCompleteSite = async () => {
+    if (!completionDate) {
+      toast.error("Please select a completion date");
+      return;
+    }
+
+    setIsCompleting(true);
+    try {
+      const { error } = await supabase
+        .from('sites')
+        .update({ 
+          is_completed: true, 
+          completion_date: completionDate.toISOString() 
+        })
+        .eq('id', siteId);
+        
+      if (error) throw error;
+      
+      toast.success("Site marked as completed");
+      setShowCompleteDialog(false);
+      fetchSiteDetails();
+    } catch (error: any) {
+      console.error('Error completing site:', error);
+      toast.error('Failed to mark site as completed: ' + error.message);
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
-  const handleAdvanceCreated = () => {
-    setIsAdvanceFormOpen(false);
-    fetchBalanceSummary();
-    fetchStats();
+  const refreshData = async (dataType: string) => {
+    fetchSiteDetails();
   };
 
-  const handleFundsReceivedCreated = () => {
-    setIsFundsReceivedFormOpen(false);
-    fetchBalanceSummary();
-    fetchStats();
-  };
+  if (isLoading) {
+    return <div>Loading site details...</div>;
+  }
 
-  const handleInvoiceCreated = () => {
-    setIsInvoiceFormOpen(false);
-    fetchBalanceSummary();
-    fetchStats();
+  if (!site) {
+    return <div>Site not found</div>;
+  }
+
+  const financialData = {
+    totalExpenses: siteSummary ? siteSummary.total_expenses_paid : 0,
+    totalAdvances: siteSummary ? siteSummary.total_advances_paid : 0,
+    fundsReceived: siteSummary ? siteSummary.funds_received : 0,
+    fundsReceivedFromSupervisor: siteSummary ? siteSummary.funds_received_from_supervisor : 0,
+    advancePaidToSupervisor: siteSummary ? siteSummary.advance_paid_to_supervisor : 0,
+    invoicesPaid: siteSummary ? siteSummary.invoices_paid : 0,
+    pendingInvoices: 0, // You might need to calculate this from site invoices
+    currentBalance: siteSummary ? siteSummary.current_balance : 0
   };
 
   return (
-    <div>
-      {isLoading ? (
-        <div>Loading site details...</div>
-      ) : (
-        <>
-          {site && (
-            <>
-              <div className="mb-8">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h1 className="text-3xl font-bold">{site.name}</h1>
-                    <p className="text-muted-foreground">
-                      {site.jobName} - {site.posNo}
-                    </p>
-                  </div>
-                  <div>
-                    <Badge variant="secondary">
-                      Supervisor: {supervisor?.name || 'N/A'}
-                    </Badge>
-                  </div>
-                </div>
-                <div className="flex space-x-4">
-                  <Badge>Location: {site.location}</Badge>
-                  <Badge>
-                    Start Date: {format(new Date(site.startDate), 'dd MMM yyyy')}
-                  </Badge>
-                  {site.completionDate && (
-                    <Badge>
-                      Completion Date: {format(new Date(site.completionDate), 'dd MMM yyyy')}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <BalanceCard balanceData={balanceSummary} siteId={siteId} />
-                <StatsCard
-                  title="Expenses"
-                  value={stats.expensesCount}
-                  description="Total expenses recorded for this site"
-                />
-                <StatsCard
-                  title="Advances"
-                  value={stats.advancesCount}
-                  description="Total advances given at this site"
-                />
-                <StatsCard
-                  title="Funds Received"
-                  value={stats.fundsReceivedCount}
-                  description="Total funds received for this site"
-                />
-              </div>
-
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Site Transactions</h2>
-                <div className="flex space-x-2">
-                  <Button
-                    variant="outline"
-                    className="flex items-center"
-                    onClick={() => setIsExpenseFormOpen(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" /> Add Expense
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex items-center"
-                    onClick={() => setIsAdvanceFormOpen(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" /> Add Advance
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex items-center"
-                    onClick={() => setIsFundsReceivedFormOpen(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" /> Add Funds Received
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex items-center"
-                    onClick={() => setIsInvoiceFormOpen(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" /> Add Invoice
-                  </Button>
-                  {/* Add Advance Paid to Supervisor button */}
-                  <Button
-                    variant="outline"
-                    className="flex items-center"
-                    onClick={() => setSupervisorFormOpen(true)}
-                  >
-                    <ArrowUpRight className="mr-2 h-4 w-4" /> Advance Paid to Supervisor
-                  </Button>
-                </div>
-              </div>
-
-              {/* Supervisor transaction form dialog */}
-              <Dialog open={supervisorFormOpen} onOpenChange={setSupervisorFormOpen}>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Advance Paid to Supervisor</DialogTitle>
-                  </DialogHeader>
-                  <SupervisorTransactionForm
-                    payerSiteId={siteId}
-                    onSuccess={() => {
-                      setSupervisorFormOpen(false);
-                      if (refreshBalanceSummary) {
-                        refreshBalanceSummary();
-                      }
-                    }}
-                  />
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={isExpenseFormOpen} onOpenChange={setIsExpenseFormOpen}>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Add Expense</DialogTitle>
-                  </DialogHeader>
-                  <ExpenseForm
-                    siteId={siteId}
-                    onExpenseCreated={handleExpenseCreated}
-                    onClose={() => setIsExpenseFormOpen(false)}
-                  />
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={isAdvanceFormOpen} onOpenChange={setIsAdvanceFormOpen}>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Add Advance</DialogTitle>
-                  </DialogHeader>
-                  <AdvanceForm
-                    siteId={siteId}
-                    onAdvanceCreated={handleAdvanceCreated}
-                    onClose={() => setIsAdvanceFormOpen(false)}
-                  />
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={isFundsReceivedFormOpen} onOpenChange={setIsFundsReceivedFormOpen}>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Add Funds Received</DialogTitle>
-                  </DialogHeader>
-                  <FundsReceivedForm
-                    siteId={siteId}
-                    onFundsReceivedCreated={handleFundsReceivedCreated}
-                    onClose={() => setIsFundsReceivedFormOpen(false)}
-                  />
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={isInvoiceFormOpen} onOpenChange={setIsInvoiceFormOpen}>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Add Invoice</DialogTitle>
-                  </DialogHeader>
-                  <InvoiceForm
-                    siteId={siteId}
-                    onInvoiceCreated={handleInvoiceCreated}
-                    onClose={() => setIsInvoiceFormOpen(false)}
-                  />
-                </DialogContent>
-              </Dialog>
-
-              <div className="mb-6">
-                <h3 className="text-xl font-bold mb-3">Supervisor-to-Supervisor Transactions</h3>
-                <SupervisorTransactionHistory siteId={siteId} />
-              </div>
-
-              <SiteDetailTransactions
-                siteId={siteId}
-                expensesCount={stats.expensesCount}
-                advancesCount={stats.advancesCount}
-                fundsReceivedCount={stats.fundsReceivedCount}
-                userRole={user?.role || UserRole.VIEWER}
-                isAdminView={user?.role === UserRole.ADMIN}
-                site={site}
-                supervisor={supervisor}
-                expenses={expenses}
-                advances={advances}
-                fundsReceived={fundsReceived}
-                onTransactionsUpdate={() => {
-                  fetchBalanceSummary();
-                  fetchStats();
-                }}
+    <div className="container py-6 space-y-6 max-w-4xl">
+      <Button variant="ghost" onClick={onBack}>
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Back to Sites
+      </Button>
+      
+      <Card className="space-y-4">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold">{site.name}</CardTitle>
+          <CardDescription>
+            {site.jobName} - {site.location}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div>
+            <h4 className="text-sm font-medium leading-none">Site Information</h4>
+            <Separator className="my-2" />
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                <strong>POS No:</strong> {site.posNo}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <strong>Start Date:</strong> {format(site.startDate, 'PPP')}
+              </p>
+              {site.completionDate && (
+                <p className="text-sm text-muted-foreground">
+                  <strong>Completion Date:</strong> {format(site.completionDate, 'PPP')}
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                <strong>Supervisor:</strong> {site.supervisor}
+              </p>
+            </div>
+          </div>
+          <div>
+            <h4 className="text-sm font-medium leading-none">Financial Summary</h4>
+            <Separator className="my-2" />
+            <div className="space-y-2">
+              <StatsCard
+                title="Funds Received"
+                value={`₹${financialData.fundsReceived.toLocaleString()}`}
               />
-            </>
+              <StatsCard
+                title="Total Expenses"
+                value={`₹${financialData.totalExpenses.toLocaleString()}`}
+              />
+              <StatsCard
+                title="Total Advances"
+                value={`₹${financialData.totalAdvances.toLocaleString()}`}
+              />
+              <StatsCard
+                title="Invoices Paid"
+                value={`₹${financialData.invoicesPaid.toLocaleString()}`}
+              />
+              <StatsCard
+                title="Current Balance"
+                value={`₹${financialData.currentBalance.toLocaleString()}`}
+              />
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-between items-center">
+          {site.isCompleted ? (
+            <Badge variant="outline">
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Completed
+            </Badge>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={isCompleting}>
+                  {isCompleting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Completing...
+                    </>
+                  ) : (
+                    <>
+                      <Circle className="mr-2 h-4 w-4" />
+                      Mark as Complete
+                    </>
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Mark Site as Complete?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to mark this site as complete? This action
+                    cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <Form>
+                  <FormField
+                    control={{}}
+                    name="completionDate"
+                    render={() => (
+                      <FormItem>
+                        <FormLabel>Completion Date</FormLabel>
+                        <DatePicker
+                          selected={completionDate}
+                          onSelect={setDate => setCompletionDate(setDate)}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </Form>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleCompleteSite} disabled={isCompleting}>
+                    {isCompleting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Completing...
+                      </>
+                    ) : (
+                      "Complete"
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
-        </>
+          {userRole === UserRole.ADMIN && (
+            <Button>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Site
+            </Button>
+          )}
+        </CardFooter>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Transactions</CardTitle>
+            <CardDescription>View and manage site transactions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px] w-full rounded-md border">
+              <TransactionHistory siteId={siteId} />
+            </ScrollArea>
+          </CardContent>
+          <CardFooter className="flex justify-end">
+            <Button onClick={() => setShowExpenseForm(true)}>Add Expense</Button>
+            <Button onClick={() => setShowAdvanceForm(true)}>Add Advance</Button>
+            <Button onClick={() => setShowFundsForm(true)}>Add Funds</Button>
+            <Button onClick={() => setShowInvoiceForm(true)}>Add Invoice</Button>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Supervisor Transactions</CardTitle>
+            <CardDescription>View supervisor transactions for this site</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px] w-full rounded-md border">
+              <SupervisorTransactionHistory siteId={siteId} />
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showExpenseForm && (
+        <ExpenseForm 
+          siteId={site.id} 
+          onSuccess={() => {
+            setShowExpenseForm(false);
+            refreshData('expense');
+          }}
+          onClose={() => setShowExpenseForm(false)} 
+        />
+      )}
+
+      {showAdvanceForm && (
+        <AdvanceForm 
+          siteId={site.id} 
+          onSuccess={() => {
+            setShowAdvanceForm(false);
+            refreshData('advance');
+          }}
+          onClose={() => setShowAdvanceForm(false)} 
+        />
+      )}
+
+      {showFundsForm && (
+        <FundsReceivedForm 
+          siteId={site.id} 
+          onSuccess={() => {
+            setShowFundsForm(false);
+            refreshData('funds');
+          }}
+          onClose={() => setShowFundsForm(false)} 
+        />
+      )}
+
+      {showInvoiceForm && (
+        <InvoiceForm 
+          siteId={site.id} 
+          onSuccess={() => {
+            setShowInvoiceForm(false);
+            refreshData('invoice');
+          }} 
+          onClose={() => setShowInvoiceForm(false)}
+        />
       )}
     </div>
   );

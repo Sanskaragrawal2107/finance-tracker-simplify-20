@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -36,6 +37,13 @@ const transactionSchema = z.object({
     required_error: 'Transaction type is required',
   }),
   description: z.string().optional(),
+  category: z.string().optional(),
+  siteId: z.string().optional(),
+  recipientName: z.string().optional(),
+  recipientType: z.string().optional(),
+  purpose: z.string().optional(),
+  method: z.string().optional(),
+  reference: z.string().optional(),
 });
 
 type TransactionFormValues = z.infer<typeof transactionSchema>;
@@ -45,7 +53,7 @@ interface TransactionFormProps {
   onSuccess?: () => void;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ siteId, onSuccess }: TransactionFormProps) => {
+const TransactionForm = ({ siteId, onSuccess }: TransactionFormProps) => {
   const { user } = useAuth();
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
@@ -54,6 +62,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ siteId, onSuccess }: 
       amount: '',
       type: 'expense',
       description: '',
+      siteId: siteId,
     },
   });
 

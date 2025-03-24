@@ -561,9 +561,12 @@ const Expenses: React.FC = () => {
         
         setFundsReceived(prevFunds => [fundWithId, ...prevFunds]);
         
+        const currentFunds = sites.find(site => site.id === selectedSiteId)?.funds || 0;
+        const newFundsTotal = currentFunds + Number(data.amount);
+        
         const { error: updateError } = await supabase
           .from('sites')
-          .update({ funds: updatedFunds })
+          .update({ funds: newFundsTotal })
           .eq('id', selectedSiteId);
           
         if (updateError) {
@@ -572,7 +575,7 @@ const Expenses: React.FC = () => {
           setSites(prevSites =>
             prevSites.map(site =>
               site.id === selectedSiteId
-                ? { ...site, funds: updatedFunds }
+                ? { ...site, funds: newFundsTotal }
                 : site
             )
           );
@@ -689,7 +692,7 @@ const Expenses: React.FC = () => {
         }, 0);
         
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.payment_by === 'supervisor')
+          .filter(invoice => invoice.approverType === 'supervisor')
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
         const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;

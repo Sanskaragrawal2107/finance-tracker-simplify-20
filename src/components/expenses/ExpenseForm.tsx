@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Calendar as CalendarIcon, Check, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command';
 import {
   Form,
   FormControl,
@@ -21,11 +22,12 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/use-auth';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { ExpenseCategory } from '@/lib/types';
-import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/integrations/supabase/client';
 
 const expenseFormSchema = z.object({
   date: z.date({
@@ -69,6 +71,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<ExpenseCategory[]>([]);
+  const [filteredCategories, setFilteredCategories] = useState<ExpenseCategory[]>([]);
 
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseFormSchema),
@@ -83,25 +87,13 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   });
 
   useEffect(() => {
-    async function fetchCategories() {
-      try {
-        const { data, error } = await supabase
-          .from('expense_categories')
-          .select('name');
-
-        if (error) {
-          console.error('Error fetching expense categories:', error);
-          toast.error('Failed to load expense categories');
-        } else {
-          setCategories(data.map((item) => item.name));
-        }
-      } catch (error) {
-        console.error('Error fetching expense categories:', error);
-        toast.error('Failed to load expense categories');
-      }
-    }
-
-    fetchCategories();
+    const categories = Object.values(ExpenseCategory).map(category => ({
+      id: category,
+      name: category.replace(/_/g, ' ')
+    }));
+    
+    setAllCategories(categories);
+    setFilteredCategories(categories);
   }, []);
 
   const site = {

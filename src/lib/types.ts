@@ -178,11 +178,13 @@ export interface Invoice {
 // Balance Summary interface
 export interface BalanceSummary {
   fundsReceived: number;
+  fundsReceivedFromSupervisor?: number;
   totalExpenditure: number;
   totalAdvances: number;
   debitsToWorker: number;
   invoicesPaid: number;
   pendingInvoices: number;
+  advancePaidToSupervisor?: number;
   totalBalance: number;
 }
 
@@ -219,6 +221,28 @@ export interface Activity {
   amount: number;
   date: Date;
   user: string;
+}
+
+// Supervisor transaction types
+export enum SupervisorTransactionType {
+  FUNDS_RECEIVED = "funds_received",
+  ADVANCE_PAID = "advance_paid"
+}
+
+export interface SupervisorTransaction {
+  id: string;
+  date: Date;
+  payerSupervisorId: string;
+  payerSupervisorName: string;
+  receiverSupervisorId: string;
+  receiverSupervisorName: string;
+  payerSiteId: string;
+  payerSiteName: string;
+  receiverSiteId: string;
+  receiverSiteName: string;
+  amount: number;
+  transactionType: SupervisorTransactionType;
+  createdAt: Date;
 }
 
 // Authentication and user-related types

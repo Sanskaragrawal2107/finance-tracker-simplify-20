@@ -90,8 +90,7 @@ export enum PaymentStatus {
 
 export enum RecipientType {
   WORKER = "worker",
-  SUBCONTRACTOR = "subcontractor",
-  SUPERVISOR = "supervisor"
+  SUBCONTRACTOR = "subcontractor"
 }
 
 export interface Expense {
@@ -175,32 +174,32 @@ export interface Invoice {
   status: PaymentStatus;
 }
 
-// Balance Summary interface
+// Balance Summary interface with new fields
 export interface BalanceSummary {
   fundsReceived: number;
+  fundsReceivedFromSupervisor: number; // New field
   totalExpenditure: number;
   totalAdvances: number;
   debitsToWorker: number;
   invoicesPaid: number;
   pendingInvoices: number;
+  advancePaidToSupervisor: number; // New field
   totalBalance: number;
 }
 
-export interface ChartDataPoint {
-  name: string;
-  value: number;
-}
-
-export interface CategorySummary {
-  category: ExpenseCategory;
-  total: number;
-  percentage: number;
-}
-
-export interface DailyExpenseSummary {
+// New interface for supervisor transactions
+export interface SupervisorTransaction {
+  id: string;
   date: Date;
-  total: number;
-  categories: CategorySummary[];
+  payerSupervisorId: string;
+  payerSupervisorName: string;
+  receiverSupervisorId: string;
+  receiverSupervisorName: string;
+  payerSiteId: string;
+  receiverSiteId: string;
+  amount: number;
+  transactionType: 'funds_received' | 'advance_paid';
+  createdAt: Date;
 }
 
 // For recent activity feed

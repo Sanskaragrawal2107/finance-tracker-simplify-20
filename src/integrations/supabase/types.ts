@@ -245,9 +245,11 @@ export type Database = {
       }
       site_financial_summary: {
         Row: {
+          advance_paid_to_supervisor: number | null
           current_balance: number | null
           debit_to_worker: number | null
           funds_received: number | null
+          funds_received_from_supervisor: number | null
           id: string
           invoices_paid: number | null
           last_updated: string | null
@@ -256,9 +258,11 @@ export type Database = {
           total_expenses_paid: number | null
         }
         Insert: {
+          advance_paid_to_supervisor?: number | null
           current_balance?: number | null
           debit_to_worker?: number | null
           funds_received?: number | null
+          funds_received_from_supervisor?: number | null
           id?: string
           invoices_paid?: number | null
           last_updated?: string | null
@@ -267,9 +271,11 @@ export type Database = {
           total_expenses_paid?: number | null
         }
         Update: {
+          advance_paid_to_supervisor?: number | null
           current_balance?: number | null
           debit_to_worker?: number | null
           funds_received?: number | null
+          funds_received_from_supervisor?: number | null
           id?: string
           invoices_paid?: number | null
           last_updated?: string | null
@@ -421,6 +427,71 @@ export type Database = {
           },
         ]
       }
+      supervisor_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          id: string
+          payer_site_id: string
+          payer_supervisor_id: string
+          receiver_site_id: string
+          receiver_supervisor_id: string
+          transaction_type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          date?: string
+          id?: string
+          payer_site_id: string
+          payer_supervisor_id: string
+          receiver_site_id: string
+          receiver_supervisor_id: string
+          transaction_type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          payer_site_id?: string
+          payer_supervisor_id?: string
+          receiver_site_id?: string
+          receiver_supervisor_id?: string
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supervisor_transactions_payer_site_id_fkey"
+            columns: ["payer_site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supervisor_transactions_payer_supervisor_id_fkey"
+            columns: ["payer_supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supervisor_transactions_receiver_site_id_fkey"
+            columns: ["receiver_site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supervisor_transactions_receiver_supervisor_id_fkey"
+            columns: ["receiver_supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           created_at: string | null
@@ -452,6 +523,12 @@ export type Database = {
     Functions: {
       initialize_site_financial_summaries: {
         Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      update_site_financial_summary_for_id: {
+        Args: {
+          site_id_param: string
+        }
         Returns: undefined
       }
     }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
@@ -16,6 +17,8 @@ import ExpenseForm from '@/components/expenses/ExpenseForm';
 import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
+import SupervisorTransactionForm from '@/components/transactions/SupervisorTransactionForm';
+import SupervisorTransactionHistory from '@/components/transactions/SupervisorTransactionHistory';
 
 interface SiteDetailProps {
   site: Site;
@@ -74,14 +77,18 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
   const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+  const [isAdvancePaidFormOpen, setIsAdvancePaidFormOpen] = useState(false);
+  const [isFundsReceivedFormOpen, setIsFundsReceivedFormOpen] = useState(false);
 
   const defaultBalanceSummary: BalanceSummary = {
     fundsReceived: 0,
+    fundsReceivedFromSupervisor: 0,
     totalExpenditure: 0,
     totalAdvances: 0,
     debitsToWorker: 0,
     invoicesPaid: 0,
     pendingInvoices: 0,
+    advancePaidToSupervisor: 0,
     totalBalance: 0
   };
 
@@ -130,323 +137,264 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         onCompleteSite(site.id, completionDate);
       }
     } catch (error: any) {
-      console.error('Error in handleMarkComplete:', error);
+      console.error('Error marking site as complete:', error);
       toast.error('Failed to mark site as complete: ' + error.message);
-    } finally {
-      setIsMarkingComplete(false);
     }
   };
 
-  const handleExpenseSubmit = (expense: Partial<Expense>) => {
-    if (onAddExpense) {
-      const expenseWithSiteId = {
-        ...expense,
-        siteId: site.id
-      };
-      onAddExpense(expenseWithSiteId);
-    }
-    setIsExpenseFormOpen(false);
+  const handleAdvancePaidSubmit = () => {
     if (onEntrySuccess) {
-      onEntrySuccess('expense');
+      onEntrySuccess('transactions');
     }
   };
 
-  const handleAdvanceSubmit = (advance: Partial<Advance>) => {
-    if (onAddAdvance) {
-      const advanceWithSiteId = {
-        ...advance,
-        siteId: site.id
-      };
-      onAddAdvance(advanceWithSiteId);
-    }
-    setIsAdvanceFormOpen(false);
+  const handleFundsReceivedSubmit = () => {
     if (onEntrySuccess) {
-      onEntrySuccess('advance');
-    }
-  };
-
-  const handleFundsSubmit = (funds: Partial<FundsReceived>) => {
-    if (onAddFunds) {
-      const fundsWithSiteId = {
-        ...funds,
-        siteId: site.id
-      };
-      onAddFunds(fundsWithSiteId);
-    }
-    setIsFundsFormOpen(false);
-    if (onEntrySuccess) {
-      onEntrySuccess('funds');
-    }
-  };
-
-  const handleInvoiceSubmit = (invoice: Omit<Invoice, 'id' | 'createdAt'>) => {
-    if (onAddInvoice) {
-      const invoiceWithSiteId = {
-        ...invoice,
-        siteId: site.id
-      };
-      onAddInvoice(invoiceWithSiteId);
-    }
-    setIsInvoiceFormOpen(false);
-    if (onEntrySuccess) {
-      onEntrySuccess('invoice');
+      onEntrySuccess('transactions');
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* Site header */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onBack}
+            className="mr-2"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <span className="text-sm font-medium text-muted-foreground">Site Name</span>
-            <h1 className="text-xl md:text-2xl font-bold">{site.name}</h1>
-          </div>
+          <h2 className="text-2xl font-bold">{site.name}</h2>
           {site.isCompleted ? (
-            <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">
-              Completed
-            </Badge>
+            <Badge variant="success" className="ml-2">Completed</Badge>
           ) : (
-            <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
-              Active
-            </Badge>
+            <Badge variant="default" className="ml-2">Active</Badge>
           )}
         </div>
         
-        {!site.isCompleted && (
-          <Button 
+        {!site.isCompleted && userRole === UserRole.ADMIN && (
+          <Button
             variant="outline" 
-            size="sm" 
-            className="text-green-600 border-green-200 hover:bg-green-50 w-full sm:w-auto mt-2 sm:mt-0" 
-            onClick={() => setIsMarkingComplete(true)}
+            onClick={handleMarkComplete}
+            disabled={isMarkingComplete}
           >
             <Check className="mr-2 h-4 w-4" />
-            Mark as Complete
+            Mark Complete
           </Button>
         )}
-
-        {isMarkingComplete && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle>Mark Site as Complete?</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p>Are you sure you want to mark this site as complete? This action cannot be undone.</p>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsMarkingComplete(false)}>Cancel</Button>
-                  <Button onClick={handleMarkComplete}>Confirm</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <CustomCard className="md:col-span-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Job Name</h3>
-              <p className="text-lg font-semibold mt-1">{site.jobName}</p>
+      
+      {/* Site info cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <CustomCard>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <Building2 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground">PO Number</h3>
-              <p className="text-lg font-semibold mt-1">{site.posNo}</p>
+              <p className="text-sm text-muted-foreground">Job Name</p>
+              <p className="font-medium">{site.jobName || 'N/A'}</p>
             </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">Start Date</h3>
-              <p className="text-lg font-semibold mt-1">{format(site.startDate, 'dd/MM/yyyy')}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground">
-                {site.isCompleted ? 'Completion Date' : 'Est. Completion'}
-              </h3>
-              <p className="text-lg font-semibold mt-1">
-                {site.completionDate ? format(site.completionDate, 'dd/MM/yyyy') : 'Not specified'}
-              </p>
-            </div>
-            {siteSupervisor && (
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Supervisor</h3>
-                <p className="text-lg font-semibold mt-1 flex items-center">
-                  <User className="h-4 w-4 mr-1 text-muted-foreground" />
-                  {siteSupervisor.name}
-                </p>
-              </div>
-            )}
           </div>
         </CustomCard>
-
-        <BalanceCard balanceData={siteSummary} siteId={site.id} />
-      </div>
-
-      {userRole !== UserRole.VIEWER && !site.isCompleted && (
-        <div className="flex flex-wrap gap-2">
-          <Button 
-            onClick={() => setIsExpenseFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Expense
-          </Button>
-          <Button 
-            onClick={() => setIsAdvanceFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Advance
-          </Button>
-          <Button 
-            onClick={() => setIsFundsFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Funds From HO
-          </Button>
-          <Button 
-            onClick={() => setIsInvoiceFormOpen(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Add Invoice
-          </Button>
-        </div>
-      )}
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className={`grid grid-cols-2 ${isMobile ? 'w-full' : 'max-w-md'} mb-4`}>
-          <TabsTrigger value="summary">Summary</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-        </TabsList>
         
-        <TabsContent value="summary" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CustomCard>
-              <h3 className="text-lg font-medium mb-4">Quick Overview</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Expenses</span>
-                  <span className="font-medium">₹{totalExpenses.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Advances</span>
-                  <span className="font-medium">₹{totalAdvances.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Invoices</span>
-                  <span className="font-medium">₹{totalInvoices.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Debits to Worker</span>
-                  <span className="font-medium">₹{totalDebitToWorker.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Funds Received</span>
-                  <span className="font-medium">₹{totalFundsReceived.toLocaleString()}</span>
-                </div>
-                <div className="pt-2 border-t">
-                  <div className="flex justify-between items-center font-medium">
-                    <span>Current Balance</span>
-                    <span className={currentBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                      ₹{currentBalance.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </CustomCard>
+        <CustomCard>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <Calendar className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Start Date</p>
+              <p className="font-medium">{format(site.startDate, 'dd MMM yyyy')}</p>
+            </div>
+          </div>
+        </CustomCard>
+        
+        <CustomCard>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <ExternalLink className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">P.O.S. No.</p>
+              <p className="font-medium">{site.posNo || 'N/A'}</p>
+            </div>
+          </div>
+        </CustomCard>
+        
+        <CustomCard>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <User className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Supervisor</p>
+              <p className="font-medium">{site.supervisor || 'Not Assigned'}</p>
+            </div>
+          </div>
+        </CustomCard>
+      </div>
+      
+      {/* Tabs and action buttons */}
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <Tabs 
+          value={activeTab} 
+          onValueChange={setActiveTab}
+          className="w-full md:w-auto"
+        >
+          <TabsList>
+            <TabsTrigger value="summary">Summary</TabsTrigger>
+            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        
+        {!site.isCompleted && (
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              size="sm" 
+              onClick={() => setIsExpenseFormOpen(true)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Expense
+            </Button>
             
-            <CustomCard>
-              <h3 className="text-lg font-medium mb-4">Activity Summary</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Expense Entries</span>
-                  <span className="font-medium">{expenses.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Advance Entries</span>
-                  <span className="font-medium">{advances.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Invoice Entries</span>
-                  <span className="font-medium">{invoices.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Funds Received Entries</span>
-                  <span className="font-medium">{fundsReceived.length}</span>
-                </div>
-                <div className="pt-2 border-t">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Site Status</span>
-                    <Badge variant="outline" className={site.isCompleted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
-                      {site.isCompleted ? 'Completed' : 'Active'}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            </CustomCard>
+            <Button 
+              size="sm" 
+              onClick={() => setIsAdvanceFormOpen(true)}
+              variant="secondary"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Advance
+            </Button>
+            
+            <Button 
+              size="sm" 
+              onClick={() => setIsFundsFormOpen(true)}
+              variant="default"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Funds Received
+            </Button>
+            
+            <Button 
+              size="sm" 
+              onClick={() => setIsInvoiceFormOpen(true)}
+              variant="outline"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Invoice
+            </Button>
+
+            <Button 
+              size="sm" 
+              onClick={() => setIsAdvancePaidFormOpen(true)}
+              variant="secondary"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Advance Paid to Supervisor
+            </Button>
+            
+            <Button 
+              size="sm" 
+              onClick={() => setIsFundsReceivedFormOpen(true)}
+              variant="outline"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Funds Received from Supervisor
+            </Button>
+          </div>
+        )}
+      </div>
+      
+      {/* Tab content */}
+      <div className="mt-4">
+        <TabsContent value="summary" className="mt-0 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <BalanceCard 
+              balanceData={siteSummary}
+              className="lg:col-span-2 row-span-2"
+              siteId={site.id}
+            />
+            
+            <SupervisorTransactionHistory 
+              siteId={site.id}
+              className="lg:col-span-1"
+            />
           </div>
         </TabsContent>
         
-        <TabsContent value="transactions">
-          <SiteDetailTransactions
-            siteId={site.id}
-            expensesCount={expenses.length}
-            advancesCount={advances.length}
-            fundsReceivedCount={fundsReceived.length}
-            userRole={userRole}
-            isAdminView={isAdminView}
+        <TabsContent value="transactions" className="mt-0 space-y-4">
+          <SiteDetailTransactions 
             site={site}
-            supervisor={supervisor}
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
-            onTransactionsUpdate={onEntrySuccess ? () => onEntrySuccess('transactions') : undefined}
+            invoices={invoices}
+            onEntrySuccess={onEntrySuccess}
+            userRole={userRole}
           />
         </TabsContent>
-      </Tabs>
+      </div>
+      
+      {/* Forms */}
+      <ExpenseForm
+        isOpen={isExpenseFormOpen}
+        onClose={() => setIsExpenseFormOpen(false)}
+        onSubmit={(expense) => {
+          if (onAddExpense) onAddExpense(expense);
+          if (onEntrySuccess) onEntrySuccess('expense');
+        }}
+        siteId={site.id}
+      />
+      
+      <AdvanceForm
+        isOpen={isAdvanceFormOpen}
+        onClose={() => setIsAdvanceFormOpen(false)}
+        onSubmit={(advance) => {
+          if (onAddAdvance) onAddAdvance(advance);
+          if (onEntrySuccess) onEntrySuccess('advance');
+        }}
+        siteId={site.id}
+      />
+      
+      <FundsReceivedForm
+        isOpen={isFundsFormOpen}
+        onClose={() => setIsFundsFormOpen(false)}
+        onSubmit={(fund) => {
+          if (onAddFunds) onAddFunds(fund);
+          if (onEntrySuccess) onEntrySuccess('funds');
+        }}
+        siteId={site.id}
+      />
+      
+      <InvoiceForm
+        isOpen={isInvoiceFormOpen}
+        onClose={() => setIsInvoiceFormOpen(false)}
+        onSubmit={(invoice) => {
+          if (onAddInvoice) onAddInvoice(invoice);
+          if (onEntrySuccess) onEntrySuccess('invoice');
+        }}
+        siteId={site.id}
+      />
 
-      {isExpenseFormOpen && (
-        <ExpenseForm
-          isOpen={isExpenseFormOpen}
-          onClose={() => setIsExpenseFormOpen(false)}
-          onSubmit={handleExpenseSubmit}
-          siteId={site.id}
-        />
-      )}
-      
-      {isAdvanceFormOpen && (
-        <AdvanceForm
-          isOpen={isAdvanceFormOpen}
-          onClose={() => setIsAdvanceFormOpen(false)}
-          onSubmit={handleAdvanceSubmit}
-          siteId={site.id}
-        />
-      )}
-      
-      {isFundsFormOpen && (
-        <FundsReceivedForm
-          isOpen={isFundsFormOpen}
-          onClose={() => setIsFundsFormOpen(false)}
-          onSubmit={handleFundsSubmit}
-          siteId={site.id}
-        />
-      )}
-      
-      {isInvoiceFormOpen && (
-        <InvoiceForm
-          isOpen={isInvoiceFormOpen}
-          onClose={() => setIsInvoiceFormOpen(false)}
-          onSubmit={handleInvoiceSubmit}
-          siteId={site.id}
-        />
-      )}
+      <SupervisorTransactionForm
+        isOpen={isAdvancePaidFormOpen}
+        onClose={() => setIsAdvancePaidFormOpen(false)}
+        onSubmit={handleAdvancePaidSubmit}
+        transactionType="advance_paid"
+        siteId={site.id}
+      />
+
+      <SupervisorTransactionForm
+        isOpen={isFundsReceivedFormOpen}
+        onClose={() => setIsFundsReceivedFormOpen(false)}
+        onSubmit={handleFundsReceivedSubmit}
+        transactionType="funds_received"
+        siteId={site.id}
+      />
     </div>
   );
 };

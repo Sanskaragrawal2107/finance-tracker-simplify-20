@@ -14,11 +14,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/use-auth';
 
-interface SupervisorTransaction {
+export interface SupervisorTransactionItem {
   id: string;
   date: string;
   amount: number;
-  transaction_type: 'funds_received' | 'advance_paid';
+  transaction_type: string;
   payer_supervisor: {
     name: string;
   };
@@ -42,7 +42,7 @@ interface SupervisorTransactionHistoryProps {
 
 export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHistoryProps) {
   const { user } = useAuth();
-  const [transactions, setTransactions] = useState<SupervisorTransaction[]>([]);
+  const [transactions, setTransactions] = useState<SupervisorTransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -70,7 +70,20 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
 
       if (error) throw error;
 
-      setTransactions(data || []);
+      if (data) {
+        const formattedData: SupervisorTransactionItem[] = data.map(item => ({
+          id: item.id,
+          date: item.date,
+          amount: item.amount,
+          transaction_type: item.transaction_type,
+          payer_supervisor: item.payer_supervisor as { name: string },
+          receiver_supervisor: item.receiver_supervisor as { name: string },
+          payer_site: item.payer_site as { name: string, location: string },
+          receiver_site: item.receiver_site as { name: string, location: string },
+          created_at: item.created_at
+        }));
+        setTransactions(formattedData);
+      }
     } catch (error) {
       console.error('Error fetching supervisor transactions:', error);
       toast.error('Failed to load supervisor transactions');
@@ -79,12 +92,25 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
     }
   };
 
-  const getTransactionTypeColor = (type: SupervisorTransaction['transaction_type']) => {
+  const getTransactionTypeColor = (type: string) => {
     switch (type) {
-      case 'funds_received':
+      case 'funds_received_from_supervisor':
         return 'bg-green-100 text-green-800';
-      case 'advance_paid':
+      case 'advance_paid_to_supervisor':
         return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getReadableTransactionType = (type: string) => {
+    switch (type) {
+      case 'funds_received_from_supervisor':
+        return 'Funds Received from Supervisor';
+      case 'advance_paid_to_supervisor':
+        return 'Advance Paid to Supervisor';
+      default:
+        return type?.replace(/_/g, ' ') || 'Unknown';
     }
   };
 
@@ -114,7 +140,7 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
               </TableCell>
               <TableCell>
                 <Badge className={getTransactionTypeColor(transaction.transaction_type)}>
-                  {transaction.transaction_type.replace(/_/g, ' ')}
+                  {getReadableTransactionType(transaction.transaction_type)}
                 </Badge>
               </TableCell>
               <TableCell>{transaction.payer_supervisor.name}</TableCell>

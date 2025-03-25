@@ -82,6 +82,32 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
     totalBalance: localBalanceData.totalBalance || 0
   };
 
+  // Set up real-time subscription to update the balance card
+  useEffect(() => {
+    if (!siteId) return;
+
+    // Subscribe to changes in the site_financial_summary table
+    const channel = supabase
+      .channel('site_financial_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'site_financial_summary',
+          filter: `site_id=eq.${siteId}`
+        }, 
+        (payload) => {
+          console.log('Financial summary changed:', payload);
+          refreshBalanceData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [siteId]);
+
   return (
     <CustomCard 
       className={cn("bg-primary text-primary-foreground", className)}

@@ -45,7 +45,7 @@ import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
 import StatsCard from '@/components/dashboard/StatsCard';
-import SupervisorTransactionForm from '@/components/transactions/SupervisorTransactionForm';
+import { SupervisorTransactionForm } from '@/components/transactions/SupervisorTransactionForm';
 import { SupervisorTransactionType } from '@/lib/types';
 
 interface SiteDetailProps {

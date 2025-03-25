@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import SiteDetail from '@/components/sites/SiteDetail';
 import { SupervisorTransactionHistory } from '@/components/transactions/SupervisorTransactionHistory';
-import SupervisorTransactionForm from '@/components/transactions/SupervisorTransactionForm';
+import { SupervisorTransactionForm } from '@/components/transactions/SupervisorTransactionForm';
 import { SupervisorTransactionType } from '@/lib/types';
 
 const SupervisorSites: React.FC = () => {

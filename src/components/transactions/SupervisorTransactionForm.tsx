@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { SupervisorTransactionType } from '@/lib/types';
 
 const supervisorTransactionSchema = z.object({
   receiver_supervisor_id: z.string({
@@ -48,7 +49,7 @@ type SupervisorTransactionFormValues = z.infer<typeof supervisorTransactionSchem
 interface SupervisorTransactionFormProps {
   onSuccess?: () => void;
   onClose?: () => void;
-  transactionType?: 'funds_received_from_supervisor' | 'advance_paid_to_supervisor';
+  transactionType?: SupervisorTransactionType;
 }
 
 interface Supervisor {

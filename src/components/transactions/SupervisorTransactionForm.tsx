@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,13 +25,12 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-import { SupervisorTransactionType } from '@/lib/types';
 
 const supervisorTransactionSchema = z.object({
   receiver_supervisor_id: z.string({
     required_error: 'Please select a supervisor',
   }),
-  site_id: z.string({
+  receiver_site_id: z.string({
     required_error: 'Please select a site',
   }),
   amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
@@ -39,7 +39,7 @@ const supervisorTransactionSchema = z.object({
   date: z.date({
     required_error: 'Date is required',
   }),
-  transaction_type: z.enum(['funds_received_from_supervisor', 'advance_paid_to_supervisor'], {
+  transaction_type: z.enum(['funds_received', 'advance_paid'], {
     required_error: 'Transaction type is required',
   }),
 });
@@ -48,8 +48,7 @@ type SupervisorTransactionFormValues = z.infer<typeof supervisorTransactionSchem
 
 interface SupervisorTransactionFormProps {
   onSuccess?: () => void;
-  onClose?: () => void;
-  transactionType?: SupervisorTransactionType;
+  payerSiteId?: string;
 }
 
 interface Supervisor {
@@ -63,7 +62,7 @@ interface Site {
   location: string;
 }
 
-export function SupervisorTransactionForm({ onSuccess, onClose, transactionType }: SupervisorTransactionFormProps) {
+export function SupervisorTransactionForm({ onSuccess, payerSiteId }: SupervisorTransactionFormProps) {
   const { user } = useAuth();
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -74,7 +73,7 @@ export function SupervisorTransactionForm({ onSuccess, onClose, transactionType 
     defaultValues: {
       date: new Date(),
       amount: '',
-      transaction_type: transactionType || 'advance_paid_to_supervisor',
+      transaction_type: 'advance_paid',
     },
   });
 
@@ -124,33 +123,56 @@ export function SupervisorTransactionForm({ onSuccess, onClose, transactionType 
     try {
       setLoading(true);
       
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+      
+      if (!payerSiteId) {
+        throw new Error('No payer site selected');
+      }
+      
       // Insert into supervisor_transactions table
       const { error: transactionError } = await supabase
         .from('supervisor_transactions')
         .insert({
-          payer_supervisor_id: user?.id,
+          payer_supervisor_id: user.id,
           receiver_supervisor_id: data.receiver_supervisor_id,
-          site_id: data.site_id,
+          payer_site_id: payerSiteId,
+          receiver_site_id: data.receiver_site_id,
           amount: Number(data.amount),
           transaction_type: data.transaction_type,
           date: data.date.toISOString(),
         });
 
       if (transactionError) throw transactionError;
+      
+      // Update payer site financial summary
+      const { error: payerSummaryError } = await supabase
+        .from('site_financial_summary')
+        .update({
+          advance_paid_to_supervisor: supabase.rpc('increment', { 
+            x: Number(data.amount) 
+          })
+        })
+        .eq('site_id', payerSiteId);
 
-      // Update site_financial_summary
-      const { error: summaryError } = await supabase.rpc('update_supervisor_financial_summary', {
-        p_site_id: data.site_id,
-        p_amount: Number(data.amount),
-        p_transaction_type: data.transaction_type
-      });
+      if (payerSummaryError) throw payerSummaryError;
+      
+      // Update receiver site financial summary
+      const { error: receiverSummaryError } = await supabase
+        .from('site_financial_summary')
+        .update({ 
+          funds_received_from_supervisor: supabase.rpc('increment', { 
+            x: Number(data.amount) 
+          })
+        })
+        .eq('site_id', data.receiver_site_id);
 
-      if (summaryError) throw summaryError;
+      if (receiverSummaryError) throw receiverSummaryError;
 
       toast.success('Transaction added successfully');
       form.reset();
       onSuccess?.();
-      onClose?.();
     } catch (error) {
       console.error('Error adding transaction:', error);
       toast.error('Failed to add transaction');
@@ -188,7 +210,7 @@ export function SupervisorTransactionForm({ onSuccess, onClose, transactionType 
 
         <FormField
           control={form.control}
-          name="site_id"
+          name="receiver_site_id"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Select Site</FormLabel>
@@ -283,8 +305,8 @@ export function SupervisorTransactionForm({ onSuccess, onClose, transactionType 
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   {...field}
                 >
-                  <option value="advance_paid_to_supervisor">Advance Paid to Supervisor</option>
-                  <option value="funds_received_from_supervisor">Funds Received from Supervisor</option>
+                  <option value="advance_paid">Advance Paid to Supervisor</option>
+                  <option value="funds_received">Funds Received from Supervisor</option>
                 </select>
               </FormControl>
               <FormMessage />
@@ -298,4 +320,4 @@ export function SupervisorTransactionForm({ onSuccess, onClose, transactionType 
       </form>
     </Form>
   );
-} 
+}

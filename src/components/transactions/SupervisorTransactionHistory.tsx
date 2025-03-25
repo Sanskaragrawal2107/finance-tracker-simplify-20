@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -17,14 +18,18 @@ interface SupervisorTransaction {
   id: string;
   date: string;
   amount: number;
-  transaction_type: 'funds_received_from_supervisor' | 'advance_paid_to_supervisor';
+  transaction_type: 'funds_received' | 'advance_paid';
   payer_supervisor: {
     name: string;
   };
   receiver_supervisor: {
     name: string;
   };
-  site: {
+  payer_site: {
+    name: string;
+    location: string;
+  };
+  receiver_site: {
     name: string;
     location: string;
   };
@@ -52,12 +57,13 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
           *,
           payer_supervisor:payer_supervisor_id(name),
           receiver_supervisor:receiver_supervisor_id(name),
-          site:site_id(name, location)
+          payer_site:payer_site_id(name, location),
+          receiver_site:receiver_site_id(name, location)
         `)
         .order('date', { ascending: false });
 
       if (siteId) {
-        query = query.eq('site_id', siteId);
+        query = query.or(`payer_site_id.eq.${siteId},receiver_site_id.eq.${siteId}`);
       }
 
       const { data, error } = await query;
@@ -75,9 +81,9 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
 
   const getTransactionTypeColor = (type: SupervisorTransaction['transaction_type']) => {
     switch (type) {
-      case 'funds_received_from_supervisor':
+      case 'funds_received':
         return 'bg-green-100 text-green-800';
-      case 'advance_paid_to_supervisor':
+      case 'advance_paid':
         return 'bg-blue-100 text-blue-800';
     }
   };
@@ -95,7 +101,8 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
             <TableHead>Type</TableHead>
             <TableHead>Payer</TableHead>
             <TableHead>Receiver</TableHead>
-            <TableHead>Site</TableHead>
+            <TableHead>From Site</TableHead>
+            <TableHead>To Site</TableHead>
             <TableHead>Amount</TableHead>
           </TableRow>
         </TableHeader>
@@ -113,7 +120,10 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
               <TableCell>{transaction.payer_supervisor.name}</TableCell>
               <TableCell>{transaction.receiver_supervisor.name}</TableCell>
               <TableCell>
-                {transaction.site.name} - {transaction.site.location}
+                {transaction.payer_site.name} - {transaction.payer_site.location}
+              </TableCell>
+              <TableCell>
+                {transaction.receiver_site.name} - {transaction.receiver_site.location}
               </TableCell>
               <TableCell>
                 ₹{transaction.amount.toLocaleString('en-IN', {
@@ -125,7 +135,7 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
           ))}
           {transactions.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center">
+              <TableCell colSpan={7} className="text-center">
                 No supervisor transactions found
               </TableCell>
             </TableRow>
@@ -134,4 +144,4 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
       </Table>
     </div>
   );
-} 
+}

@@ -1,3 +1,4 @@
+
 -- Drop existing view if it exists
 DROP VIEW IF EXISTS site_financial_summary;
 
@@ -9,7 +10,7 @@ SELECT
     s.location,
     s.supervisor_id,
     u.name as supervisor_name,
-    COALESCE(SUM(CASE WHEN t.type = 'funds_received' THEN t.amount ELSE 0 END), 0) as funds_received_from_ho,
+    COALESCE(SUM(CASE WHEN t.type = 'funds_received' THEN t.amount ELSE 0 END), 0) as funds_received,
     COALESCE(SUM(CASE WHEN t.type = 'funds_received_from_supervisor' THEN t.amount ELSE 0 END), 0) as funds_received_from_supervisor,
     COALESCE(SUM(CASE WHEN t.type = 'expense' THEN t.amount ELSE 0 END), 0) as total_expenses,
     COALESCE(SUM(CASE WHEN t.type = 'advance' THEN t.amount ELSE 0 END), 0) as total_advances,

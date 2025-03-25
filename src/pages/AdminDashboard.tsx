@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
-import { User, Users, Building2, PieChart, BarChart, UserPlus, Plus } from 'lucide-react';
+import { User, Users, Building2, PieChart, BarChart, UserPlus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { UserRole, SupervisorTransactionType } from '@/lib/types';
+import { UserRole } from '@/lib/types';
 import { getSupervisors } from '@/data/supervisors';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -15,7 +15,6 @@ import RegisterForm from '@/components/auth/RegisterForm';
 import { supabase } from '@/integrations/supabase/client';
 import SiteForm from '@/components/sites/SiteForm';
 import SitesList from '@/components/sites/SitesList';
-import { SupervisorTransactionForm } from '@/components/transactions/SupervisorTransactionForm';
 
 interface SupervisorStats {
   totalSites: number;
@@ -35,8 +34,6 @@ const AdminDashboard: React.FC = () => {
   const [isRegisterFormOpen, setIsRegisterFormOpen] = useState(false);
   const [isSiteFormOpen, setIsSiteFormOpen] = useState(false);
   const [loadingSupervisors, setLoadingSupervisors] = useState(true);
-  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
-  const [selectedTransactionType, setSelectedTransactionType] = useState<SupervisorTransactionType | null>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -346,15 +343,6 @@ const AdminDashboard: React.FC = () => {
                       <Building2 className="h-4 w-4 mr-2" />
                       View Sites
                     </Button>
-                    <Button 
-                      onClick={() => {
-                        setSelectedTransactionType(SupervisorTransactionType.ADVANCE_PAID);
-                        setShowSupervisorTransactionForm(true);
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Advance Paid to Supervisor
-                    </Button>
                   </div>
                 </div>
               </div>
@@ -430,25 +418,6 @@ const AdminDashboard: React.FC = () => {
             onSubmit={handleCreateSite}
             supervisorId={selectedSupervisorId || undefined}
           />
-          {showSupervisorTransactionForm && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-white p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
-                <h2 className="text-xl font-bold mb-4">
-                  {selectedTransactionType === SupervisorTransactionType.ADVANCE_PAID
-                    ? 'Advance Paid to Supervisor'
-                    : 'Funds Received from Supervisor'}
-                </h2>
-                <SupervisorTransactionForm
-                  onSuccess={() => {
-                    setShowSupervisorTransactionForm(false);
-                    fetchSupervisorsAndSites();
-                  }}
-                  onClose={() => setShowSupervisorTransactionForm(false)}
-                  transactionType={selectedTransactionType}
-                />
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

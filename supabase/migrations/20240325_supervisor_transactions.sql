@@ -1,3 +1,4 @@
+
 -- Add new columns to site_financial_summary
 ALTER TABLE site_financial_summary
 ADD COLUMN IF NOT EXISTS funds_received_from_supervisor DECIMAL(10,2) DEFAULT 0,

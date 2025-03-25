@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
@@ -93,34 +94,7 @@ const Invoices: React.FC = () => {
     },
   });
 
-  const mapInvoices = (data: any[]) => {
-    return data.map(invoice => ({
-      id: invoice.id,
-      date: new Date(invoice.date),
-      partyId: invoice.party_id,
-      partyName: invoice.party_name,
-      material: invoice.material,
-      quantity: Number(invoice.quantity),
-      rate: Number(invoice.rate),
-      gstPercentage: Number(invoice.gst_percentage),
-      grossAmount: Number(invoice.gross_amount),
-      netAmount: Number(invoice.net_amount),
-      materialItems: invoice.material_items ? JSON.parse(invoice.material_items.toString()) : [],
-      bankDetails: invoice.bank_details ? JSON.parse(invoice.bank_details.toString()) : {},
-      billUrl: invoice.bill_url || '',
-      invoiceImageUrl: invoice.invoice_image_url || '',
-      paymentStatus: invoice.payment_status as PaymentStatus,
-      createdBy: invoice.created_by || '',
-      createdAt: new Date(invoice.created_at),
-      approverType: (invoice.approver_type || 'ho') as ('ho' | 'supervisor'),
-      siteId: invoice.site_id,
-      status: invoice.payment_status as PaymentStatus,
-      vendorName: invoice.party_name,
-      invoiceNumber: invoice.id,
-      amount: Number(invoice.net_amount)
-    }));
-  };
-
+  // Fetch invoices from Supabase
   useEffect(() => {
     const fetchInvoices = async () => {
       setIsLoading(true);
@@ -141,7 +115,92 @@ const Invoices: React.FC = () => {
         }
         
         if (data) {
-          const mappedInvoices = mapInvoices(data);
+          const mappedInvoices: Invoice[] = data.map(invoice => {
+            // Parse material_items with proper type checking and conversion
+            let parsedMaterialItems: MaterialItem[] = [];
+            try {
+              if (typeof invoice.material_items === 'object' && invoice.material_items !== null) {
+                if (Array.isArray(invoice.material_items)) {
+                  // Explicitly cast with type guard to ensure we have necessary properties
+                  parsedMaterialItems = (invoice.material_items as any[]).map(item => ({
+                    id: item.id || undefined,
+                    material: item.material || '',
+                    quantity: typeof item.quantity === 'number' ? item.quantity : null,
+                    rate: typeof item.rate === 'number' ? item.rate : null,
+                    gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
+                    amount: typeof item.amount === 'number' ? item.amount : null
+                  }));
+                } else {
+                  parsedMaterialItems = [];
+                  console.warn('material_items is an object but not an array:', invoice.material_items);
+                }
+              } else if (invoice.material_items) {
+                const parsedItems = JSON.parse(invoice.material_items as string);
+                if (Array.isArray(parsedItems)) {
+                  parsedMaterialItems = parsedItems.map(item => ({
+                    id: item.id || undefined,
+                    material: item.material || '',
+                    quantity: typeof item.quantity === 'number' ? item.quantity : null,
+                    rate: typeof item.rate === 'number' ? item.rate : null,
+                    gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
+                    amount: typeof item.amount === 'number' ? item.amount : null
+                  }));
+                }
+              }
+            } catch (e) {
+              console.error('Error parsing material items:', e);
+              parsedMaterialItems = [];
+            }
+            
+            // Parse bank_details with proper type checking and conversion
+            let parsedBankDetails: BankDetails = {
+              accountNumber: '',
+              bankName: '',
+              ifscCode: ''
+            };
+            
+            try {
+              if (typeof invoice.bank_details === 'object' && invoice.bank_details !== null) {
+                const typedBankDetails = invoice.bank_details as Record<string, any>;
+                parsedBankDetails = {
+                  accountNumber: typedBankDetails.accountNumber || '',
+                  bankName: typedBankDetails.bankName || '',
+                  ifscCode: typedBankDetails.ifscCode || ''
+                };
+              } else if (invoice.bank_details) {
+                const parsedDetails = JSON.parse(invoice.bank_details as string);
+                parsedBankDetails = {
+                  accountNumber: parsedDetails.accountNumber || '',
+                  bankName: parsedDetails.bankName || '',
+                  ifscCode: parsedDetails.ifscCode || ''
+                };
+              }
+            } catch (e) {
+              console.error('Error parsing bank details:', e);
+            }
+            
+            return {
+              id: invoice.id,
+              date: new Date(invoice.date),
+              partyId: invoice.party_id,
+              partyName: invoice.party_name,
+              material: invoice.material,
+              quantity: Number(invoice.quantity),
+              rate: Number(invoice.rate),
+              gstPercentage: Number(invoice.gst_percentage),
+              grossAmount: Number(invoice.gross_amount),
+              netAmount: Number(invoice.net_amount),
+              materialItems: parsedMaterialItems,
+              bankDetails: parsedBankDetails,
+              billUrl: invoice.bill_url,
+              paymentStatus: invoice.payment_status as PaymentStatus,
+              createdBy: invoice.created_by || '',
+              createdAt: new Date(invoice.created_at),
+              approverType: invoice.approver_type as "ho" | "supervisor" || "ho",
+              siteId: invoice.site_id || ''
+            };
+          });
+          
           setInvoices(mappedInvoices);
         }
       } catch (error) {
@@ -195,6 +254,66 @@ const Invoices: React.FC = () => {
       }
       
       if (data && data.length > 0) {
+        // Create a new invoice object with proper type handling for material_items and bank_details
+        let materialItems: MaterialItem[] = [];
+        try {
+          if (typeof data[0].material_items === 'object' && data[0].material_items !== null) {
+            if (Array.isArray(data[0].material_items)) {
+              // Explicitly cast with type guard to ensure we have necessary properties
+              materialItems = (data[0].material_items as any[]).map(item => ({
+                id: item.id || undefined,
+                material: item.material || '',
+                quantity: typeof item.quantity === 'number' ? item.quantity : null,
+                rate: typeof item.rate === 'number' ? item.rate : null,
+                gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
+                amount: typeof item.amount === 'number' ? item.amount : null
+              }));
+            }
+          } else if (data[0].material_items) {
+            const parsedItems = JSON.parse(data[0].material_items as string || '[]');
+            if (Array.isArray(parsedItems)) {
+              materialItems = parsedItems.map(item => ({
+                id: item.id || undefined,
+                material: item.material || '',
+                quantity: typeof item.quantity === 'number' ? item.quantity : null,
+                rate: typeof item.rate === 'number' ? item.rate : null,
+                gstPercentage: typeof item.gstPercentage === 'number' ? item.gstPercentage : null,
+                amount: typeof item.amount === 'number' ? item.amount : null
+              }));
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing material items:', e);
+          materialItems = [];
+        }
+        
+        // Parse bank_details with proper type checking and conversion
+        let bankDetails: BankDetails = {
+          accountNumber: '',
+          bankName: '',
+          ifscCode: ''
+        };
+        
+        try {
+          if (typeof data[0].bank_details === 'object' && data[0].bank_details !== null) {
+            const typedBankDetails = data[0].bank_details as Record<string, any>;
+            bankDetails = {
+              accountNumber: typedBankDetails.accountNumber || '',
+              bankName: typedBankDetails.bankName || '',
+              ifscCode: typedBankDetails.ifscCode || ''
+            };
+          } else if (data[0].bank_details) {
+            const parsedDetails = JSON.parse(data[0].bank_details as string || '{}');
+            bankDetails = {
+              accountNumber: parsedDetails.accountNumber || '',
+              bankName: parsedDetails.bankName || '',
+              ifscCode: parsedDetails.ifscCode || ''
+            };
+          }
+        } catch (e) {
+          console.error('Error parsing bank details:', e);
+        }
+        
         const newInvoice: Invoice = {
           id: data[0].id,
           date: new Date(data[0].date),
@@ -206,14 +325,14 @@ const Invoices: React.FC = () => {
           gstPercentage: Number(data[0].gst_percentage),
           grossAmount: Number(data[0].gross_amount),
           netAmount: Number(data[0].net_amount),
-          materialItems: JSON.parse(data[0].material_items),
-          bankDetails: JSON.parse(data[0].bank_details),
+          materialItems: materialItems,
+          bankDetails: bankDetails,
           billUrl: data[0].bill_url,
-          paymentStatus: data[0].payment_status,
+          paymentStatus: data[0].payment_status as PaymentStatus,
           createdBy: data[0].created_by || '',
           createdAt: new Date(data[0].created_at),
-          approverType: data[0].approver_type || "ho",
-          siteId: data[0].site_id
+          approverType: data[0].approver_type as "ho" | "supervisor" || "ho",
+          siteId: data[0].site_id || ''
         };
         
         setInvoices([newInvoice, ...invoices]);
@@ -237,6 +356,7 @@ const Invoices: React.FC = () => {
 
   const handleMakePayment = async (invoice: Invoice) => {
     try {
+      // Update payment status in Supabase
       const { error } = await supabase
         .from('site_invoices')
         .update({ 
@@ -254,6 +374,7 @@ const Invoices: React.FC = () => {
         return;
       }
       
+      // Update the invoice in state
       const updatedInvoices = invoices.map(inv => {
         if (inv.id === invoice.id) {
           return {
@@ -287,6 +408,7 @@ const Invoices: React.FC = () => {
   };
 
   const handleDownloadInvoice = (invoice: Invoice) => {
+    // Implementation for downloading invoice
     toast({
       title: "Download Started",
       description: `Download for invoice ${invoice.partyId} has started.`,
@@ -410,12 +532,7 @@ const Invoices: React.FC = () => {
           <DialogDescription>
             Fill out the form below to create a new invoice
           </DialogDescription>
-          <InvoiceForm 
-            onSuccess={() => {
-              setShowInvoiceForm(false);
-              fetchInvoices();
-            }}
-          />
+          <InvoiceForm onSubmit={handleCreateInvoice} />
         </DialogContent>
       </Dialog>
 

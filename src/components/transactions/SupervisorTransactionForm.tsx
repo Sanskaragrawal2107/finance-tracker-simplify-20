@@ -25,7 +25,6 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-import { SupervisorTransactionType } from '@/lib/types';
 
 const supervisorTransactionSchema = z.object({
   receiver_supervisor_id: z.string({
@@ -40,7 +39,7 @@ const supervisorTransactionSchema = z.object({
   date: z.date({
     required_error: 'Date is required',
   }),
-  transaction_type: z.enum(['funds_received_from_supervisor', 'advance_paid_to_supervisor'], {
+  transaction_type: z.enum(['funds_received', 'advance_paid'], {
     required_error: 'Transaction type is required',
   }),
 });
@@ -74,7 +73,7 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
     defaultValues: {
       date: new Date(),
       amount: '',
-      transaction_type: 'advance_paid_to_supervisor',
+      transaction_type: 'advance_paid',
     },
   });
 
@@ -147,8 +146,29 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
 
       if (transactionError) throw transactionError;
       
-      // The financial summary will be updated automatically via the database trigger
-      // but we could also call the update function explicitly if needed
+      // Update payer site financial summary
+      const { error: payerSummaryError } = await supabase
+        .from('site_financial_summary')
+        .update({
+          advance_paid_to_supervisor: supabase.rpc('increment', { 
+            x: Number(data.amount) 
+          })
+        })
+        .eq('site_id', payerSiteId);
+
+      if (payerSummaryError) throw payerSummaryError;
+      
+      // Update receiver site financial summary
+      const { error: receiverSummaryError } = await supabase
+        .from('site_financial_summary')
+        .update({ 
+          funds_received_from_supervisor: supabase.rpc('increment', { 
+            x: Number(data.amount) 
+          })
+        })
+        .eq('site_id', data.receiver_site_id);
+
+      if (receiverSummaryError) throw receiverSummaryError;
 
       toast.success('Transaction added successfully');
       form.reset();
@@ -285,8 +305,8 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   {...field}
                 >
-                  <option value="advance_paid_to_supervisor">Advance Paid to Supervisor</option>
-                  <option value="funds_received_from_supervisor">Funds Received from Supervisor</option>
+                  <option value="advance_paid">Advance Paid to Supervisor</option>
+                  <option value="funds_received">Funds Received from Supervisor</option>
                 </select>
               </FormControl>
               <FormMessage />

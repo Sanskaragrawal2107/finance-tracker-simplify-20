@@ -225,8 +225,8 @@ export interface Activity {
 
 // Supervisor transaction types
 export enum SupervisorTransactionType {
-  FUNDS_RECEIVED_FROM_SUPERVISOR = "funds_received_from_supervisor",
-  ADVANCE_PAID_TO_SUPERVISOR = "advance_paid_to_supervisor"
+  FUNDS_RECEIVED = "funds_received",
+  ADVANCE_PAID = "advance_paid"
 }
 
 export interface SupervisorTransaction {

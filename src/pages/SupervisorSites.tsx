@@ -13,15 +13,6 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import SiteDetail from '@/components/sites/SiteDetail';
-import { SupervisorTransactionHistory } from '@/components/transactions/SupervisorTransactionHistory';
-import { SupervisorTransactionForm } from '@/components/transactions/SupervisorTransactionForm';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 const SupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -35,8 +26,6 @@ const SupervisorSites: React.FC = () => {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [showSiteDetail, setShowSiteDetail] = useState(false);
   const [activeTab, setActiveTab] = useState('active');
-  const [showTransactionDialog, setShowTransactionDialog] = useState(false);
-  const [selectedSiteForTransaction, setSelectedSiteForTransaction] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -227,11 +216,6 @@ const SupervisorSites: React.FC = () => {
     fetchSites(); // Refresh the list in case there were updates
   };
 
-  const handleOpenTransactionDialog = (site: Site) => {
-    setSelectedSiteForTransaction(site.id);
-    setShowTransactionDialog(true);
-  };
-
   const renderSiteCard = (site: Site) => {
     const statusColor = site.isCompleted
       ? 'text-green-600 bg-green-100'
@@ -283,22 +267,9 @@ const SupervisorSites: React.FC = () => {
             <p className="text-xs text-muted-foreground">Supervisor</p>
             <p className="text-sm font-medium">{site.supervisor}</p>
           </div>
-          <div className="flex gap-2">
-            <Button 
-              size="sm" 
-              variant="outline" 
-              className="text-primary"
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent card click
-                handleOpenTransactionDialog(site);
-              }}
-            >
-              Add Transaction
-            </Button>
-            <Button size="sm" variant="ghost" className="text-primary">
-              View Details <ArrowUpRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
+          <Button size="sm" variant="ghost" className="text-primary">
+            View Details <ArrowUpRight className="h-4 w-4 ml-1" />
+          </Button>
         </div>
       </CustomCard>
     );
@@ -465,29 +436,6 @@ const SupervisorSites: React.FC = () => {
           </Tabs>
         </>
       )}
-
-      {/* Transaction Dialog */}
-      <Dialog open={showTransactionDialog} onOpenChange={setShowTransactionDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Supervisor Transaction</DialogTitle>
-            <DialogDescription>
-              Add a transaction between supervisors
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSiteForTransaction && (
-            <SupervisorTransactionForm
-              payerSiteId={selectedSiteForTransaction}
-              onSuccess={() => {
-                setShowTransactionDialog(false);
-                toast({
-                  title: "Transaction added successfully",
-                });
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

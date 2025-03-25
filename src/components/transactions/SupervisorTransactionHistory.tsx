@@ -70,13 +70,32 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
 
       if (error) throw error;
 
-      // Transform the data to ensure transaction_type is of the correct type
-      const typedData = data?.map(item => ({
-        ...item,
-        transaction_type: item.transaction_type as 'funds_received' | 'advance_paid'
-      })) || [];
-
-      setTransactions(typedData);
+      if (data) {
+        // Ensure the data matches the expected shape before setting it
+        const mappedData: SupervisorTransaction[] = data.map(item => ({
+          id: item.id,
+          date: item.date,
+          amount: item.amount,
+          transaction_type: item.transaction_type as 'funds_received' | 'advance_paid',
+          payer_supervisor: {
+            name: item.payer_supervisor?.name || 'Unknown'
+          },
+          receiver_supervisor: {
+            name: item.receiver_supervisor?.name || 'Unknown'
+          },
+          payer_site: {
+            name: item.payer_site?.name || 'Unknown',
+            location: item.payer_site?.location || 'Unknown'
+          },
+          receiver_site: {
+            name: item.receiver_site?.name || 'Unknown',
+            location: item.receiver_site?.location || 'Unknown'
+          },
+          created_at: item.created_at
+        }));
+        
+        setTransactions(mappedData);
+      }
     } catch (error) {
       console.error('Error fetching supervisor transactions:', error);
       toast.error('Failed to load supervisor transactions');
@@ -91,6 +110,8 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
         return 'bg-green-100 text-green-800';
       case 'advance_paid':
         return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -113,33 +134,34 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
           </TableRow>
         </TableHeader>
         <TableBody>
-          {transactions.map((transaction) => (
-            <TableRow key={transaction.id}>
-              <TableCell>
-                {format(new Date(transaction.date), 'PPP')}
-              </TableCell>
-              <TableCell>
-                <Badge className={getTransactionTypeColor(transaction.transaction_type)}>
-                  {transaction.transaction_type.replace(/_/g, ' ')}
-                </Badge>
-              </TableCell>
-              <TableCell>{transaction.payer_supervisor.name}</TableCell>
-              <TableCell>{transaction.receiver_supervisor.name}</TableCell>
-              <TableCell>
-                {transaction.payer_site.name} - {transaction.payer_site.location}
-              </TableCell>
-              <TableCell>
-                {transaction.receiver_site.name} - {transaction.receiver_site.location}
-              </TableCell>
-              <TableCell>
-                ₹{transaction.amount.toLocaleString('en-IN', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </TableCell>
-            </TableRow>
-          ))}
-          {transactions.length === 0 && (
+          {transactions.length > 0 ? (
+            transactions.map((transaction) => (
+              <TableRow key={transaction.id}>
+                <TableCell>
+                  {format(new Date(transaction.date), 'PPP')}
+                </TableCell>
+                <TableCell>
+                  <Badge className={getTransactionTypeColor(transaction.transaction_type)}>
+                    {transaction.transaction_type.replace(/_/g, ' ')}
+                  </Badge>
+                </TableCell>
+                <TableCell>{transaction.payer_supervisor.name}</TableCell>
+                <TableCell>{transaction.receiver_supervisor.name}</TableCell>
+                <TableCell>
+                  {transaction.payer_site.name} - {transaction.payer_site.location}
+                </TableCell>
+                <TableCell>
+                  {transaction.receiver_site.name} - {transaction.receiver_site.location}
+                </TableCell>
+                <TableCell>
+                  ₹{transaction.amount.toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
             <TableRow>
               <TableCell colSpan={7} className="text-center">
                 No supervisor transactions found

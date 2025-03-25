@@ -17,8 +17,8 @@ import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import SupervisorTransactionForm from '../transactions/SupervisorTransactionForm';
-import SupervisorTransactionHistory from '../transactions/SupervisorTransactionHistory';
+import { SupervisorTransactionForm } from '../transactions/SupervisorTransactionForm';
+import { SupervisorTransactionHistory } from '../transactions/SupervisorTransactionHistory';
 
 interface SiteDetailProps {
   site: Site;
@@ -312,6 +312,14 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             className="flex items-center gap-1"
           >
             <Plus className="h-4 w-4" /> Add Funds From HO
+          </Button>
+          <Button 
+            onClick={() => setIsInvoiceFormOpen(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <Plus className="h-4 w-4" /> Add Invoice
           </Button>
           <Button 
             onClick={() => setShowSupervisorTransactionForm(true)}

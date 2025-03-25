@@ -1,18 +1,8 @@
 
-import React, { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import React, { useState, useEffect } from 'react';
+import { Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -20,27 +10,36 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { toast } from 'sonner';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from "sonner";
 import { useAuth } from '@/hooks/use-auth';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supervisors } from '@/data/supervisors';
 
 const supervisorTransactionSchema = z.object({
-  receiver_supervisor_id: z.string({
-    required_error: 'Please select a supervisor',
+  receiverSupervisorId: z.string({
+    required_error: "Please select a supervisor",
   }),
-  receiver_site_id: z.string({
-    required_error: 'Please select a site',
+  receiverSiteId: z.string({
+    required_error: "Please select a site",
   }),
-  amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
-    message: 'Amount must be a positive number',
+  amount: z.coerce.number().positive({
+    message: "Amount must be positive",
   }),
   date: z.date({
-    required_error: 'Date is required',
-  }),
-  transaction_type: z.enum(['funds_received', 'advance_paid'], {
-    required_error: 'Transaction type is required',
+    required_error: "Please select a date",
   }),
 });
 
@@ -51,133 +50,96 @@ interface SupervisorTransactionFormProps {
   payerSiteId?: string;
 }
 
-interface Supervisor {
-  id: string;
-  name: string;
-}
-
 interface Site {
   id: string;
   name: string;
   location: string;
+  supervisor_id: string;
 }
 
 export function SupervisorTransactionForm({ onSuccess, payerSiteId }: SupervisorTransactionFormProps) {
   const { user } = useAuth();
-  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
-  const [sites, setSites] = useState<Site[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [receiverSites, setReceiverSites] = useState<Site[]>([]);
+  const [availableSupervisors, setAvailableSupervisors] = useState(supervisors.filter(s => s.id !== user?.id));
 
   const form = useForm<SupervisorTransactionFormValues>({
     resolver: zodResolver(supervisorTransactionSchema),
     defaultValues: {
+      amount: undefined,
       date: new Date(),
-      amount: '',
-      transaction_type: 'advance_paid',
     },
   });
 
+  const selectedSupervisorId = form.watch('receiverSupervisorId');
+  
+  // Fetch sites for selected supervisor
   useEffect(() => {
-    fetchSupervisors();
-  }, []);
-
-  useEffect(() => {
-    const receiverId = form.watch('receiver_supervisor_id');
-    if (receiverId) {
-      fetchSites(receiverId);
+    if (selectedSupervisorId) {
+      fetchSupervisorSites(selectedSupervisorId);
+    } else {
+      setReceiverSites([]);
     }
-  }, [form.watch('receiver_supervisor_id')]);
+  }, [selectedSupervisorId]);
 
-  const fetchSupervisors = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, name')
-        .eq('role', 'supervisor')
-        .neq('id', user?.id);
-
-      if (error) throw error;
-      setSupervisors(data || []);
-    } catch (error) {
-      console.error('Error fetching supervisors:', error);
-      toast.error('Failed to load supervisors');
-    }
-  };
-
-  const fetchSites = async (supervisorId: string) => {
+  const fetchSupervisorSites = async (supervisorId: string) => {
     try {
       const { data, error } = await supabase
         .from('sites')
-        .select('id, name, location')
-        .eq('supervisor_id', supervisorId);
+        .select('id, name, location, supervisor_id')
+        .eq('supervisor_id', supervisorId)
+        .eq('is_completed', false);
 
       if (error) throw error;
-      setSites(data || []);
+      
+      setReceiverSites(data || []);
     } catch (error) {
-      console.error('Error fetching sites:', error);
-      toast.error('Failed to load sites');
+      console.error('Error fetching supervisor sites:', error);
+      toast.error('Failed to load sites for the selected supervisor');
     }
   };
 
   const onSubmit = async (data: SupervisorTransactionFormValues) => {
+    if (!user) {
+      toast.error('You must be logged in to perform this action');
+      return;
+    }
+
+    if (!payerSiteId) {
+      toast.error('No payer site selected');
+      return;
+    }
+
+    setIsSubmitting(true);
+
     try {
-      setLoading(true);
-      
-      if (!user?.id) {
-        throw new Error('User not authenticated');
-      }
-      
-      if (!payerSiteId) {
-        throw new Error('No payer site selected');
-      }
-      
-      // Insert into supervisor_transactions table
-      const { error: transactionError } = await supabase
+      // Insert the supervisor transaction
+      const { data: transactionData, error: transactionError } = await supabase
         .from('supervisor_transactions')
         .insert({
           payer_supervisor_id: user.id,
-          receiver_supervisor_id: data.receiver_supervisor_id,
+          receiver_supervisor_id: data.receiverSupervisorId,
           payer_site_id: payerSiteId,
-          receiver_site_id: data.receiver_site_id,
-          amount: Number(data.amount),
-          transaction_type: data.transaction_type,
+          receiver_site_id: data.receiverSiteId,
+          amount: data.amount,
           date: data.date.toISOString(),
-        });
+          transaction_type: 'advance_paid'
+        })
+        .select();
 
       if (transactionError) throw transactionError;
-      
-      // Update payer site financial summary
-      const { error: payerSummaryError } = await supabase
-        .from('site_financial_summary')
-        .update({
-          advance_paid_to_supervisor: supabase.rpc('increment', { 
-            x: Number(data.amount) 
-          })
-        })
-        .eq('site_id', payerSiteId);
 
-      if (payerSummaryError) throw payerSummaryError;
-      
-      // Update receiver site financial summary
-      const { error: receiverSummaryError } = await supabase
-        .from('site_financial_summary')
-        .update({ 
-          funds_received_from_supervisor: supabase.rpc('increment', { 
-            x: Number(data.amount) 
-          })
-        })
-        .eq('site_id', data.receiver_site_id);
-
-      if (receiverSummaryError) throw receiverSummaryError;
-
-      toast.success('Transaction added successfully');
+      toast.success('Transaction recorded successfully');
       form.reset();
-      onSuccess?.();
-    } catch (error) {
-      console.error('Error adding transaction:', error);
-      toast.error('Failed to add transaction');
+      
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error: any) {
+      console.error('Error submitting transaction:', error);
+      toast.error(`Failed to submit transaction: ${error.message}`);
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -186,23 +148,24 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="receiver_supervisor_id"
+          name="receiverSupervisorId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Select Supervisor</FormLabel>
-              <FormControl>
-                <select
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  {...field}
-                >
-                  <option value="">Select a supervisor</option>
-                  {supervisors.map((supervisor) => (
-                    <option key={supervisor.id} value={supervisor.id}>
+              <FormLabel>Receiver Supervisor</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select supervisor" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {availableSupervisors.map((supervisor) => (
+                    <SelectItem key={supervisor.id} value={supervisor.id}>
                       {supervisor.name}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-              </FormControl>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
@@ -210,24 +173,24 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
 
         <FormField
           control={form.control}
-          name="receiver_site_id"
+          name="receiverSiteId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Select Site</FormLabel>
-              <FormControl>
-                <select
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  {...field}
-                  disabled={!form.watch('receiver_supervisor_id')}
-                >
-                  <option value="">Select a site</option>
-                  {sites.map((site) => (
-                    <option key={site.id} value={site.id}>
+              <FormLabel>Receiver Site</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedSupervisorId || receiverSites.length === 0}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder={receiverSites.length === 0 ? "No active sites for this supervisor" : "Select site"} />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {receiverSites.map((site) => (
+                    <SelectItem key={site.id} value={site.id}>
                       {site.name} - {site.location}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-              </FormControl>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
@@ -238,13 +201,13 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
           name="amount"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Amount</FormLabel>
+              <FormLabel>Amount (₹)</FormLabel>
               <FormControl>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Enter amount"
-                  {...field}
+                <Input 
+                  type="number" 
+                  placeholder="Enter amount" 
+                  {...field} 
+                  onChange={(e) => field.onChange(e.target.valueAsNumber)}
                 />
               </FormControl>
               <FormMessage />
@@ -257,19 +220,19 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
           name="date"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Date</FormLabel>
+              <FormLabel>Transaction Date</FormLabel>
               <Popover>
                 <PopoverTrigger asChild>
                   <FormControl>
                     <Button
-                      variant="outline"
+                      variant={"outline"}
                       className={cn(
-                        'w-full pl-3 text-left font-normal',
-                        !field.value && 'text-muted-foreground'
+                        "w-full pl-3 text-left font-normal",
+                        !field.value && "text-muted-foreground"
                       )}
                     >
                       {field.value ? (
-                        format(field.value, 'PPP')
+                        format(field.value, "PPP")
                       ) : (
                         <span>Pick a date</span>
                       )}
@@ -283,7 +246,7 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
                     selected={field.value}
                     onSelect={field.onChange}
                     disabled={(date) =>
-                      date > new Date() || date < new Date('1900-01-01')
+                      date > new Date() || date < new Date("1900-01-01")
                     }
                     initialFocus
                   />
@@ -294,28 +257,11 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="transaction_type"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Transaction Type</FormLabel>
-              <FormControl>
-                <select
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                  {...field}
-                >
-                  <option value="advance_paid">Advance Paid to Supervisor</option>
-                  <option value="funds_received">Funds Received from Supervisor</option>
-                </select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Adding Transaction...' : 'Add Transaction'}
+        <Button 
+          type="submit" 
+          className="w-full" 
+          disabled={isSubmitting || !form.formState.isValid}>
+          {isSubmitting ? "Processing..." : "Submit Transaction"}
         </Button>
       </form>
     </Form>

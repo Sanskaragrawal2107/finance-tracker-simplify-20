@@ -70,7 +70,13 @@ export function SupervisorTransactionHistory({ siteId }: SupervisorTransactionHi
 
       if (error) throw error;
 
-      setTransactions(data || []);
+      // Transform the data to ensure transaction_type is of the correct type
+      const typedData = data?.map(item => ({
+        ...item,
+        transaction_type: item.transaction_type as 'funds_received' | 'advance_paid'
+      })) || [];
+
+      setTransactions(typedData);
     } catch (error) {
       console.error('Error fetching supervisor transactions:', error);
       toast.error('Failed to load supervisor transactions');

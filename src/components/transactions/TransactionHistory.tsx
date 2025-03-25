@@ -129,4 +129,4 @@ export function TransactionHistory({ siteId }: TransactionHistoryProps) {
       </Table>
     </div>
   );
-} 
+}

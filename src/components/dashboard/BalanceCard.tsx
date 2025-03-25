@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { IndianRupee, RefreshCw } from 'lucide-react';
@@ -26,7 +25,6 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
     
     setIsLoading(true);
     try {
-      // Fetch data from the site_financial_summary table
       const { data, error } = await supabase
         .from('site_financial_summary')
         .select('*')
@@ -49,7 +47,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
           debitsToWorker: data.debit_to_worker || 0,
           invoicesPaid: data.invoices_paid || 0,
           advancePaidToSupervisor: data.advance_paid_to_supervisor || 0,
-          pendingInvoices: localBalanceData.pendingInvoices || 0, // Keep existing value as it's not in the summary table
+          pendingInvoices: localBalanceData.pendingInvoices || 0,
           totalBalance: data.current_balance || 0
         });
       }

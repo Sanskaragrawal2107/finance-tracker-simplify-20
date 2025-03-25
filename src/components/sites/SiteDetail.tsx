@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus, SendHorizontal } from 'lucide-react';
 import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus, UserRole } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,9 @@ import ExpenseForm from '@/components/expenses/ExpenseForm';
 import AdvanceForm from '@/components/advances/AdvanceForm';
 import FundsReceivedForm from '@/components/funds/FundsReceivedForm';
 import InvoiceForm from '@/components/invoices/InvoiceForm';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import SupervisorTransactionForm from '../transactions/SupervisorTransactionForm';
+import SupervisorTransactionHistory from '../transactions/SupervisorTransactionHistory';
 
 interface SiteDetailProps {
   site: Site;
@@ -74,6 +77,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
   const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
 
   const defaultBalanceSummary: BalanceSummary = {
     fundsReceived: 0,
@@ -310,12 +314,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             <Plus className="h-4 w-4" /> Add Funds From HO
           </Button>
           <Button 
-            onClick={() => setIsInvoiceFormOpen(true)}
+            onClick={() => setShowSupervisorTransactionForm(true)}
             variant="outline"
             size="sm"
             className="flex items-center gap-1"
           >
-            <Plus className="h-4 w-4" /> Add Invoice
+            <SendHorizontal className="h-4 w-4" /> Advance Paid to Supervisor
           </Button>
         </div>
       )}
@@ -447,6 +451,24 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           siteId={site.id}
         />
       )}
+
+      <Dialog open={showSupervisorTransactionForm} onOpenChange={setShowSupervisorTransactionForm}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add Supervisor Transaction</DialogTitle>
+            <DialogDescription>
+              Transfer funds to another supervisor from this site.
+            </DialogDescription>
+          </DialogHeader>
+          <SupervisorTransactionForm 
+            onSuccess={() => {
+              setShowSupervisorTransactionForm(false);
+              onEntrySuccess?.('transactions');
+            }}
+            payerSiteId={site?.id}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

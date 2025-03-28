@@ -1,4 +1,3 @@
-
 -- Add new columns to site_financial_summary
 ALTER TABLE site_financial_summary
 ADD COLUMN IF NOT EXISTS funds_received_from_supervisor DECIMAL(10,2) DEFAULT 0,
@@ -11,7 +10,7 @@ CREATE TABLE IF NOT EXISTS supervisor_transactions (
     receiver_supervisor_id UUID REFERENCES users(id),
     site_id UUID REFERENCES sites(id) ON DELETE CASCADE,
     amount DECIMAL(10,2) NOT NULL,
-    transaction_type VARCHAR(50) NOT NULL CHECK (transaction_type IN ('funds_received_from_supervisor', 'advance_paid_to_supervisor')),
+    transaction_type VARCHAR(50) NOT NULL CHECK (transaction_type IN ('funds_received_from_supervisor', 'advance_paid')),
     date DATE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
@@ -55,15 +54,17 @@ CREATE POLICY "Users can insert supervisor transactions"
 CREATE OR REPLACE FUNCTION update_supervisor_financial_summary()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Update payer's financial summary
-    UPDATE site_financial_summary
-    SET advance_paid_to_supervisor = advance_paid_to_supervisor + NEW.amount
-    WHERE site_id = NEW.site_id;
+    -- Update payer's financial summary - only add to advance_paid_to_supervisor
+    IF NEW.transaction_type = 'advance_paid' THEN
+        UPDATE site_financial_summary
+        SET advance_paid_to_supervisor = advance_paid_to_supervisor + NEW.amount
+        WHERE site_id = NEW.payer_site_id;
+    END IF;
 
-    -- Update receiver's financial summary
+    -- Update receiver's financial summary - always add to funds_received_from_supervisor
     UPDATE site_financial_summary
     SET funds_received_from_supervisor = funds_received_from_supervisor + NEW.amount
-    WHERE site_id = NEW.site_id;
+    WHERE site_id = NEW.receiver_site_id;
 
     RETURN NEW;
 END;

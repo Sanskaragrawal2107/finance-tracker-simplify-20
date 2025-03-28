@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
-import { Search, Filter, Building, User, Users, CheckSquare } from 'lucide-react';
+import { Search, Filter, Building, User, Users, CheckSquare, Plus, SendHorizontal } from 'lucide-react';
 import { 
   Expense, 
   ExpenseCategory, 
@@ -29,6 +29,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { SupervisorTransactionHistory } from '@/components/transactions/SupervisorTransactionHistory';
+import { SupervisorAdvanceForm } from '@/components/transactions/SupervisorAdvanceForm';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 import { supervisors } from '@/data/supervisors';
 
@@ -52,6 +55,10 @@ const Expenses: React.FC = () => {
   const [fundsReceived, setFundsReceived] = useState<FundsReceived[]>(initialFunds);
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
   const [isSiteFormOpen, setIsSiteFormOpen] = useState(false);
+  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
+  const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
+  const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
+  const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string | null>(null);
@@ -59,6 +66,7 @@ const Expenses: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'completed'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [hasFetchedData, setHasFetchedData] = useState(false);
+  const [showSupervisorAdvanceForm, setShowSupervisorAdvanceForm] = useState(false);
 
   const fetchSites = useCallback(async () => {
     if (!user) {
@@ -741,6 +749,11 @@ const Expenses: React.FC = () => {
         // Calculate total funds received
         const totalFunds = fundsReceived.reduce((sum, fund) => sum + fund.amount, 0);
         
+        // Calculate funds received from supervisor
+        const fundsReceivedFromSupervisor = fundsReceived
+          .filter(fund => fund.source === 'SUPERVISOR' || fund.source === 'supervisor')
+          .reduce((sum, fund) => sum + fund.amount, 0);
+        
         // Calculate total advances (excluding debit to worker)
         const totalAdvances = advances.reduce((sum, advance) => {
           if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
@@ -759,19 +772,30 @@ const Expenses: React.FC = () => {
         
         // Calculate supervisor invoices (only those paid by supervisor)
         const supervisorInvoiceTotal = invoices
-          .filter(invoice => invoice.payment_by === 'supervisor')
+          .filter(invoice => 
+            invoice.paymentStatus === PaymentStatus.PAID && 
+            (invoice.payerType === 'supervisor' || invoice.payerType === 'SUPERVISOR')
+          )
           .reduce((sum, invoice) => sum + invoice.netAmount, 0);
         
-        // Calculate total balance
-        const totalBalance = totalFunds - totalExpenses - totalAdvances - supervisorInvoiceTotal;
+        // Get advancePaidToSupervisor from site financial summary
+        let advancePaidToSupervisor = 0;
+        
+        // Calculate total balance according to the correct formula:
+        // (Funds Received from HO + Funds Received from Supervisor) - 
+        // (Total Expenses Paid by Supervisor + Total Advances Paid by Supervisor + Invoices Paid by Supervisor + Advance Paid to Supervisor)
+        const totalBalance = (totalFunds + fundsReceivedFromSupervisor) - 
+                             (totalExpenses + totalAdvances + supervisorInvoiceTotal + advancePaidToSupervisor);
         
         return {
           fundsReceived: totalFunds,
+          fundsReceivedFromSupervisor,
           totalExpenditure: totalExpenses,
           totalAdvances,
           debitsToWorker: totalDebitToWorker,
           invoicesPaid: supervisorInvoiceTotal,
-          pendingInvoices: 0, // This will be implemented later
+          advancePaidToSupervisor,
+          pendingInvoices: 0,
           totalBalance: totalBalance
         };
       }
@@ -779,10 +803,12 @@ const Expenses: React.FC = () => {
     
     return {
       fundsReceived: 0,
+      fundsReceivedFromSupervisor: 0,
       totalExpenditure: 0,
       totalAdvances: 0,
       debitsToWorker: 0,
       invoicesPaid: 0,
+      advancePaidToSupervisor: 0,
       pendingInvoices: 0,
       totalBalance: 0
     };
@@ -884,6 +910,49 @@ const Expenses: React.FC = () => {
       else if (entryType === 'invoice') fetchSiteInvoices(selectedSiteId);
       else if (entryType === 'transactions') refreshSiteData(selectedSiteId);
     }
+  };
+
+  const renderFinancialSummary = () => {
+    if (!selectedSiteId) return null;
+    
+    const site = sites.find(s => s.id === selectedSiteId);
+    if (!site) return null;
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setIsExpenseFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Expense
+          </Button>
+          
+          <Button onClick={() => setIsAdvanceFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Advance
+          </Button>
+          
+          <Button onClick={() => setShowSupervisorAdvanceForm(true)}>
+            <SendHorizontal className="h-4 w-4 mr-2" />
+            Advance to Supervisor
+          </Button>
+          
+          <Button onClick={() => setIsFundsFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Funds
+          </Button>
+          
+          <Button onClick={() => setIsInvoiceFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Invoice
+          </Button>
+        </div>
+        
+        <SupervisorTransactionHistory 
+          siteId={selectedSiteId}
+          title="Supervisor-to-Supervisor Transactions"
+        />
+      </div>
+    );
   };
 
   return (
@@ -1060,6 +1129,26 @@ const Expenses: React.FC = () => {
               ? selectedSupervisorId 
               : user?.id}
           />
+
+          {renderFinancialSummary()}
+
+          <Dialog open={showSupervisorAdvanceForm} onOpenChange={setShowSupervisorAdvanceForm}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Advance Paid to Supervisor</DialogTitle>
+                <DialogDescription>
+                  Send funds to another supervisor from this site.
+                </DialogDescription>
+              </DialogHeader>
+              <SupervisorAdvanceForm 
+                onSuccess={() => {
+                  setShowSupervisorAdvanceForm(false);
+                  handleEntrySuccess('supervisor_advance');
+                }}
+                payerSiteId={selectedSiteId}
+              />
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

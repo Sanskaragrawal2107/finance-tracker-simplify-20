@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Expenses from "./pages/Expenses";
 import AdminDashboard from "./pages/AdminDashboard";
 import SupervisorSites from "./pages/SupervisorSites";
+import AdminSupervisorSites from "./pages/admin/SupervisorSites";
 import NotFound from "./pages/NotFound";
 import Navbar from "./components/layout/Navbar";
 import { UserRole } from "./lib/types";
@@ -146,7 +147,7 @@ const AppContent = () => {
           element={
             <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
               <AppLayout>
-                <SupervisorSites />
+                <AdminSupervisorSites />
               </AppLayout>
             </ProtectedRoute>
           } 

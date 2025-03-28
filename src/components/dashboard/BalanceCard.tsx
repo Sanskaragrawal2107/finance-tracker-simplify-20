@@ -39,16 +39,31 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
       if (data) {
         console.log("Retrieved financial summary from DB:", data);
         
+        // Get the correct values
+        const fundsReceived = data.funds_received || 0;
+        const fundsReceivedFromSupervisor = data.funds_received_from_supervisor || 0;
+        const totalExpensesPaid = data.total_expenses_paid || 0;
+        const totalAdvancesPaid = data.total_advances_paid || 0;
+        const debitsToWorker = data.debit_to_worker || 0;
+        const invoicesPaid = data.invoices_paid || 0;
+        const advancePaidToSupervisor = data.advance_paid_to_supervisor || 0;
+        
+        // Calculate total balance using the correct formula:
+        // (Funds Received from HO + Funds Received from Supervisor) - 
+        // (Total Expenses Paid by Supervisor + Total Advances Paid by Supervisor + Invoices Paid by Supervisor + Advance Paid to Supervisor)
+        const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
+                             (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor);
+        
         setLocalBalanceData({
-          fundsReceived: data.funds_received || 0,
-          fundsReceivedFromSupervisor: data.funds_received_from_supervisor || 0,
-          totalExpenditure: data.total_expenses_paid || 0,
-          totalAdvances: data.total_advances_paid || 0,
-          debitsToWorker: data.debit_to_worker || 0,
-          invoicesPaid: data.invoices_paid || 0,
-          advancePaidToSupervisor: data.advance_paid_to_supervisor || 0,
+          fundsReceived,
+          fundsReceivedFromSupervisor,
+          totalExpenditure: totalExpensesPaid,
+          totalAdvances: totalAdvancesPaid,
+          debitsToWorker,
+          invoicesPaid,
+          advancePaidToSupervisor,
           pendingInvoices: localBalanceData.pendingInvoices || 0,
-          totalBalance: data.current_balance || 0
+          totalBalance
         });
       }
     } catch (error) {
@@ -65,7 +80,24 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   }, [siteId]);
   
   useEffect(() => {
-    setLocalBalanceData(balanceData);
+    // Update local balance data when prop changes
+    // But ensure we calculate the correct total balance
+    const fundsReceived = balanceData.fundsReceived || 0;
+    const fundsReceivedFromSupervisor = balanceData.fundsReceivedFromSupervisor || 0;
+    const totalExpenditure = balanceData.totalExpenditure || 0;
+    const totalAdvances = balanceData.totalAdvances || 0;
+    const invoicesPaid = balanceData.invoicesPaid || 0;
+    const advancePaidToSupervisor = balanceData.advancePaidToSupervisor || 0;
+    const debitsToWorker = balanceData.debitsToWorker || 0;
+    
+    // Calculate total balance using the correct formula
+    const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
+                         (totalExpenditure + totalAdvances + invoicesPaid + advancePaidToSupervisor);
+    
+    setLocalBalanceData({
+      ...balanceData,
+      totalBalance
+    });
   }, [balanceData]);
 
   const safeBalanceData = {

@@ -19,6 +19,7 @@ import InvoiceForm from '@/components/invoices/InvoiceForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { SupervisorTransactionForm } from '../transactions/SupervisorTransactionForm';
 import { SupervisorTransactionHistory } from '../transactions/SupervisorTransactionHistory';
+import { SupervisorAdvanceForm } from '../transactions/SupervisorAdvanceForm';
 
 interface SiteDetailProps {
   site: Site;
@@ -78,6 +79,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
   const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
+  const [showSupervisorAdvanceForm, setShowSupervisorAdvanceForm] = useState(false);
 
   const defaultBalanceSummary: BalanceSummary = {
     fundsReceived: 0,
@@ -306,6 +308,14 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             <Plus className="h-4 w-4" /> Add Advance
           </Button>
           <Button 
+            onClick={() => setShowSupervisorAdvanceForm(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1"
+          >
+            <SendHorizontal className="h-4 w-4" /> Advance to Supervisor
+          </Button>
+          <Button 
             onClick={() => setIsFundsFormOpen(true)}
             variant="outline"
             size="sm"
@@ -320,14 +330,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             className="flex items-center gap-1"
           >
             <Plus className="h-4 w-4" /> Add Invoice
-          </Button>
-          <Button 
-            onClick={() => setShowSupervisorTransactionForm(true)}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-1"
-          >
-            <SendHorizontal className="h-4 w-4" /> Advance Paid to Supervisor
           </Button>
         </div>
       )}
@@ -412,6 +414,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             expensesCount={expenses.length}
             advancesCount={advances.length}
             fundsReceivedCount={fundsReceived.length}
+            invoicesCount={invoices.length}
             userRole={userRole}
             isAdminView={isAdminView}
             site={site}
@@ -419,6 +422,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             expenses={expenses}
             advances={advances}
             fundsReceived={fundsReceived}
+            invoices={invoices}
             onTransactionsUpdate={onEntrySuccess ? () => onEntrySuccess('transactions') : undefined}
           />
         </TabsContent>
@@ -471,6 +475,24 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           <SupervisorTransactionForm 
             onSuccess={() => {
               setShowSupervisorTransactionForm(false);
+              onEntrySuccess?.('transactions');
+            }}
+            payerSiteId={site?.id}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSupervisorAdvanceForm} onOpenChange={setShowSupervisorAdvanceForm}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Advance Paid to Supervisor</DialogTitle>
+            <DialogDescription>
+              Send funds to another supervisor from this site.
+            </DialogDescription>
+          </DialogHeader>
+          <SupervisorAdvanceForm 
+            onSuccess={() => {
+              setShowSupervisorAdvanceForm(false);
               onEntrySuccess?.('transactions');
             }}
             payerSiteId={site?.id}

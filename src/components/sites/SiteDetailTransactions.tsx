@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ExpenseList } from '@/components/expenses/ExpenseList';
@@ -22,6 +21,7 @@ interface SiteDetailTransactionsProps {
   expenses?: any[];
   advances?: any[];
   fundsReceived?: any[];
+  invoices?: any[];
   onTransactionsUpdate?: () => void;
 }
 
@@ -38,6 +38,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   expenses,
   advances,
   fundsReceived,
+  invoices,
   onTransactionsUpdate
 }) => {
   const [activeTab, setActiveTab] = useState('expenses');
@@ -55,6 +56,9 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           </TabsTrigger>
           <TabsTrigger value="fundsReceived" className="flex-shrink-0">
             Funds Received {fundsReceivedCount > 0 && `(${fundsReceivedCount})`}
+          </TabsTrigger>
+          <TabsTrigger value="invoices" className="flex-shrink-0">
+            Invoices {invoicesCount > 0 && `(${invoicesCount})`}
           </TabsTrigger>
           <TabsTrigger value="supervisorTransactions" className="flex-shrink-0">
             Supervisor Transactions
@@ -91,8 +95,17 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           />
         </TabsContent>
         
+        <TabsContent value="invoices">
+          <InvoiceList 
+            siteId={siteId}
+            userRole={userRole}
+            isAdminView={isAdminView}
+            onTransactionsUpdate={onTransactionsUpdate}
+          />
+        </TabsContent>
+        
         <TabsContent value="supervisorTransactions">
-          <SupervisorTransactionHistory siteId={siteId} />
+          <SupervisorTransactionHistory siteId={siteId} isAdminView={isAdminView} />
         </TabsContent>
       </Tabs>
     </div>

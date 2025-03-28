@@ -1,299 +1,233 @@
-import React, { useEffect, useState } from 'react';
-import { format } from 'date-fns';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useAuth } from '@/hooks/use-auth';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Trash2 } from 'lucide-react';
-import { 
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
-import { UserRole } from '@/lib/types';
-
-interface SupervisorTransaction {
-  id: string;
-  date: string;
-  amount: number;
-  transaction_type: string;
-  payer_supervisor_id?: string;
-  receiver_supervisor_id?: string;
-  payer_supervisor: {
-    name: string;
-  };
-  receiver_supervisor: {
-    name: string;
-  };
-  payer_site: {
-    name: string;
-    location: string;
-  };
-  receiver_site: {
-    name: string;
-    location: string;
-  };
-  created_at: string;
-}
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Skeleton } from '../ui/skeleton';
+import { useLoadingState } from '@/hooks/use-loading-state';
+import { formatCurrency } from '@/lib/utils';
 
 interface SupervisorTransactionHistoryProps {
-  siteId?: string;
-  supervisorId?: string;
-  title?: string;
+  siteId: string;
   isAdminView?: boolean;
+  onTransactionsUpdate?: () => void;
 }
 
 export function SupervisorTransactionHistory({ 
-  siteId, 
-  supervisorId,
-  title = "Supervisor-to-Supervisor Transactions",
-  isAdminView = false
+  siteId,
+  isAdminView = false,
+  onTransactionsUpdate
 }: SupervisorTransactionHistoryProps) {
-  const { user } = useAuth();
-  const [transactions, setTransactions] = useState<SupervisorTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useLoadingState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchTransactions();
+  const fetchTransactions = useCallback(async () => {
+    if (!siteId) return;
     
-    // Set up a subscription for real-time updates
-    const channel = supabase
-      .channel('supervisor_transactions_changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'supervisor_transactions' 
-        }, 
-        (payload) => {
-          console.log('Change received!', payload);
-          fetchTransactions();
-        }
-      )
-      .subscribe();
-      
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [siteId, supervisorId]);
-
-  const fetchTransactions = async () => {
-    setLoading(true);
     try {
-      let query = supabase
+      setIsLoading(true);
+      console.log('Fetching supervisor transactions for site:', siteId);
+      
+      const { data, error } = await supabase
         .from('supervisor_transactions')
         .select(`
           *,
-          payer_supervisor:users!payer_supervisor_id(name),
-          receiver_supervisor:users!receiver_supervisor_id(name),
-          payer_site:sites!payer_site_id(name, location),
-          receiver_site:sites!receiver_site_id(name, location)
+          payer_supervisor:users!supervisor_transactions_payer_supervisor_id_fkey(name),
+          receiver_supervisor:users!supervisor_transactions_receiver_supervisor_id_fkey(name),
+          payer_site:sites!supervisor_transactions_payer_site_id_fkey(name),
+          receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)
         `)
-        .order('date', { ascending: false });
+        .or(`payer_site_id.eq.${siteId},receiver_site_id.eq.${siteId}`)
+        .order('created_at', { ascending: false });
 
-      if (siteId) {
-        query = query.or(`payer_site_id.eq.${siteId},receiver_site_id.eq.${siteId}`);
+      if (error) {
+        console.error('Error fetching transactions:', error.message);
+        toast.error('Failed to load transaction history');
+        return;
       }
-      
-      if (supervisorId) {
-        query = query.or(`payer_supervisor_id.eq.${supervisorId},receiver_supervisor_id.eq.${supervisorId}`);
-      }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      if (data) {
-        // Ensure the data matches the expected shape before setting it
-        const mappedData: SupervisorTransaction[] = data.map(item => ({
-          id: item.id,
-          date: item.date,
-          amount: item.amount,
-          transaction_type: item.transaction_type,
-          payer_supervisor_id: item.payer_supervisor_id,
-          receiver_supervisor_id: item.receiver_supervisor_id,
-          payer_supervisor: {
-            name: item.payer_supervisor?.name || 'Unknown'
-          },
-          receiver_supervisor: {
-            name: item.receiver_supervisor?.name || 'Unknown'
-          },
-          payer_site: {
-            name: item.payer_site?.name || 'Unknown',
-            location: item.payer_site?.location || 'Unknown'
-          },
-          receiver_site: {
-            name: item.receiver_site?.name || 'Unknown',
-            location: item.receiver_site?.location || 'Unknown'
-          },
-          created_at: item.created_at
-        }));
-        
-        setTransactions(mappedData);
-      }
-    } catch (error) {
-      console.error('Error fetching supervisor transactions:', error);
-      toast.error('Failed to load supervisor transactions');
+      console.log('Fetched supervisor transactions:', data);
+      setTransactions(data || []);
+    } catch (error: any) {
+      console.error('Error in fetchTransactions:', error);
+      toast.error('Failed to load transaction history');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
+  }, [siteId, setIsLoading]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   const handleDeleteTransaction = async () => {
-    if (!selectedTransactionId) return;
+    if (!transactionToDelete || !siteId) return;
     
     try {
+      // Get transaction details before deletion
+      const { data: transactionData, error: transactionError } = await supabase
+        .from('supervisor_transactions')
+        .select('*')
+        .eq('id', transactionToDelete)
+        .single();
+        
+      if (transactionError) {
+        console.error('Error fetching transaction for deletion:', transactionError);
+        toast.error('Failed to find transaction details');
+        return;
+      }
+      
+      // Delete the transaction
       const { error } = await supabase
         .from('supervisor_transactions')
         .delete()
-        .eq('id', selectedTransactionId);
-        
-      if (error) throw error;
-      
+        .eq('id', transactionToDelete);
+
+      if (error) {
+        console.error('Error deleting transaction:', error);
+        toast.error('Failed to delete transaction');
+        return;
+      }
+
+      // Update site financial summary based on transaction type
+      if (transactionData) {
+        const { error: updateError } = await supabase
+          .rpc('update_site_financial_summary_for_id', { site_id_param: siteId });
+          
+        if (updateError) {
+          console.error('Error updating financial summary:', updateError);
+          // Continue with UI update even if financial summary update fails
+        }
+      }
+
+      // Update UI directly
+      setTransactions(prev => prev.filter(transaction => transaction.id !== transactionToDelete));
       toast.success('Transaction deleted successfully');
-      // Refresh the transactions list
-      fetchTransactions();
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
-      toast.error('Failed to delete transaction');
+      
+      // Notify parent to refresh financial data
+      if (onTransactionsUpdate) {
+        onTransactionsUpdate();
+      }
+    } catch (error: any) {
+      console.error('Error in handleDeleteTransaction:', error);
+      toast.error('An error occurred while deleting the transaction');
     } finally {
+      setTransactionToDelete(null);
       setShowDeleteDialog(false);
-      setSelectedTransactionId(null);
     }
   };
 
-  const showDeleteConfirmation = (transactionId: string) => {
-    setSelectedTransactionId(transactionId);
+  const handleDeleteClick = (id: string) => {
+    setTransactionToDelete(id);
     setShowDeleteDialog(true);
   };
 
-  if (loading) {
-    return <div className="py-4 text-center text-muted-foreground">Loading transactions...</div>;
-  }
+  const formatTransactionType = (type: string) => {
+    switch (type) {
+      case 'advance_paid':
+        return 'Advance Paid';
+      case 'funds_received':
+        return 'Funds Received';
+      default:
+        return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+  };
 
-  if (transactions.length === 0) {
-    return <div className="py-4 text-center text-muted-foreground">No supervisor transactions found</div>;
-  }
-
-  // Only admins or the component in admin view should see delete buttons
-  const showDeleteButton = user?.role === UserRole.ADMIN || isAdminView;
+  const getTransactionTypeColor = (type: string) => {
+    switch (type) {
+      case 'advance_paid':
+        return 'bg-red-100 text-red-800';
+      case 'funds_received':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Supervisor Paid</TableHead>
-                <TableHead>Supervisor Received</TableHead>
-                <TableHead>From Site</TableHead>
-                <TableHead>To Site</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                {showDeleteButton && <TableHead className="w-[80px]">Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.map((transaction) => {
-                // Format the transaction type for display
-                const formatTransactionType = (type: string) => {
-                  switch (type) {
-                    case 'funds_received':
-                      return 'Funds Received from Head Office';
-                    case 'advance_paid':
-                      // Check if the current user is the payer (meaning they paid an advance to another supervisor)
-                      if (transaction.payer_supervisor_id === user?.id) {
-                        return 'Advance Paid to Supervisor';
-                      }
-                      // If current user is the receiver, it's an advance received
-                      return 'Advance Received from Supervisor';
-                    default:
-                      return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                  }
-                };
-                
-                return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Supervisor Transactions</CardTitle>
+        <CardDescription>Direct transactions between site supervisor and head office</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="text-center py-4 text-gray-500">No supervisor transactions found</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>From</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  {isAdminView && <TableHead>Actions</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((transaction) => (
                   <TableRow key={transaction.id}>
-                    <TableCell>{format(new Date(transaction.date), 'MMM d, yyyy')}</TableCell>
-                    <TableCell>{transaction.payer_supervisor.name}</TableCell>
-                    <TableCell>{transaction.receiver_supervisor.name}</TableCell>
-                    <TableCell>{transaction.payer_site.name} - {transaction.payer_site.location}</TableCell>
-                    <TableCell>{transaction.receiver_site.name} - {transaction.receiver_site.location}</TableCell>
+                    <TableCell>{new Date(transaction.created_at).toLocaleDateString()}</TableCell>
                     <TableCell>
-                      <Badge 
-                        variant={
-                          transaction.payer_supervisor_id === user?.id
-                            ? 'destructive'
-                            : 'default'
-                        }
-                      >
+                      {transaction.payer_site?.name || '-'} ({transaction.payer_supervisor?.name || 'Unknown'})
+                    </TableCell>
+                    <TableCell>
+                      {transaction.receiver_site?.name || '-'} ({transaction.receiver_supervisor?.name || 'Unknown'})
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getTransactionTypeColor(transaction.transaction_type)} variant="outline">
                         {formatTransactionType(transaction.transaction_type)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-medium">
-                      ₹{transaction.amount.toLocaleString('en-IN')}
+                    <TableCell className="text-right">
+                      {formatCurrency(transaction.amount)}
                     </TableCell>
-                    {showDeleteButton && (
+                    {isAdminView && (
                       <TableCell>
                         <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                          onClick={() => showDeleteConfirmation(transaction.id)}
+                          variant="destructive" 
+                          size="sm"
+                          onClick={() => handleDeleteClick(transaction.id)}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          Delete
                         </Button>
                       </TableCell>
                     )}
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action will permanently delete this transaction record. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDeleteTransaction}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the transaction and update the financial summary.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteTransaction}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
   );
 }

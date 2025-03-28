@@ -154,45 +154,8 @@ const AdminDashboard: React.FC = () => {
 
   const handleCreateSite = async (site: any) => {
     try {
-      const siteData = {
-        name: site.name,
-        job_name: site.jobName,
-        pos_no: site.posNo,
-        start_date: site.startDate,
-        completion_date: site.completionDate,
-        location: site.location || "",
-        supervisor_id: site.supervisorId || selectedSupervisorId,
-        is_completed: false,
-        funds: site.funds || 0
-      };
-      
-      const { data: existingSite, error: checkError } = await supabase
-        .from('sites')
-        .select('id')
-        .eq('name', siteData.name)
-        .single();
-      
-      if (existingSite) {
-        toast.error(`Site with name "${siteData.name}" already exists`);
-        return;
-      }
-      
-      const { data, error } = await supabase
-        .from('sites')
-        .insert(siteData)
-        .select();
-      
-      if (error) {
-        console.error('Error creating site:', error);
-        
-        if (error.code === '23505' && error.message.includes('sites_name_key')) {
-          toast.error(`Site with name "${siteData.name}" already exists`);
-        } else {
-          toast.error('Failed to create site: ' + error.message);
-        }
-        return;
-      }
-      
+      // Remove duplicate site creation since the SiteForm already creates the site
+      // Just update the UI stats instead
       setSupervisorStats(prev => {
         const updatedStats = { ...prev };
         const supervisorId = site.supervisorId || selectedSupervisorId;
@@ -207,7 +170,7 @@ const AdminDashboard: React.FC = () => {
         return updatedStats;
       });
       
-      toast.success(`Site "${site.name}" created successfully`);
+      // The site was already created in SiteForm, no need for duplicating the success message
       setIsSiteFormOpen(false);
     } catch (error: any) {
       console.error('Error in handleCreateSite:', error);

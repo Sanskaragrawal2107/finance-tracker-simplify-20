@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Skeleton } from '../ui/skeleton';
+import { useLoadingState } from '@/hooks/use-loading-state';
+import { formatCurrency } from '@/lib/utils';
 
 interface AdvanceListProps {
   siteId: string;
@@ -34,19 +38,17 @@ export function AdvanceList({
   onTransactionsUpdate
 }: AdvanceListProps) {
   const [advances, setAdvances] = useState(initialAdvances || []);
-  const [loading, setLoading] = useState(!initialAdvances);
+  const [isLoading, setIsLoading] = useLoadingState(!initialAdvances);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedAdvanceId, setSelectedAdvanceId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!initialAdvances) {
-      fetchAdvances();
-    }
-  }, [siteId]);
-
-  const fetchAdvances = async () => {
+  const fetchAdvances = useCallback(async () => {
+    if (!siteId) return;
+    
     try {
-      setLoading(true);
+      setIsLoading(true);
+      console.log('Fetching advances for site:', siteId);
+      
       const { data, error } = await supabase
         .from('advances')
         .select('*')
@@ -54,19 +56,41 @@ export function AdvanceList({
         .order('date', { ascending: false });
 
       if (error) throw error;
+      
+      console.log('Fetched advances:', data);
       setAdvances(data || []);
     } catch (error) {
       console.error('Error fetching advances:', error);
       toast.error('Failed to load advances');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
+  }, [siteId, setIsLoading]);
+
+  useEffect(() => {
+    if (initialAdvances) {
+      setAdvances(initialAdvances);
+    } else {
+      fetchAdvances();
+    }
+  }, [fetchAdvances, initialAdvances]);
 
   const handleDeleteAdvance = async () => {
     if (!selectedAdvanceId) return;
     
     try {
+      // Get advance details before deletion
+      const { data: advanceData, error: advanceError } = await supabase
+        .from('advances')
+        .select('*')
+        .eq('id', selectedAdvanceId)
+        .single();
+        
+      if (advanceError) {
+        throw advanceError;
+      }
+      
+      // Delete the advance
       const { error } = await supabase
         .from('advances')
         .delete()
@@ -74,10 +98,20 @@ export function AdvanceList({
         
       if (error) throw error;
       
+      // Update site financial summary to reflect the deletion
+      const { error: updateError } = await supabase
+        .rpc('update_site_financial_summary_for_id', { site_id_param: siteId });
+        
+      if (updateError) {
+        console.error('Error updating financial summary:', updateError);
+        // Continue with UI update even if financial summary update fails
+      }
+      
+      // Update UI directly
+      setAdvances(prevAdvances => prevAdvances.filter(advance => advance.id !== selectedAdvanceId));
       toast.success('Advance deleted successfully');
-      // Refresh the advances list
-      fetchAdvances();
-      // Update parent component
+      
+      // Notify parent component to refresh financial data
       if (onTransactionsUpdate) {
         onTransactionsUpdate();
       }
@@ -108,89 +142,84 @@ export function AdvanceList({
     }
   };
 
-  if (loading) {
-    return <div>Loading advances...</div>;
-  }
-
   const showDeleteButton = userRole === UserRole.ADMIN || isAdminView;
 
   return (
-    <>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Recipient</TableHead>
-              <TableHead>Purpose</TableHead>
-              <TableHead>Remarks</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              {showDeleteButton && <TableHead className="w-[80px]">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {advances.length > 0 ? (
-              advances.map((advance) => (
-                <TableRow key={advance.id}>
-                  <TableCell>{format(new Date(advance.date), 'PPP')}</TableCell>
-                  <TableCell>
-                    {advance.recipient_name}
-                    <Badge className="ml-2" variant="outline">
-                      {advance.recipient_type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{advance.purpose}</TableCell>
-                  <TableCell>{advance.remarks || '-'}</TableCell>
-                  <TableCell className="text-right">
-                    ₹{Number(advance.amount).toLocaleString('en-IN', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </TableCell>
-                  {showDeleteButton && (
-                    <TableCell>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                        onClick={() => showDeleteConfirmation(advance.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  )}
+    <Card>
+      <CardHeader>
+        <CardTitle>Advances</CardTitle>
+        <CardDescription>View all advance payments for this site</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : advances.length === 0 ? (
+          <div className="text-center py-4 text-gray-500">No advances found</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Recipient</TableHead>
+                  <TableHead>Purpose</TableHead>
+                  <TableHead>Remarks</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  {showDeleteButton && <TableHead>Actions</TableHead>}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={showDeleteButton ? 6 : 5} className="text-center">
-                  No advances found
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              </TableHeader>
+              <TableBody>
+                {advances.map((advance) => (
+                  <TableRow key={advance.id}>
+                    <TableCell>{format(new Date(advance.date), 'PPP')}</TableCell>
+                    <TableCell>
+                      {advance.recipient_name}
+                      <Badge className="ml-2" variant="outline">
+                        {advance.recipient_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{advance.purpose}</TableCell>
+                    <TableCell>{advance.remarks || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(advance.amount)}
+                    </TableCell>
+                    {showDeleteButton && (
+                      <TableCell>
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          onClick={() => showDeleteConfirmation(advance.id)}
+                        >
+                          Delete
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action will permanently delete this advance. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDeleteAdvance}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the advance and remove the associated financial data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setSelectedAdvanceId(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteAdvance}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle, Building2, SendHorizontal, ArrowLeft, RefreshCcw } from 'lucide-react';
 import { format } from 'date-fns';
@@ -22,6 +22,7 @@ import { FundsReceivedList } from '@/components/funds/FundsReceivedList';
 import { InvoiceList } from '@/components/invoices/InvoiceList';
 import SiteDetailTransactions from '@/components/sites/SiteDetailTransactions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import VisibilityHandler from '@/components/common/VisibilityHandler';
 
 const AdminSupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -40,11 +41,15 @@ const AdminSupervisorSites: React.FC = () => {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [financialSummary, setFinancialSummary] = useState<BalanceSummary | null>(null);
   const [loadingFinancials, setLoadingFinancials] = useState(false);
+  
+  const lastVisibleTimeRef = useRef(Date.now());
 
   // Get supervisorId from route state if provided by AdminDashboard
   const supervisorIdFromState = location.state?.supervisorId;
   const supervisorNameFromState = location.state?.supervisorName;
-
+  
+  // Remove the handleVisibilityChange function from here to place it after filterSites
+  
   useEffect(() => {
     let mounted = true;
     
@@ -61,11 +66,109 @@ const AdminSupervisorSites: React.FC = () => {
     };
   }, [user?.id, supervisorIdFromState]); // Re-fetch when supervisorId from state changes
 
+  const filterSites = useCallback((sitesToFilter = sites) => {
+    const filtered = sitesToFilter.filter(site => {
+      const matchesSearch = site.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            site.location.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesStatus = 
+        activeTab === 'all' ? true :
+        activeTab === 'active' ? !site.isCompleted :
+        activeTab === 'completed' ? site.isCompleted : true;
+      
+      return matchesSearch && matchesStatus;
+    });
+    
+    setFilteredSites(filtered);
+  }, [searchQuery, activeTab]);
+
   useEffect(() => {
     if (sites.length > 0) {
       filterSites();
     }
-  }, [searchQuery, sites, activeTab]);
+  }, [filterSites, sites]);
+
+  // Handle visibility changes (when browser tab becomes visible again)
+  const handleVisibilityChange = useCallback((wasHidden: boolean, hiddenDuration: number) => {
+    console.log('Tab visibility changed, was hidden for', hiddenDuration, 'ms');
+    
+    if (wasHidden) {
+      if (selectedSiteId) {
+        // Reset loading states and show toast
+        setLoadingFinancials(false);
+        toast({
+          title: 'Refreshing data',
+          description: 'Data is being refreshed after tab switch'
+        });
+        
+        // Manually trigger a fetch to update the UI
+        supabase
+          .from('site_financial_summary')
+          .select('*')
+          .eq('site_id', selectedSiteId)
+          .single()
+          .then(({ data, error }) => {
+            if (!error && data) {
+              // Get the correct values
+              const fundsReceived = data.funds_received || 0;
+              const fundsReceivedFromSupervisor = data.funds_received_from_supervisor || 0;
+              const totalExpensesPaid = data.total_expenses_paid || 0;
+              const totalAdvancesPaid = data.total_advances_paid || 0;
+              const debitsToWorker = data.debit_to_worker || 0;
+              const invoicesPaid = data.invoices_paid || 0;
+              const advancePaidToSupervisor = data.advance_paid_to_supervisor || 0;
+              
+              // Calculate total balance
+              const updatedTotalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
+                               (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor);
+              
+              setFinancialSummary({
+                fundsReceived,
+                fundsReceivedFromSupervisor,
+                totalExpenditure: totalExpensesPaid,
+                totalAdvances: totalAdvancesPaid,
+                debitsToWorker,
+                invoicesPaid,
+                advancePaidToSupervisor,
+                pendingInvoices: 0,
+                totalBalance: updatedTotalBalance
+              });
+            }
+          });
+      } else {
+        // Reset loading state
+        setLoading(false);
+        
+        // Direct fetch to update sites
+        supabase
+          .from('sites')
+          .select('*, users!sites_supervisor_id_fkey(name)')
+          .then(({ data, error }) => {
+            if (!error && data) {
+              // Transform the data to match our Site interface
+              const transformedSites: Site[] = data.map((site) => ({
+                id: site.id,
+                name: site.name,
+                jobName: site.job_name || '',
+                posNo: site.pos_no || '',
+                location: site.location || '',
+                startDate: site.start_date ? new Date(site.start_date) : new Date(),
+                completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
+                supervisorId: site.supervisor_id || '',
+                supervisor: site.users?.name || 'Unassigned',
+                createdAt: new Date(site.created_at || new Date()),
+                isCompleted: site.is_completed || false,
+                funds: site.funds || 0,
+                totalFunds: site.total_funds || 0,
+              }));
+              
+              setSites(transformedSites);
+              filterSites(transformedSites);
+            }
+          });
+      }
+    }
+  }, [selectedSiteId, toast, filterSites]);
 
   // Effect to fetch financial summary when a site is selected
   useEffect(() => {
@@ -106,9 +209,7 @@ const AdminSupervisorSites: React.FC = () => {
         const invoicesPaid = data.invoices_paid || 0;
         const advancePaidToSupervisor = data.advance_paid_to_supervisor || 0;
         
-        // Calculate total balance using the correct formula:
-        // (Funds Received from HO + Funds Received from Supervisor) - 
-        // (Total Expenses Paid by Supervisor + Total Advances Paid by Supervisor + Invoices Paid by Supervisor + Advance Paid to Supervisor)
+        // Calculate total balance
         const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
                              (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor);
         
@@ -245,31 +346,8 @@ const AdminSupervisorSites: React.FC = () => {
     }
   };
 
-  const filterSites = (sitesToFilter = sites) => {
-    let filtered = [...sitesToFilter];
-    
-    // Apply status filter
-    if (activeTab === 'active') {
-      filtered = filtered.filter(site => !site.isCompleted);
-    } else if (activeTab === 'completed') {
-      filtered = filtered.filter(site => site.isCompleted);
-    }
-    
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(site => 
-        site.name.toLowerCase().includes(query) || 
-        site.location.toLowerCase().includes(query) ||
-        site.supervisor.toLowerCase().includes(query)
-      );
-    }
-    
-    setFilteredSites(filtered);
-  };
-
   const handleSiteSelect = (site: Site) => {
-    console.log('Site selected:', site.name, site.id);
+    console.log('Selected site:', site.name);
     setSelectedSite(site);
     setSelectedSiteId(site.id);
   };
@@ -746,6 +824,9 @@ const AdminSupervisorSites: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Add VisibilityHandler to handle tab switching */}
+      <VisibilityHandler onVisibilityChange={handleVisibilityChange} />
+      
       {!user ? (
         <div className="text-center py-12">
           <div className="animate-pulse">

@@ -826,26 +826,8 @@ const Expenses: React.FC = () => {
   const handleCreateSite = async (newSite) => {
     if (!user) return;
     try {
-      const { data, error } = await supabase.from('sites').insert([
-        {
-          name: newSite.name,
-          job_name: newSite.jobName,
-          pos_no: newSite.posNo,
-          location: newSite.location,
-          start_date: newSite.startDate?.toISOString(),
-          completion_date: newSite.completionDate?.toISOString(),
-          supervisor_id: newSite.supervisorId || user.id,
-          created_by: user.id,
-          is_completed: false
-        }
-      ]);
-      
-      if (error) {
-        console.error('Error creating site:', error);
-        toast.error('Error creating site: ' + error.message);
-        return;
-      }
-      
+      // SiteForm already inserts the site into the database, so we don't need to do it again here
+      // Just update the UI by fetching the latest sites
       toast.success('Site created successfully');
       setIsSiteFormOpen(false);
       fetchSites();

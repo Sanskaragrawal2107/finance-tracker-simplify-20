@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -49,13 +49,7 @@ export function InvoiceList({
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
 
-  useEffect(() => {
-    if (!initialInvoices) {
-      fetchInvoices();
-    }
-  }, [siteId]);
-
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -72,7 +66,13 @@ export function InvoiceList({
     } finally {
       setLoading(false);
     }
-  };
+  }, [siteId]);
+
+  useEffect(() => {
+    if (!initialInvoices) {
+      fetchInvoices();
+    }
+  }, [fetchInvoices, initialInvoices]);
 
   const handleDeleteInvoice = async () => {
     if (!selectedInvoiceId) return;

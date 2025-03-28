@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -147,7 +146,7 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
       }
       
       if (existingSites && existingSites.length > 0) {
-        toast.error('A site with this name and P.O. number already exists');
+        toast.error(`A site with this name and P.O. number combination already exists`);
         return;
       }
       
@@ -170,7 +169,19 @@ const SiteForm: React.FC<SiteFormProps> = ({ isOpen, onClose, onSubmit, supervis
       
       if (error) {
         console.error('Error creating site:', error);
-        toast.error('Failed to create site: ' + error.message);
+        
+        // Provide more user-friendly error messages for specific error cases
+        if (error.code === '23505') {
+          if (error.message.includes('name')) {
+            toast.error(`A site with the name "${uppercaseValues.name}" already exists`);
+          } else if (error.message.includes('pos_no')) {
+            toast.error(`A site with the P.O. number "${uppercaseValues.posNo}" already exists`);
+          } else {
+            toast.error('A site with these details already exists');
+          }
+        } else {
+          toast.error('Failed to create site: ' + error.message);
+        }
         return;
       }
       

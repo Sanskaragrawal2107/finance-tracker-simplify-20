@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, createContext, useContext, useRef, useCallback } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,6 +19,7 @@ import AppLayout from "./components/layout/AppLayout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { refreshSchemaCache, supabase } from "./integrations/supabase/client";
 import { toast } from "sonner";
+import { useVisibilityRefresh } from "./hooks/use-visibility-refresh";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +30,64 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Create a context for visibility change handling
+export const VisibilityContext = createContext<{
+  forceRefresh: () => void;
+  registerLoadingState: (id: string, isLoading: boolean) => void;
+}>({
+  forceRefresh: () => {},
+  registerLoadingState: () => {}
+});
+
+// Visibility Provider component to make visibility state available app-wide
+const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
+  const loadingStatesRef = useRef<Record<string, boolean>>({});
+
+  // Clear all loading states and force a refresh only when explicitly called
+  const forceRefresh = useCallback(() => {
+    // Reset all loading states to false
+    Object.keys(loadingStatesRef.current).forEach(key => {
+      loadingStatesRef.current[key] = false;
+    });
+    
+    // Force component refresh by updating the refresh time
+    setLastRefreshTime(Date.now());
+  }, []);
+
+  // Register a loading state from a component
+  const registerLoadingState = useCallback((id: string, isLoading: boolean) => {
+    loadingStatesRef.current[id] = isLoading;
+  }, []);
+
+  // Handle document visibility changes - but don't auto refresh
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Only clear loading states without refreshing data
+        Object.keys(loadingStatesRef.current).forEach(key => {
+          loadingStatesRef.current[key] = false;
+        });
+      }
+    };
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  return (
+    <VisibilityContext.Provider value={{ forceRefresh, registerLoadingState }}>
+      <div key={lastRefreshTime}>
+        {children}
+      </div>
+    </VisibilityContext.Provider>
+  );
+};
 
 // Redirect component based on user role
 const RoleBasedRedirect = () => {
@@ -235,7 +294,9 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <AppContent />
+            <VisibilityRefreshProvider>
+              <AppContent />
+            </VisibilityRefreshProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

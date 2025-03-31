@@ -107,14 +107,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             // Redirect based on role - only if on login page or root
             const currentPath = window.location.pathname;
+            console.log("Current path during auth state change:", currentPath);
+            
+            // Only redirect if on login page or root, preserve specific admin routes
             if (currentPath === '/' || currentPath === '/login') {
               if (profile.role === UserRole.ADMIN) {
+                console.log("Redirecting to /admin from login/root");
                 navigate('/admin');
               } else if (profile.role === UserRole.SUPERVISOR) {
+                console.log("Redirecting to /expenses from login/root");
                 navigate('/expenses');
               } else {
+                console.log("Redirecting to /dashboard from login/root");
                 navigate('/dashboard');
               }
+            } else {
+              console.log("Keeping user on current path:", currentPath);
             }
           } else {
             // Important: Still set loading to false if profile not found
@@ -167,15 +175,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
           // Redirect based on role
           console.log("Redirecting based on role:", profile.role);
-          if (profile.role === UserRole.ADMIN) {
-            console.log("Redirecting to /admin");
-            navigate('/admin', { replace: true });
-          } else if (profile.role === UserRole.SUPERVISOR) {
-            console.log("Redirecting to /expenses");
-            navigate('/expenses', { replace: true });
+          
+          // Only redirect if on login page or root
+          const currentPath = window.location.pathname;
+          console.log("Current path during login:", currentPath);
+          
+          if (currentPath === '/' || currentPath === '/login') {
+            if (profile.role === UserRole.ADMIN) {
+              console.log("Redirecting to /admin");
+              navigate('/admin', { replace: true });
+            } else if (profile.role === UserRole.SUPERVISOR) {
+              console.log("Redirecting to /expenses");
+              navigate('/expenses', { replace: true });
+            } else {
+              console.log("Redirecting to /dashboard");
+              navigate('/dashboard', { replace: true });
+            }
           } else {
-            console.log("Redirecting to /dashboard");
-            navigate('/dashboard', { replace: true });
+            console.log("Keeping user on current path after login:", currentPath);
           }
         } else {
           console.error("No user profile found for:", data.user.id);

@@ -92,11 +92,22 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 // Redirect component based on user role
 const RoleBasedRedirect = () => {
   const { user } = useAuth();
+  const location = useLocation();
   console.log("RoleBasedRedirect - current user:", user);
+  console.log("RoleBasedRedirect - location state:", location.state);
+  
+  // Check if there's a from path in the location state
+  const fromPath = location.state?.from?.pathname;
   
   if (!user) {
     console.log("No user found, redirecting to /");
     return <Navigate to="/" replace />;
+  }
+  
+  // If we have a fromPath and it's not the root, use that
+  if (fromPath && fromPath !== '/') {
+    console.log("Redirecting to previous path:", fromPath);
+    return <Navigate to={fromPath} replace />;
   }
   
   console.log("User role:", user.role);

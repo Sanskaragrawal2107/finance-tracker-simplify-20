@@ -105,9 +105,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             console.log("Setting user with role:", profile.role);
             setUser(profile);
             
-            // Redirect based on role - only if on login page or root
+            // Get current path and check sessionStorage for last visited path
             const currentPath = window.location.pathname;
+            const lastVisitedPath = sessionStorage.getItem('lastVisitedPath');
+            
             console.log("Current path during auth state change:", currentPath);
+            console.log("Last visited path from session storage:", lastVisitedPath);
+            
+            // If this is a page reload (e.g., at /admin/supervisor-sites) and we have a stored path
+            if (currentPath === '/' && lastVisitedPath && lastVisitedPath !== '/') {
+              console.log("Restoring last visited path after reload:", lastVisitedPath);
+              navigate(lastVisitedPath);
+              return;
+            }
             
             // Only redirect if on login page or root, preserve specific admin routes
             if (currentPath === '/' || currentPath === '/login') {

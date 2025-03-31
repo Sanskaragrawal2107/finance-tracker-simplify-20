@@ -264,8 +264,9 @@ const App = () => {
   useEffect(() => {
     const handleOnline = () => {
       console.log('Browser detected online status');
-      // Force a page refresh to re-establish connections when coming back online
-      window.location.reload();
+      // Don't force a page refresh when coming back online
+      // This may be causing the routing issues
+      // window.location.reload();
     };
 
     window.addEventListener('online', handleOnline);

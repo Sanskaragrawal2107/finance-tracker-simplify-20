@@ -60,6 +60,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (profile && mounted) {
             console.log("Setting user from existing session");
             setUser(profile);
+            
+            // Don't forcefully redirect on page load/refresh if we already have a path
+            // This prevents redirect loops when reloading specific pages
+            const currentPath = window.location.pathname;
+            if (currentPath === '/' && profile) {
+              console.log("User on root path, redirecting based on role");
+              if (profile.role === UserRole.ADMIN) {
+                navigate('/admin', { replace: true });
+              } else if (profile.role === UserRole.SUPERVISOR) {
+                navigate('/expenses', { replace: true });
+              } else {
+                navigate('/dashboard', { replace: true });
+              }
+            }
           } else {
             console.log("No user profile found for existing session");
             // If we have a session but no profile, log this error
@@ -105,35 +119,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             console.log("Setting user with role:", profile.role);
             setUser(profile);
             
-            // Get current path and check sessionStorage for last visited path
+            // Redirect based on role - only if on login page or root
             const currentPath = window.location.pathname;
-            const lastVisitedPath = sessionStorage.getItem('lastVisitedPath');
-            
-            console.log("Current path during auth state change:", currentPath);
-            console.log("Last visited path from session storage:", lastVisitedPath);
-            
-            // If this is a page reload (e.g., at /admin/supervisor-sites) and we have a stored path
-            if (currentPath === '/' && lastVisitedPath && lastVisitedPath !== '/') {
-              console.log("Restoring last visited path after reload:", lastVisitedPath);
-              navigate(lastVisitedPath);
-              return;
-            }
-            
-            // Only redirect if on login page or root, preserve specific admin routes
+            // Only redirect if coming from login or root path
             if (currentPath === '/' || currentPath === '/login') {
+              console.log("Redirecting from login/root based on role");
               if (profile.role === UserRole.ADMIN) {
-                console.log("Redirecting to /admin from login/root");
-                navigate('/admin');
+                navigate('/admin', { replace: true });
               } else if (profile.role === UserRole.SUPERVISOR) {
-                console.log("Redirecting to /expenses from login/root");
-                navigate('/expenses');
+                navigate('/expenses', { replace: true });
               } else {
-                console.log("Redirecting to /dashboard from login/root");
-                navigate('/dashboard');
+                navigate('/dashboard', { replace: true });
               }
             } else {
-              console.log("Keeping user on current path:", currentPath);
+              // User is already on a specific page, keep them there
+              console.log("User already on specific page:", currentPath);
             }
+            setLoading(false);
           } else {
             // Important: Still set loading to false if profile not found
             console.error("No user profile found after sign-in");
@@ -141,6 +143,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               setLoading(false);
             }
           }
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+          // Handle token refresh without redirects
+          console.log("Auth token refreshed");
+          const profile = await fetchUserProfile(session.user.id);
+          if (profile && mounted) {
+            setUser(profile);
+          }
+          setLoading(false);
         } else if (event === 'SIGNED_OUT' && mounted) {
           setUser(null);
           navigate('/');
@@ -185,24 +195,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
           // Redirect based on role
           console.log("Redirecting based on role:", profile.role);
-          
-          // Only redirect if on login page or root
-          const currentPath = window.location.pathname;
-          console.log("Current path during login:", currentPath);
-          
-          if (currentPath === '/' || currentPath === '/login') {
-            if (profile.role === UserRole.ADMIN) {
-              console.log("Redirecting to /admin");
-              navigate('/admin', { replace: true });
-            } else if (profile.role === UserRole.SUPERVISOR) {
-              console.log("Redirecting to /expenses");
-              navigate('/expenses', { replace: true });
-            } else {
-              console.log("Redirecting to /dashboard");
-              navigate('/dashboard', { replace: true });
-            }
+          if (profile.role === UserRole.ADMIN) {
+            console.log("Redirecting to /admin");
+            navigate('/admin', { replace: true });
+          } else if (profile.role === UserRole.SUPERVISOR) {
+            console.log("Redirecting to /expenses");
+            navigate('/expenses', { replace: true });
           } else {
-            console.log("Keeping user on current path after login:", currentPath);
+            console.log("Redirecting to /dashboard");
+            navigate('/dashboard', { replace: true });
           }
         } else {
           console.error("No user profile found for:", data.user.id);

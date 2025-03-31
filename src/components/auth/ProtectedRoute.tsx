@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
 import { UserRole } from '@/lib/types';
@@ -14,17 +14,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const [showLoader, setShowLoader] = useState(true);
   
-  // Store the current path in sessionStorage when entering a protected route
-  // This helps restore the correct route after page refresh
+  // Add a time limit for showing the loading state to prevent infinite loading
   useEffect(() => {
-    if (!loading && user) {
-      console.log("Storing last visited path:", location.pathname);
-      sessionStorage.setItem('lastVisitedPath', location.pathname);
-    }
-  }, [location.pathname, loading, user]);
+    const timer = setTimeout(() => {
+      setShowLoader(false);
+    }, 3000); // Stop showing loader after 3 seconds
+    
+    return () => clearTimeout(timer);
+  }, []);
   
-  if (loading) {
+  // Only show loading indicator for a limited time
+  if (loading && showLoader) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -32,15 +34,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
   
+  // No user after loading is complete, redirect to login
   if (!user) {
-    // Store intended destination before redirecting
     return <Navigate to="/" state={{ from: location }} replace />;
   }
   
+  // User doesn't have required role
   if (!allowedRoles.includes(user.role)) {
     return <Navigate to="/unauthorized" replace />;
   }
   
+  // All checks passed, render children
   return <>{children}</>;
 };
 

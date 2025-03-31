@@ -44,6 +44,7 @@ export const VisibilityContext = createContext<{
 const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
   const loadingStatesRef = useRef<Record<string, boolean>>({});
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Clear all loading states and force a refresh only when explicitly called
   const forceRefresh = useCallback(() => {
@@ -59,6 +60,22 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Register a loading state from a component
   const registerLoadingState = useCallback((id: string, isLoading: boolean) => {
     loadingStatesRef.current[id] = isLoading;
+    
+    // If anything is loading, set a timeout to clear all loading states
+    // This prevents infinite loading states
+    if (isLoading && !timeoutRef.current) {
+      timeoutRef.current = setTimeout(() => {
+        console.warn("Forcing loading states to clear after timeout");
+        Object.keys(loadingStatesRef.current).forEach(key => {
+          loadingStatesRef.current[key] = false;
+        });
+        timeoutRef.current = null;
+      }, 10000); // 10 second timeout
+    } else if (!isLoading && timeoutRef.current) {
+      // If nothing is loading anymore, clear the timeout
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
   }, []);
 
   // Handle document visibility changes - but don't auto refresh
@@ -77,14 +94,16 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // Clear any pending timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
   }, []);
 
   return (
     <VisibilityContext.Provider value={{ forceRefresh, registerLoadingState }}>
-      <div key={lastRefreshTime}>
-        {children}
-      </div>
+      {children}
     </VisibilityContext.Provider>
   );
 };
@@ -92,22 +111,11 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 // Redirect component based on user role
 const RoleBasedRedirect = () => {
   const { user } = useAuth();
-  const location = useLocation();
   console.log("RoleBasedRedirect - current user:", user);
-  console.log("RoleBasedRedirect - location state:", location.state);
-  
-  // Check if there's a from path in the location state
-  const fromPath = location.state?.from?.pathname;
   
   if (!user) {
     console.log("No user found, redirecting to /");
     return <Navigate to="/" replace />;
-  }
-  
-  // If we have a fromPath and it's not the root, use that
-  if (fromPath && fromPath !== '/') {
-    console.log("Redirecting to previous path:", fromPath);
-    return <Navigate to={fromPath} replace />;
   }
   
   console.log("User role:", user.role);
@@ -266,18 +274,27 @@ const App = () => {
 
     initializeApp();
     
+    // Force initialization after 4 seconds max, regardless of what happens
+    const maxTimeout = setTimeout(() => {
+      if (mounted && !isInitialized) {
+        console.warn("Forcing application initialization after timeout");
+        setIsInitialized(true);
+      }
+    }, 4000);
+    
     return () => {
       mounted = false;
+      clearTimeout(maxTimeout);
     };
-  }, []);
+  }, [isInitialized]);
 
   // Add event listeners to handle browser online/offline events
   useEffect(() => {
     const handleOnline = () => {
       console.log('Browser detected online status');
-      // Don't force a page refresh when coming back online
-      // This may be causing the routing issues
-      // window.location.reload();
+      // Don't force a page refresh as this causes navigation issues
+      // Instead just show a notification
+      toast.success('Connection restored');
     };
 
     window.addEventListener('online', handleOnline);
@@ -304,7 +321,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter basename="/">
           <AuthProvider>
             <VisibilityRefreshProvider>
               <AppContent />

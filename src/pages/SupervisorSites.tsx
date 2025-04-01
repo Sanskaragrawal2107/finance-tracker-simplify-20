@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -7,12 +7,14 @@ import CustomCard from '@/components/ui/CustomCard';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Site, UserRole } from '@/lib/types';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, pingSupabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import SiteDetail from '@/components/sites/SiteDetail';
+import { useVisibilityRefresh } from '@/hooks/use-visibility-refresh';
+import { createVisibilityAwareTimeout } from '@/lib/connectivity';
 
 const SupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +28,7 @@ const SupervisorSites: React.FC = () => {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [showSiteDetail, setShowSiteDetail] = useState(false);
   const [activeTab, setActiveTab] = useState('active');
+  const [connectionChecking, setConnectionChecking] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -49,6 +52,41 @@ const SupervisorSites: React.FC = () => {
     }
   }, [searchQuery, sites, activeTab]);
 
+  // Handle page visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // When tab becomes visible, check connection
+        const checkConnection = async () => {
+          setConnectionChecking(true);
+          try {
+            const isConnected = await pingSupabase();
+            if (!isConnected) {
+              console.log('Connection issues detected after tab switch');
+              toast({
+                title: 'Connection issues detected',
+                description: 'Try refreshing the page if functionality is limited',
+                variant: 'destructive',
+              });
+            }
+          } catch (error) {
+            console.error('Error checking connection:', error);
+          } finally {
+            setConnectionChecking(false);
+          }
+        };
+        
+        checkConnection();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   const fetchSites = async () => {
     if (!user) {
       setLoading(false);
@@ -57,9 +95,9 @@ const SupervisorSites: React.FC = () => {
 
     setLoading(true);
     
-    // Add fetch timeout safety
-    const fetchTimeout = setTimeout(() => {
-      console.warn('Sites data fetch timeout after 10 seconds');
+    // Create a visibility-aware timeout for the fetch operation
+    const fetchTimeout = createVisibilityAwareTimeout(() => {
+      console.warn('Sites data fetch timeout after 10 seconds of visible time');
       setLoading(false);
       toast({
         title: 'Network request timeout',
@@ -68,7 +106,7 @@ const SupervisorSites: React.FC = () => {
       });
       setSites([]);
       setFilteredSites([]);
-    }, 10000); // 10 second timeout
+    }, 10000);
     
     try {
       let query = supabase
@@ -81,6 +119,9 @@ const SupervisorSites: React.FC = () => {
       }
 
       const { data, error } = await query;
+      
+      // Fetch completed, clear the timeout
+      fetchTimeout.clear();
 
       if (error) {
         console.error('Error fetching sites:', error);
@@ -130,12 +171,13 @@ const SupervisorSites: React.FC = () => {
       setSites([]);
       setFilteredSites([]);
     } finally {
-      clearTimeout(fetchTimeout);
+      // Ensure timeout is cleared
+      fetchTimeout.clear();
       setLoading(false);
     }
   };
 
-  const filterSites = () => {
+  const filterSites = useCallback(() => {
     let filtered = [...sites];
 
     // Filter by active/completed status
@@ -158,50 +200,60 @@ const SupervisorSites: React.FC = () => {
     }
 
     setFilteredSites(filtered);
-  };
+  }, [sites, activeTab, searchQuery]);
 
   const handleCreateSite = async (newSite: Partial<Site>) => {
-    if (!user) return;
-
     try {
-      const { data, error } = await supabase.from('sites').insert([
-        {
-          name: newSite.name,
-          job_name: newSite.jobName,
-          pos_no: newSite.posNo,
-          location: newSite.location,
-          start_date: newSite.startDate?.toISOString(),
-          completion_date: newSite.completionDate?.toISOString(),
-          supervisor_id: newSite.supervisorId || user.id,
-          created_by: user.id,
-          is_completed: false,
-        },
-      ]);
+      setLoading(true);
+      console.log('Creating new site:', newSite);
+
+      // First, check connection
+      const isConnected = await pingSupabase();
+      if (!isConnected) {
+        throw new Error('Connection to the server is unstable. Please refresh the page.');
+      }
+      
+      // Create the site
+      const { data, error } = await supabase
+        .from('sites')
+        .insert([
+          {
+            name: newSite.name,
+            job_name: newSite.jobName,
+            pos_no: newSite.posNo,
+            start_date: newSite.startDate?.toISOString().split('T')[0],
+            location: newSite.location,
+            supervisor_id: user?.id,
+            supervisor_name: user?.name || 'Unknown',
+            is_completed: false,
+          },
+        ])
+        .select()
+        .single();
 
       if (error) {
         console.error('Error creating site:', error);
-        toast({
-          title: 'Error creating site',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
+        throw error;
       }
 
-      toast({
-        title: 'Site created',
-        description: 'The site has been created successfully.',
-      });
-
+      // Add the new site to our list and refresh
+      console.log('Site created successfully:', data);
+      await fetchSites();
+      
       setShowNewSiteForm(false);
-      fetchSites();
-    } catch (error) {
-      console.error('Error in handleCreateSite:', error);
+      toast({
+        title: 'Success',
+        description: 'Site created successfully',
+      });
+    } catch (error: any) {
+      console.error('Failed to create site:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create site. Please try again.',
+        description: error.message || 'Failed to create site. Please try again.',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -329,6 +381,21 @@ const SupervisorSites: React.FC = () => {
     );
   };
 
+  // Show user-friendly UI when needed
+  const renderConnectionStatus = () => {
+    if (connectionChecking) {
+      return (
+        <div className="fixed bottom-4 right-4 bg-blue-100 text-blue-800 px-4 py-2 rounded-md shadow-md z-50">
+          <div className="flex items-center gap-2">
+            <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></span>
+            Checking connection...
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   // If site detail view is open, show that instead
   if (showSiteDetail && selectedSite) {
     return (
@@ -374,6 +441,7 @@ const SupervisorSites: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {renderConnectionStatus()}
       {!user ? (
         <div className="text-center py-12">
           <div className="animate-pulse">

@@ -18,9 +18,80 @@ export const supabase = createClient<Database>(
       storageKey: 'finance-tracker-auth',
       storage: localStorage,
       autoRefreshToken: true,
+    },
+    global: {
+      fetch: customFetch
     }
   }
 );
+
+// Custom fetch function with retry mechanism for network errors
+function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return withRetry(() => fetch(input, init), 3, 1000);
+}
+
+// Helper function to retry failed operations
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number,
+  delay: number,
+  retryCondition?: (error: any) => boolean
+): Promise<T> {
+  let lastError: any;
+  let retries = 0;
+
+  while (retries < maxRetries) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      // Check if we should retry based on the error
+      if (retryCondition && !retryCondition(error)) {
+        break;
+      }
+
+      retries++;
+      if (retries < maxRetries) {
+        console.warn(`Operation failed, retrying (${retries}/${maxRetries})...`, error);
+        // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delay * retries));
+      }
+    }
+  }
+
+  console.error(`Operation failed after ${maxRetries} retries:`, lastError);
+  throw lastError;
+}
+
+// Function to ping Supabase and reconnect if needed
+export const pingSupabase = async (): Promise<boolean> => {
+  try {
+    const start = Date.now();
+    const { data, error } = await supabase.from('users').select('count').limit(1);
+    const duration = Date.now() - start;
+    
+    console.log(`Supabase ping response time: ${duration}ms`);
+    
+    if (error) {
+      console.error('Supabase ping failed:', error);
+      return false;
+    }
+    
+    // Reconnect Supabase realtime channels
+    try {
+      supabase.removeAllChannels();
+      supabase.channel('system').subscribe();
+      console.log('Reconnected Supabase channels');
+    } catch (err) {
+      console.error('Error reconnecting Supabase channels:', err);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error pinging Supabase:', error);
+    return false;
+  }
+};
 
 // Function to refresh schema cache - this was missing and causing errors
 export const refreshSchemaCache = async () => {

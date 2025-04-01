@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useEffect, useRef, useContext } from 'react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Home, Building, LogOut } from 'lucide-react';
+import { Home, Building, LogOut, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
+import { VisibilityContext } from '@/App';
+import { toast } from 'sonner';
+import { pingSupabase } from '@/integrations/supabase/client';
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -23,14 +26,94 @@ const Navbar: React.FC<NavbarProps> = ({
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { logout, user } = useAuth();
+  const { forceRefresh } = useContext(VisibilityContext);
+  const lastInteractionRef = useRef<number>(Date.now());
+  
+  // Check if the app needs a refresh based on last interaction time
+  useEffect(() => {
+    const checkInteraction = () => {
+      const now = Date.now();
+      const timeSinceLastInteraction = now - lastInteractionRef.current;
+      
+      // If it's been more than 10 minutes, show a warning
+      if (timeSinceLastInteraction > 10 * 60 * 1000) {
+        toast.info("It's been a while. Click refresh if needed.", {
+          duration: 5000
+        });
+      }
+      
+      lastInteractionRef.current = now;
+    };
+    
+    // Check when the tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkInteraction();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
   
   // Function to handle home button click based on user role
   const handleHomeClick = () => {
-    if (userRole === UserRole.ADMIN) {
-      navigate('/admin');
-    } else {
-      navigate('/dashboard');
+    lastInteractionRef.current = Date.now();
+    try {
+      if (userRole === UserRole.ADMIN) {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error('Error navigating to home:', error);
+      toast.error('Navigation failed. Please try refreshing the page.');
     }
+  };
+  
+  // Handle logout with error handling
+  const handleLogout = async () => {
+    lastInteractionRef.current = Date.now();
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Error logging out:', error);
+      toast.error('Logout failed. Please try refreshing the page.');
+      
+      // Try to ping Supabase to check connection
+      const connected = await pingSupabase();
+      if (!connected) {
+        toast.error('Connection issues detected. Try refreshing the page.');
+      }
+    }
+  };
+  
+  // Handle navigation to expenses
+  const handleExpensesClick = () => {
+    lastInteractionRef.current = Date.now();
+    try {
+      navigate('/expenses');
+    } catch (error) {
+      console.error('Error navigating to expenses:', error);
+      toast.error('Navigation failed. Please try refreshing the page.');
+    }
+  };
+  
+  // Force refresh app state
+  const handleRefresh = () => {
+    lastInteractionRef.current = Date.now();
+    forceRefresh();
+    toast.success('App state refreshed');
+    
+    // Also ping Supabase to ensure connection
+    pingSupabase().then(connected => {
+      if (!connected) {
+        toast.error('Connection issues detected. Try refreshing the page.');
+      }
+    });
   };
   
   return (
@@ -78,7 +161,7 @@ const Navbar: React.FC<NavbarProps> = ({
               <Button 
                 variant="ghost" 
                 size="icon" 
-                onClick={() => navigate('/expenses')}
+                onClick={handleExpensesClick}
                 className="p-1 md:p-2"
                 title="Go to Sites & Expenses"
                 aria-label="Go to Sites & Expenses"
@@ -89,7 +172,18 @@ const Navbar: React.FC<NavbarProps> = ({
               <Button 
                 variant="ghost" 
                 size="icon" 
-                onClick={() => logout()}
+                onClick={handleRefresh}
+                className="p-1 md:p-2"
+                title="Refresh App State"
+                aria-label="Refresh App State"
+              >
+                <RefreshCw className="h-5 w-5 text-muted-foreground" />
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleLogout}
                 className="p-1 md:p-2"
                 title="Logout"
                 aria-label="Logout"

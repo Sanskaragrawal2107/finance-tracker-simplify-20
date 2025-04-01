@@ -14,5 +14,77 @@
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        // Track service worker registration
+        let swRegistration;
+        
+        // Function to notify service worker about visibility changes
+        const notifyServiceWorkerVisibility = () => {
+          if (swRegistration && swRegistration.active) {
+            swRegistration.active.postMessage({
+              type: 'VISIBILITY_CHANGE',
+              state: document.visibilityState
+            });
+          }
+        };
+        
+        // Listen for visibility changes to notify service worker
+        document.addEventListener('visibilitychange', notifyServiceWorkerVisibility);
+        
+        // Register the service worker when the page loads
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(registration => {
+              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+              swRegistration = registration;
+              
+              // Initial visibility state
+              notifyServiceWorkerVisibility();
+              
+              // When the controllerchange event fires, the page has a new service worker
+              navigator.serviceWorker.addEventListener('controllerchange', () => {
+                console.log('New service worker activated');
+                
+                // Send visibility state to new controller
+                if (navigator.serviceWorker.controller) {
+                  notifyServiceWorkerVisibility();
+                }
+              });
+            })
+            .catch(error => {
+              console.log('ServiceWorker registration failed: ', error);
+            });
+        });
+        
+        // Check service worker status periodically
+        setInterval(() => {
+          if (navigator.serviceWorker.controller && document.visibilityState === 'visible') {
+            const messageChannel = new MessageChannel();
+            
+            // Set up a timeout for the response
+            const timeout = setTimeout(() => {
+              console.warn('Service worker ping timed out');
+            }, 1000);
+            
+            // Handle the response
+            messageChannel.port1.onmessage = (event) => {
+              clearTimeout(timeout);
+              if (event.data && event.data.type === 'PONG') {
+                console.log('Service worker is alive');
+              }
+            };
+            
+            // Send ping to service worker
+            navigator.serviceWorker.controller.postMessage(
+              { type: 'PING' },
+              [messageChannel.port2]
+            );
+          }
+        }, 60000); // Check every minute
+      }
+    </script>
   </body>
 </html>

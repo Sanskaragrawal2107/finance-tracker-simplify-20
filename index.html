@@ -15,7 +15,7 @@
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration - Netlify-compatible -->
     <script>
       if ('serviceWorker' in navigator) {
         // Track service worker registration
@@ -31,18 +31,69 @@
           }
         };
         
+        // Get the correct service worker path for Netlify
+        const getServiceWorkerUrl = () => {
+          // Get the base URL from the current location
+          const baseUrl = window.location.origin;
+          // Return the full path to the service worker
+          return `${baseUrl}/service-worker.js`;
+        };
+        
+        // Force update of service worker
+        const updateServiceWorker = async () => {
+          if (swRegistration) {
+            try {
+              await swRegistration.update();
+              console.log('Service worker updated');
+            } catch (error) {
+              console.error('Error updating service worker:', error);
+            }
+          }
+        };
+        
+        // Check for stale service worker
+        const checkServiceWorkerFreshness = () => {
+          // If tab was hidden for more than 5 minutes, update SW on visibility change
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+              const lastHiddenTime = parseInt(sessionStorage.getItem('lastHiddenTime') || '0');
+              const now = Date.now();
+              
+              // Only update if it's been more than 5 minutes
+              if (lastHiddenTime > 0 && now - lastHiddenTime > 5 * 60 * 1000) {
+                console.log('Tab hidden for more than 5 minutes, updating service worker');
+                updateServiceWorker();
+              }
+              
+              // Reset the timer
+              sessionStorage.removeItem('lastHiddenTime');
+            } else {
+              // Save when the tab was hidden
+              sessionStorage.setItem('lastHiddenTime', Date.now().toString());
+            }
+          });
+        };
+        
         // Listen for visibility changes to notify service worker
         document.addEventListener('visibilitychange', notifyServiceWorkerVisibility);
         
         // Register the service worker when the page loads
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/service-worker.js')
+          navigator.serviceWorker.register(getServiceWorkerUrl(), {
+            scope: '/',
+            updateViaCache: 'none' // Never use cached service worker
+          })
             .then(registration => {
               console.log('ServiceWorker registration successful with scope: ', registration.scope);
               swRegistration = registration;
               
               // Initial visibility state
               notifyServiceWorkerVisibility();
+              
+              // Check for service worker updates every 30 minutes
+              setInterval(() => {
+                updateServiceWorker();
+              }, 30 * 60 * 1000);
               
               // When the controllerchange event fires, the page has a new service worker
               navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -53,11 +104,57 @@
                   notifyServiceWorkerVisibility();
                 }
               });
+              
+              // Set up freshness checking
+              checkServiceWorkerFreshness();
             })
             .catch(error => {
               console.log('ServiceWorker registration failed: ', error);
             });
         });
+        
+        // Helper function to handle network errors
+        const handleNetworkError = () => {
+          console.warn('Network error detected, trying to recover...');
+          
+          // Try to ping Supabase directly
+          fetch('https://bpyzpnioddmzniuikbsn.supabase.co/rest/v1/', { 
+            method: 'HEAD',
+            mode: 'cors',
+            cache: 'no-cache'
+          })
+          .then(response => {
+            if (response.ok) {
+              console.log('Supabase is reachable, page might need refresh');
+              
+              // Show a notification that lets the user refresh
+              const notification = document.createElement('div');
+              notification.style.position = 'fixed';
+              notification.style.top = '0';
+              notification.style.left = '0';
+              notification.style.right = '0';
+              notification.style.backgroundColor = '#f8d7da';
+              notification.style.color = '#721c24';
+              notification.style.padding = '10px';
+              notification.style.textAlign = 'center';
+              notification.style.zIndex = '9999';
+              notification.innerHTML = 'Connection issues detected. <button style="background-color: #721c24; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px;">Refresh</button>';
+              
+              document.body.appendChild(notification);
+              
+              // Add event listener to the button
+              const refreshButton = notification.querySelector('button');
+              if (refreshButton) {
+                refreshButton.addEventListener('click', () => {
+                  window.location.reload();
+                });
+              }
+            }
+          })
+          .catch(error => {
+            console.error('Connectivity test failed:', error);
+          });
+        };
         
         // Check service worker status periodically
         setInterval(() => {
@@ -67,7 +164,8 @@
             // Set up a timeout for the response
             const timeout = setTimeout(() => {
               console.warn('Service worker ping timed out');
-            }, 1000);
+              handleNetworkError();
+            }, 2000); // Longer timeout for Netlify
             
             // Handle the response
             messageChannel.port1.onmessage = (event) => {
@@ -78,10 +176,15 @@
             };
             
             // Send ping to service worker
-            navigator.serviceWorker.controller.postMessage(
-              { type: 'PING' },
-              [messageChannel.port2]
-            );
+            try {
+              navigator.serviceWorker.controller.postMessage(
+                { type: 'PING' },
+                [messageChannel.port2]
+              );
+            } catch (error) {
+              console.error('Error pinging service worker:', error);
+              clearTimeout(timeout);
+            }
           }
         }, 60000); // Check every minute
       }

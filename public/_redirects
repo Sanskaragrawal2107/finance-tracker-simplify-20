@@ -1,1 +1,9 @@
+# Netlify redirects file
+# This ensures that all routes are redirected to index.html for client-side routing
+
+# Handle /public paths
+/lovable-uploads/* /lovable-uploads/:splat 200
+/service-worker.js /service-worker.js 200
+
+# Redirect all other routes to index.html
 /* /index.html 200 

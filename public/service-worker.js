@@ -1,9 +1,9 @@
 // Service worker for handling network connectivity issues
 
-// Cache name
-const CACHE_NAME = 'finance-tracker-v1';
+// Cache name - adding Netlify-specific identifier
+const CACHE_NAME = 'finance-tracker-v1-netlify';
 
-// Assets to cache for offline use
+// Assets to cache for offline use - include Netlify path variations
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -95,14 +95,37 @@ const shouldHandleFetch = (request) => {
 
   // Skip certain URLs
   const url = new URL(request.url);
+  
+  // Skip API calls and Netlify function calls
   if (url.pathname.includes('browser-sync') || 
       url.pathname.includes('realtime') ||
       url.pathname.includes('rest/v1') ||
-      url.pathname.includes('auth/v1')) {
+      url.pathname.includes('auth/v1') ||
+      url.pathname.includes('/.netlify/') ||
+      url.pathname.includes('/__api/') ||
+      url.pathname.includes('/__functions/')) {
     return false;
   }
   
   return true;
+};
+
+// Helper function to handle Netlify paths
+const normalizeNetlifyPath = (url) => {
+  // Extract path from the request URL
+  const path = new URL(url).pathname;
+  
+  // Handle index.html for SPA routes
+  if (path.endsWith('/')) {
+    return url.replace(/\/$/, '/index.html');
+  }
+  
+  // Handle missing extension (likely SPA routes)
+  if (!path.includes('.') && !path.endsWith('/')) {
+    return url + '/index.html';
+  }
+  
+  return url;
 };
 
 // Network first, falling back to cache strategy for GET requests
@@ -115,9 +138,20 @@ self.addEventListener('fetch', (event) => {
   // Add a custom header to track if the request is from a visible client
   const hasVisibleClients = visibleClients.size > 0;
   
+  // Normalize the URL for Netlify
+  const normalizedUrl = normalizeNetlifyPath(event.request.url);
+  const fetchRequest = normalizedUrl === event.request.url ? 
+    event.request : new Request(normalizedUrl, {
+      method: event.request.method,
+      headers: event.request.headers,
+      mode: event.request.mode,
+      credentials: event.request.credentials,
+      redirect: event.request.redirect
+    });
+  
   event.respondWith(
     // Try to get from network first
-    fetch(event.request)
+    fetch(fetchRequest)
       .then((response) => {
         // Cache successful responses
         if (response.status === 200) {
@@ -149,7 +183,7 @@ self.addEventListener('fetch', (event) => {
           
           // For navigation requests, return the offline page
           if (event.request.mode === 'navigate') {
-            return caches.match('/');
+            return caches.match('/index.html');
           }
           
           // Otherwise, return a simple response

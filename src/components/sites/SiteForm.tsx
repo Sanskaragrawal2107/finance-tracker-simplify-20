@@ -164,32 +164,21 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Improved form submission with timeout handling and session verification
   const onFormSubmit = async (values: SiteFormValues) => {
-    // Reset any previous errors
     setIsLoading(true);
-    
-    // Ensure we have the current supervisorId value
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
-    
     console.log('Creating site with supervisorId:', currentSupervisorId);
-    
-    // Create an AbortController to handle request timeout
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log('Site creation request timed out after 15 seconds');
       abortController.abort();
-    }, 15000); // 15 second timeout
-    
+    }, 15000);
     try {
-      // Check if session is still valid before submitting
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
       if (sessionError || !session) {
         toast.error('Your session has expired. Please refresh the page to log in again.');
         console.error('Session error:', sessionError);
         return;
       }
-      
-      // Convert values to uppercase
       const uppercaseValues = {
         ...values,
         name: values.name.toUpperCase(),
@@ -198,12 +187,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         location: values.location.toUpperCase(),
         supervisorId: currentSupervisorId
       };
-      
-      // Use the AbortController signal with the request
-      // Check if abortSignal is supported, otherwise fall back to regular request
       let response;
       try {
-        // First try with abort signal
         response = await supabase
           .from('sites')
           .insert([{
@@ -223,7 +208,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           .abortSignal(abortController.signal);
       } catch (signalError) {
         console.warn('AbortSignal not supported, falling back to standard request', signalError);
-        // Fall back to standard request without abort signal
         response = await supabase
           .from('sites')
           .insert([{
@@ -241,19 +225,12 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           }])
           .select();
       }
-      
       const { data, error } = response;
-      
-      // Handle errors
       if (error) {
         console.error('Error creating site:', error);
-        
-        // Handle auth errors specifically
         if (error.code === 'PGRST301' || error.code === '401' || error.message?.includes('JWT')) {
           toast.error('Your session has expired. Please refresh the page to log in again.');
-        }
-        // Handle constraint violations
-        else if (error.code === '23505') {
+        } else if (error.code === '23505') {
           if (error.message?.includes('name')) {
             toast.error(`A site with the name "${uppercaseValues.name}" already exists`);
           } else if (error.message?.includes('pos_no')) {
@@ -262,47 +239,29 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             toast.error('A site with these details already exists');
           }
         } else {
-          // Generic error
           toast.error('Failed to create site: ' + error.message);
         }
-        
         return;
       }
-      
-      // Success - close form and notify user
       if (data) {
         console.log('Site created successfully:', data);
-        
-        // Close form and reset
         onClose();
         form.reset();
-        
-        // Callback
         onSubmit(uppercaseValues);
-        
         toast.success('Site created successfully');
       }
     } catch (error: any) {
       console.error('Exception in site creation:', error);
-      
-      // Handle AbortError from timeout
       if (error.name === 'AbortError') {
         toast.error('Site creation timed out. Please check your connection and try again.');
-      } 
-      // Handle other fetch errors
-      else if (error.message?.includes('fetch')) {
+      } else if (error.message?.includes('fetch')) {
         toast.error('Network error. Please check your connection and try again.');
-      } 
-      // Handle session errors
-      else if (error.message?.includes('auth') || error.message?.includes('session')) {
+      } else if (error.message?.includes('auth') || error.message?.includes('session')) {
         toast.error('Your session has expired. Please refresh the page to log in again.');
-      } 
-      // Generic error
-      else {
+      } else {
         toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
       }
     } finally {
-      // Always turn off loading state and clean up
       setIsLoading(false);
       clearTimeout(timeoutId);
     }

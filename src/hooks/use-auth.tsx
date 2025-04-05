@@ -39,20 +39,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchUserProfile = async (userId: string) => {
     try {
       console.log("Fetching user profile for ID:", userId);
-      
-      // Add timeout protection
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5 second timeout
-      
       // Use type assertion to bypass TypeScript errors with Supabase
       const { data, error } = await (supabase
         .from('users') as any)
         .select('*')
         .eq('id', userId)
-        .single()
-        .abortSignal(controller.signal);
-      
-      clearTimeout(timeoutId);
+        .single();
 
       if (error) {
         console.error('Error fetching user profile:', error);
@@ -62,85 +54,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log("Found user profile:", data);
       return data as AuthUser;
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.warn('Profile fetch timed out for user ID:', userId);
-      } else {
-        console.error('Error in fetchUserProfile:', error);
-      }
+      console.error('Error in fetchUserProfile:', error);
       return null;
     }
   };
 
-  // Function to refresh the session token with improved timeout handling
+  // Function to refresh the session token
   const refreshSession = useCallback(async (): Promise<boolean> => {
-    const startTime = Date.now();
-    console.log('🔄 Starting auth session refresh');
-    
     try {
-      // Add timeout protection using AbortController
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.warn('⏱️ Auth session refresh timed out after 3s');
-        controller.abort();
-      }, 3000); // 3 second timeout
+      console.log('Manually refreshing auth session');
+      const { data, error } = await supabase.auth.refreshSession();
       
-      try {
-        const { data, error } = await supabase.auth.refreshSession();
-        const refreshDuration = Date.now() - startTime;
-        clearTimeout(timeoutId);
-        
-        if (error) {
-          console.error(`❌ Error refreshing session after ${refreshDuration}ms:`, error);
-          return false;
-        }
-
-        if (data?.session) {
-          // Fetch user profile with the refreshed token
-          if (data.session.user.id) {
-            console.log(`✅ Session refreshed in ${refreshDuration}ms, fetching profile...`);
-            
-            // Set a separate timeout for profile fetch
-            const profileController = new AbortController();
-            const profileTimeoutId = setTimeout(() => {
-              console.warn('⏱️ Profile fetch timed out after 2s');
-              profileController.abort();
-            }, 2000);
-            
-            try {
-              const profileStartTime = Date.now();
-              const profile = await fetchUserProfile(data.session.user.id);
-              const profileDuration = Date.now() - profileStartTime;
-              clearTimeout(profileTimeoutId);
-              
-              if (profile) {
-                setUser(profile);
-                console.log(`✅ Auth flow completed in ${Date.now() - startTime}ms (profile: ${profileDuration}ms)`);
-                return true;
-              }
-            } catch (profileError) {
-              clearTimeout(profileTimeoutId);
-              console.error(`❌ Error fetching profile after refresh (${Date.now() - startTime}ms total):`, profileError);
-              // Continue with existing user data
-              return false;
-            }
-          }
-        }
-        
-        return false;
-      } catch (abortError) {
-        clearTimeout(timeoutId);
-        if (abortError instanceof DOMException && abortError.name === 'AbortError') {
-          console.warn(`⏱️ Session refresh timed out after ${Date.now() - startTime}ms`);
-        } else {
-          console.error(`❌ Error during session refresh (${Date.now() - startTime}ms):`, abortError);
-        }
+      if (error) {
+        console.error('Error refreshing session:', error);
         return false;
       }
+
+      if (data?.session) {
+        // Fetch user profile with the refreshed token
+        if (data.session.user.id) {
+          const profile = await fetchUserProfile(data.session.user.id);
+          if (profile) {
+            setUser(profile);
+            console.log('Auth session refreshed successfully');
+            return true;
+          }
+        }
+      }
+      
+      return false;
     } catch (err) {
-      console.error(`❌ Error in refreshSession (${Date.now() - startTime}ms):`, err);
+      console.error('Error in refreshSession:', err);
       return false;
     }
-  }, [fetchUserProfile]);
+  }, []);
 
   // Check active session and fetch user data on mount
   useEffect(() => {

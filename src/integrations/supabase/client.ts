@@ -25,52 +25,9 @@ export const supabase = createClient<Database>(
   }
 );
 
-// Custom fetch function with retry mechanism for network errors and timeout debugging
+// Custom fetch function with retry mechanism for network errors
 function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  // Extract URL string for logging
-  const urlString = typeof input === 'string' 
-    ? input 
-    : input instanceof URL 
-      ? input.toString() 
-      : input.url;
-  
-  const startTime = Date.now();
-  
-  // Log the request starting - parse URL only for pathname
-  const urlPath = (() => {
-    try {
-      return new URL(urlString).pathname;
-    } catch (e) {
-      return urlString; // Fallback if URL parsing fails
-    }
-  })();
-  
-  console.log(`🔄 Supabase request started: ${urlPath}`);
-  
-  return withRetry(async () => {
-    const fetchPromise = fetch(input, init);
-    
-    // Create a timeout promise for debugging
-    const timeoutPromise = new Promise<Response>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Network request timeout after 10s: ${urlPath}`));
-      }, 10000); // 10 second timeout for debugging
-    });
-    
-    try {
-      // Race the fetch against the timeout
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
-      const duration = Date.now() - startTime;
-      
-      // Log successful responses
-      console.log(`✅ Supabase request completed in ${duration}ms: ${urlPath}`);
-      return response;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ Supabase request failed after ${duration}ms: ${urlPath}`, error);
-      throw error;
-    }
-  }, 3, 1000);
+  return withRetry(() => fetch(input, init), 3, 1000);
 }
 
 // Helper function to retry failed operations
@@ -106,27 +63,48 @@ async function withRetry<T>(
   throw lastError;
 }
 
-/**
- * Enhanced pingSupabase function with better timeout handling
- * This function is used to check if the Supabase API is reachable
- */
+// Function to ping Supabase and reconnect if needed
 export const pingSupabase = async (): Promise<boolean> => {
   try {
-    // Create an abort controller with a timeout
+    // Create abort controller with a short timeout to prevent hanging
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
     
-    // Simple query that should return quickly
-    const { error } = await supabase
+    const start = Date.now();
+    const { data, error } = await supabase
       .from('users')
       .select('count')
       .limit(1)
       .abortSignal(controller.signal);
     
+    // Clear the timeout since the request completed
     clearTimeout(timeoutId);
-    return !error;
+    
+    const duration = Date.now() - start;
+    console.log(`Supabase ping response time: ${duration}ms`);
+    
+    if (error) {
+      console.error('Supabase ping failed:', error);
+      return false;
+    }
+    
+    // Reconnect Supabase realtime channels
+    try {
+      supabase.removeAllChannels();
+      supabase.channel('system').subscribe();
+      console.log('Reconnected Supabase channels');
+    } catch (err) {
+      console.error('Error reconnecting Supabase channels:', err);
+    }
+    
+    return true;
   } catch (error) {
-    console.error('Ping Supabase error:', error);
+    // Special handling for AbortError (timeout)
+    if (error.name === 'AbortError') {
+      console.error('Supabase ping timed out');
+    } else {
+      console.error('Error pinging Supabase:', error);
+    }
     return false;
   }
 };

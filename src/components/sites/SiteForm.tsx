@@ -82,14 +82,35 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Handle visibility changes
   useEffect(() => {
+    // Flag to track if we're currently submitting the form
+    let isSubmitting = false;
+    
+    // Listen for form submission to prevent visibility handler interference
+    const submitButton = document.querySelector('form button[type="submit"]');
+    if (submitButton) {
+      submitButton.addEventListener('click', () => {
+        isSubmitting = true;
+        // Reset after a reasonable period
+        setTimeout(() => { isSubmitting = false }, 10000);
+      });
+    }
+    
     const handleVisibilityChange = () => {
+      // Don't do anything if we're in the process of submitting
+      if (isSubmitting) {
+        console.log('Ignoring visibility change during form submission');
+        return;
+      }
+      
       if (document.visibilityState === 'hidden') {
         lastHiddenTimeRef.current = Date.now();
       } else if (document.visibilityState === 'visible' && lastHiddenTimeRef.current) {
         const hiddenDuration = Date.now() - lastHiddenTimeRef.current;
         
-        if (hiddenDuration > 30000) {
-          console.log('Tab was hidden for more than 30 seconds, refreshing supervisors');
+        // Only refresh supervisors for very long absences (2+ minutes)
+        // to avoid unnecessary refreshes when quickly switching tabs
+        if (hiddenDuration > 120000) {
+          console.log('Tab was hidden for more than 2 minutes, refreshing supervisors');
           refreshSupervisors();
         }
         
@@ -101,6 +122,12 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // Clean up any event listeners on submit button
+      if (submitButton) {
+        submitButton.removeEventListener('click', () => {
+          isSubmitting = true;
+        });
+      }
     };
   }, []);
   

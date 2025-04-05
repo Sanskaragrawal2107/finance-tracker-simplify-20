@@ -207,7 +207,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Submitting site data to Supabase:', siteData);
       
-      // Insert the site
+      // Insert the site with a simpler approach - no timeoutPromise or race conditions
       const { data, error } = await supabase
         .from('sites')
         .insert([siteData])
@@ -249,11 +249,11 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         supervisorId: currentSupervisorId
       };
       
+      // First call onSubmit to notify parent component
+      onSubmit(uppercaseValues);
+      
       // Show success message
       toast.success('Site created successfully');
-      
-      // Call onSubmit to notify parent component
-      onSubmit(uppercaseValues);
       
       // Close the dialog and reset form
       onClose();

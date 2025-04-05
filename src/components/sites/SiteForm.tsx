@@ -189,6 +189,10 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         try {
           console.log(`Attempting to create site (attempt ${retryCount + 1})`);
           
+          // Create abort controller with a reasonable timeout (8 seconds)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          
           const { data, error } = await supabase
             .from('sites')
             .insert([{
@@ -204,7 +208,11 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
               funds: 0,
               total_funds: 0
             }])
-            .select();
+            .select()
+            .abortSignal(controller.signal);
+          
+          // Clear the timeout since the request completed
+          clearTimeout(timeoutId);
           
           if (error) {
             console.error(`Error creating site (attempt ${retryCount + 1}):`, error);
@@ -224,10 +232,21 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
               break;
             }
             
-            // Check if it's a connection issue
-            const connected = await pingSupabase();
-            if (!connected) {
-              toast.error('Connection issues detected. Please try again or refresh the page.');
+            // Check if it's a connection issue with a shorter timeout
+            try {
+              const controller = new AbortController();
+              const pingTimeoutId = setTimeout(() => controller.abort(), 2000);
+              
+              const connected = await pingSupabase();
+              clearTimeout(pingTimeoutId);
+              
+              if (!connected) {
+                toast.error('Connection issues detected. Please try again or refresh the page.');
+                break;
+              }
+            } catch (pingError) {
+              console.error('Error checking connection:', pingError);
+              toast.error('Network connection unstable. Please try again when your connection improves.');
               break;
             }
             
@@ -240,15 +259,34 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             siteData = data;
             break;
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Exception creating site (attempt ${retryCount + 1}):`, error);
+          
+          // Handle AbortError specially
+          if (error.name === 'AbortError') {
+            toast.error('Request timed out. Please try again when your connection is more stable.');
+            lastError = new Error('Request timed out');
+            break;
+          }
+          
           lastError = error;
           retryCount++;
           
-          // Check connection
-          const connected = await pingSupabase();
-          if (!connected) {
-            toast.error('Connection issues detected. Please try again or refresh the page.');
+          // Check connection with a short timeout
+          try {
+            const controller = new AbortController();
+            const pingTimeoutId = setTimeout(() => controller.abort(), 2000);
+            
+            const connected = await pingSupabase();
+            clearTimeout(pingTimeoutId);
+            
+            if (!connected) {
+              toast.error('Connection issues detected. Please try again or refresh the page.');
+              break;
+            }
+          } catch (pingError) {
+            console.error('Error checking connection:', pingError);
+            toast.error('Network connection unstable. Please try again.');
             break;
           }
           
@@ -260,26 +298,17 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
       
       if (!siteData) {
+        // Show a more specific error message based on the error type
+        if (lastError?.message?.includes('timeout') || lastError?.name === 'AbortError') {
+          throw new Error('Network timeout. Please try again when your connection is more stable.');
+        }
         throw lastError || new Error('Failed to create site after multiple attempts');
       }
       
       console.log('Site created successfully:', siteData);
       
-      // Verify creation
-      try {
-        const { data: verifyData } = await supabase
-          .from('sites')
-          .select('id')
-          .eq('id', siteData[0].id)
-          .single();
-          
-        if (!verifyData) {
-          console.warn('Site verification did not return data');
-        }
-      } catch (verifyError) {
-        console.error('Site verification error:', verifyError);
-        // Continue anyway as the site might still be created
-      }
+      // No need for verification - if we got here, the site was created
+      // Skip the verification step that could cause additional timeouts
       
       // Close the form first for better UX
       onClose();
@@ -291,9 +320,14 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       toast.success('Site created successfully');
     }, {
       onConnectionError: () => {
-        toast.error('Connection failed during site creation. Please try again.');
+        toast.error('Connection failed during site creation. Please try again when your network is stable.');
       },
-      maxRetries: 2
+      maxRetries: 1, // Reduce retries here since we have our own retry logic above
+      retryDelay: 1000
+    }).catch(error => {
+      // Handle any uncaught errors
+      console.error('Unhandled error in site creation:', error);
+      toast.error(error.message || 'Failed to create site. Please try again.');
     }).finally(() => {
       setIsLoading(false);
     });

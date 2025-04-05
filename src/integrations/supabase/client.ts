@@ -25,9 +25,52 @@ export const supabase = createClient<Database>(
   }
 );
 
-// Custom fetch function with retry mechanism for network errors
+// Custom fetch function with retry mechanism for network errors and timeout debugging
 function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return withRetry(() => fetch(input, init), 3, 1000);
+  // Extract URL string for logging
+  const urlString = typeof input === 'string' 
+    ? input 
+    : input instanceof URL 
+      ? input.toString() 
+      : input.url;
+  
+  const startTime = Date.now();
+  
+  // Log the request starting - parse URL only for pathname
+  const urlPath = (() => {
+    try {
+      return new URL(urlString).pathname;
+    } catch (e) {
+      return urlString; // Fallback if URL parsing fails
+    }
+  })();
+  
+  console.log(`🔄 Supabase request started: ${urlPath}`);
+  
+  return withRetry(async () => {
+    const fetchPromise = fetch(input, init);
+    
+    // Create a timeout promise for debugging
+    const timeoutPromise = new Promise<Response>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Network request timeout after 10s: ${urlPath}`));
+      }, 10000); // 10 second timeout for debugging
+    });
+    
+    try {
+      // Race the fetch against the timeout
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      const duration = Date.now() - startTime;
+      
+      // Log successful responses
+      console.log(`✅ Supabase request completed in ${duration}ms: ${urlPath}`);
+      return response;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ Supabase request failed after ${duration}ms: ${urlPath}`, error);
+      throw error;
+    }
+  }, 3, 1000);
 }
 
 // Helper function to retry failed operations

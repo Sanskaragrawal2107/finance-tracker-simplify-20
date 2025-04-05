@@ -13,16 +13,24 @@ export function useConnection() {
   const [isConnected, setIsConnected] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   
-  // Test connection to Supabase with timeout - simplified and more robust
+  // Test connection to Supabase with timeout - with enhanced debugging
   const checkConnection = useCallback(async (showToast = false): Promise<boolean> => {
-    if (isChecking) return isConnected;
+    if (isChecking) {
+      console.log('👀 Connection check already in progress, returning current state:', isConnected);
+      return isConnected;
+    }
     
+    const startTime = Date.now();
+    console.log('🔄 Starting connection check');
     setIsChecking(true);
     
     try {
       // Create an abort controller for timeout handling
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
+      const timeoutId = setTimeout(() => {
+        console.warn(`⏱️ Connection check timeout after ${CONNECTION_TIMEOUT}ms`);
+        controller.abort();
+      }, CONNECTION_TIMEOUT);
       
       // Perform a simple query to test the connection
       const { error } = await supabase
@@ -32,9 +40,16 @@ export function useConnection() {
         .abortSignal(controller.signal);
       
       clearTimeout(timeoutId);
+      const duration = Date.now() - startTime;
       
       const connected = !error;
       setIsConnected(connected);
+      
+      if (connected) {
+        console.log(`✅ Connection check successful in ${duration}ms`);
+      } else {
+        console.error(`❌ Connection check failed in ${duration}ms:`, error);
+      }
       
       // Only show toast for failures or if explicitly requested for success
       if ((showToast && !connected) || (showToast && connected && !isConnected)) {
@@ -47,13 +62,15 @@ export function useConnection() {
       
       return connected;
     } catch (error) {
+      const duration = Date.now() - startTime;
+      
       // Check if this was an abort error (timeout)
       const isTimeoutError = error instanceof DOMException && error.name === 'AbortError';
       
       if (isTimeoutError) {
-        console.warn('Connection check timed out');
+        console.warn(`⏱️ Connection check timed out after ${duration}ms`);
       } else {
-        console.error('Connection check error:', error);
+        console.error(`❌ Connection check error after ${duration}ms:`, error);
       }
       
       setIsConnected(false);

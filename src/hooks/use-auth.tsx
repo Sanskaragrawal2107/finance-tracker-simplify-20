@@ -73,41 +73,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Function to refresh the session token with improved timeout handling
   const refreshSession = useCallback(async (): Promise<boolean> => {
+    const startTime = Date.now();
+    console.log('🔄 Starting auth session refresh');
+    
     try {
-      console.log('Refreshing auth session');
-      
       // Add timeout protection using AbortController
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      const timeoutId = setTimeout(() => {
+        console.warn('⏱️ Auth session refresh timed out after 3s');
+        controller.abort();
+      }, 3000); // 3 second timeout
       
       try {
         const { data, error } = await supabase.auth.refreshSession();
+        const refreshDuration = Date.now() - startTime;
         clearTimeout(timeoutId);
         
         if (error) {
-          console.error('Error refreshing session:', error);
+          console.error(`❌ Error refreshing session after ${refreshDuration}ms:`, error);
           return false;
         }
 
         if (data?.session) {
           // Fetch user profile with the refreshed token
           if (data.session.user.id) {
+            console.log(`✅ Session refreshed in ${refreshDuration}ms, fetching profile...`);
+            
             // Set a separate timeout for profile fetch
             const profileController = new AbortController();
-            const profileTimeoutId = setTimeout(() => profileController.abort(), 2000);
+            const profileTimeoutId = setTimeout(() => {
+              console.warn('⏱️ Profile fetch timed out after 2s');
+              profileController.abort();
+            }, 2000);
             
             try {
+              const profileStartTime = Date.now();
               const profile = await fetchUserProfile(data.session.user.id);
+              const profileDuration = Date.now() - profileStartTime;
               clearTimeout(profileTimeoutId);
               
               if (profile) {
                 setUser(profile);
-                console.log('Auth session refreshed successfully');
+                console.log(`✅ Auth flow completed in ${Date.now() - startTime}ms (profile: ${profileDuration}ms)`);
                 return true;
               }
             } catch (profileError) {
               clearTimeout(profileTimeoutId);
-              console.error('Error fetching profile after refresh:', profileError);
+              console.error(`❌ Error fetching profile after refresh (${Date.now() - startTime}ms total):`, profileError);
               // Continue with existing user data
               return false;
             }
@@ -118,14 +130,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (abortError) {
         clearTimeout(timeoutId);
         if (abortError instanceof DOMException && abortError.name === 'AbortError') {
-          console.warn('Session refresh timed out');
+          console.warn(`⏱️ Session refresh timed out after ${Date.now() - startTime}ms`);
         } else {
-          console.error('Error during session refresh:', abortError);
+          console.error(`❌ Error during session refresh (${Date.now() - startTime}ms):`, abortError);
         }
         return false;
       }
     } catch (err) {
-      console.error('Error in refreshSession:', err);
+      console.error(`❌ Error in refreshSession (${Date.now() - startTime}ms):`, err);
       return false;
     }
   }, [fetchUserProfile]);

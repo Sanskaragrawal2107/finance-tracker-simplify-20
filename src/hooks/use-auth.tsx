@@ -264,9 +264,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const timeHidden = currentTime - lastVisibilityChangeRef.current;
         lastVisibilityChangeRef.current = currentTime;
         
+        // Skip refresh for very short tab switches (like F12 dev tools)
+        if (timeHidden < 1000) {
+          console.log('Tab was hidden for less than 1 second, skipping session check');
+          return;
+        }
+        
         // Only attempt session refresh if tab was hidden for a substantial time AND user exists
         if (timeHidden > 60000 && user) {
           console.log(`Tab was hidden for ${timeHidden}ms, checking connectivity first`);
+          
+          // Suppress network toasts during reconnection
+          import('@/utils/dataFetching').then(({ tabSwitchState }) => {
+            tabSwitchState.suppressNetworkToasts();
+          });
           
           // First check if we can connect to Supabase with a simple, fast query
           // before attempting a full session refresh
@@ -291,14 +302,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 console.warn('Session refresh failed, but connection is working');
                 // No need to show an error toast here since connection is working
               }
+              
+              // Re-enable network toasts
+              import('@/utils/dataFetching').then(({ tabSwitchState }) => {
+                tabSwitchState.allowNetworkToasts();
+              });
             } else {
               console.warn('Connection test failed after tab visibility change:', error);
-              // Show a gentle message that doesn't mention timeout specifically
-              toast.error('Connection issues detected. Try refreshing the page if you experience problems.');
+              
+              // Only show a toast if this is a substantial tab switch (> 5 seconds)
+              // to avoid flashing messages for brief tab changes
+              if (timeHidden > 5000) {
+                // Show a gentle message that doesn't mention timeout specifically
+                toast.error('Connection issues detected. Try refreshing the page if you experience problems.');
+              }
+              
+              // Re-enable network toasts after a delay
+              setTimeout(() => {
+                import('@/utils/dataFetching').then(({ tabSwitchState }) => {
+                  tabSwitchState.allowNetworkToasts();
+                });
+              }, 2000);
             }
           } catch (err) {
             console.error('Error during connection test after tab switch:', err);
             // No toast here to avoid being too noisy - we'll only show an error if actions fail
+            
+            // Re-enable network toasts
+            setTimeout(() => {
+              import('@/utils/dataFetching').then(({ tabSwitchState }) => {
+                tabSwitchState.allowNetworkToasts();
+              });
+            }, 1000);
           }
         }
       } else {

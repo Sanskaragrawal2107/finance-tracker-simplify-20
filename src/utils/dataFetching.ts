@@ -2,11 +2,42 @@ import { toast } from 'sonner';
 import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+// Track if we're currently reconnecting from a tab switch
+// This helps prevent showing error toasts during reconnection
+const reconnectionState = {
+  isReconnecting: false,
+  suppressNetworkErrors: false,
+  setReconnecting: (value: boolean) => {
+    reconnectionState.isReconnecting = value;
+    
+    // When starting reconnection, suppress network errors for a short period
+    if (value === true) {
+      reconnectionState.suppressNetworkErrors = true;
+      setTimeout(() => {
+        reconnectionState.suppressNetworkErrors = false;
+      }, 5000); // Suppress network error toasts for 5 seconds max
+    }
+  }
+};
+
+// Export for global access
+export const tabSwitchState = {
+  suppressNetworkToasts: () => {
+    reconnectionState.setReconnecting(true);
+  },
+  allowNetworkToasts: () => {
+    reconnectionState.setReconnecting(false);
+    reconnectionState.suppressNetworkErrors = false;
+  },
+  isReconnecting: () => reconnectionState.isReconnecting
+};
+
 interface FetchOptions {
   maxRetries?: number;
   retryDelay?: number;
   showToast?: boolean;
   context?: string;
+  bypassToastSuppression?: boolean;
 }
 
 /**
@@ -23,7 +54,8 @@ export async function fetchWithRetry<T>(
     maxRetries = 3,
     retryDelay = 1000,
     showToast = true,
-    context = 'data'
+    context = 'data',
+    bypassToastSuppression = false
   } = options;
   
   let lastError: any = null;
@@ -41,7 +73,7 @@ export async function fetchWithRetry<T>(
       if (error?.message?.includes('JWT') || 
           error?.message?.includes('token') || 
           error?.message?.includes('session')) {
-        if (showToast) {
+        if (showToast && !reconnectionState.suppressNetworkErrors) {
           toast.error('Your session has expired. Please refresh the page or log in again.');
         }
         console.error('Session error during data fetch:', error);
@@ -69,7 +101,10 @@ export async function fetchWithRetry<T>(
         console.warn(`Network error (retry ${retries + 1}/${maxRetries + 1}):`, error);
         
         // Only show toast on the first retry for network errors
-        if (retries === 0 && showToast) {
+        // AND only if we're not reconnecting from a tab switch
+        // or if we explicitly want to bypass toast suppression
+        if (retries === 0 && showToast && 
+            (bypassToastSuppression || !reconnectionState.suppressNetworkErrors)) {
           toast.error(`Connection issue while fetching ${context}. Retrying...`);
         }
       } else {
@@ -77,7 +112,9 @@ export async function fetchWithRetry<T>(
         console.error(`Fetch error (retry ${retries + 1}/${maxRetries + 1}):`, error);
         
         // Only show toast on the last retry for other errors
-        if (retries === maxRetries && showToast) {
+        // and only if we're not suppressing error messages
+        if (retries === maxRetries && showToast && 
+            (bypassToastSuppression || !reconnectionState.suppressNetworkErrors)) {
           toast.error(`Error fetching ${context}. Please try again later.`);
         }
       }

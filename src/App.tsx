@@ -20,6 +20,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { refreshSchemaCache, supabase } from "./integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { tabSwitchState } from '@/utils/dataFetching';
 
 // Create a singleton QueryClient instance to be shared across the application
 const queryClient = new QueryClient({
@@ -70,6 +71,9 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const forceRefresh = useCallback(async () => {
     console.log('Forcing application refresh...');
     
+    // Suppress network error toasts during reconnection process
+    tabSwitchState.suppressNetworkToasts();
+    
     // Reset all loading states to false
     Object.keys(loadingStatesRef.current).forEach(key => {
       loadingStatesRef.current[key] = false;
@@ -111,7 +115,11 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
         
         // Other connection errors - show toast and continue trying
-        toast.error('Connection error. Retrying...');
+        // But only if we've spent significant time trying to reconnect (>2 sec)
+        const reconnectStarted = Date.now() - (hiddenTimeRef.current || Date.now());
+        if (reconnectStarted > 2000) {
+          toast.error('Connection error. Retrying...');
+        }
       }
       
       // 4. Recreate Supabase channel
@@ -133,9 +141,26 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setLastRefreshTime(Date.now());
       
       console.log('Application refresh complete');
+      
+      // Allow network toasts again after a successful refresh
+      // We delay this slightly to avoid any race conditions
+      setTimeout(() => {
+        tabSwitchState.allowNetworkToasts();
+      }, 500);
     } catch (error) {
       console.error('Error during application refresh:', error);
-      toast.error('Error refreshing data. Please reload the page.');
+      
+      // Only show error toast if we've been trying for a while
+      // to avoid flashing error messages during quick tab switches
+      const reconnectAttemptDuration = Date.now() - (hiddenTimeRef.current || Date.now());
+      if (reconnectAttemptDuration > 2000) {
+        toast.error('Error refreshing data. Please reload the page.');
+      }
+      
+      // Re-enable network toasts after failed refresh attempt
+      setTimeout(() => {
+        tabSwitchState.allowNetworkToasts();
+      }, 500);
     }
   }, []);
 
@@ -178,6 +203,9 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   
   // Handle document visibility changes - with improved reconnection
   useEffect(() => {
+    const pendingToastsRef = useRef<Set<string>>(new Set());
+    const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         const currentTime = Date.now();
@@ -189,6 +217,18 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           loadingStatesRef.current[key] = false;
         });
         
+        // For very brief tab changes (< 1 second), don't trigger a refresh or reconnection
+        // This prevents unnecessary network errors for quick tab switches or F12 dev tools
+        if (timeHidden < 1000) {
+          console.log('Tab hidden for less than 1 second, skipping refresh');
+          hiddenTimeRef.current = null;
+          return;
+        }
+        
+        // Suppress network error toasts for a short period after tab change
+        // This prevents temporary connection error toasts from flashing during reconnection
+        const toastId = 'tab-switch-reconnecting';
+        
         // Always refresh data on tab focus for admin pages
         // Check the current path to see if we're on an admin page
         const currentPath = window.location.pathname;
@@ -199,10 +239,29 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (isAdminPage || timeHidden > 5000) {
           console.log(`${isAdminPage ? 'Admin page' : 'Page'} detected, refreshing data after tab switch`);
           
+          // Mark that we're in the process of reconnecting
+          pendingToastsRef.current.add(toastId);
+          
           // Add short delay before refresh to ensure UI is responsive first
+          // and to allow initial network connections to resume
           setTimeout(() => {
-            forceRefresh();
-          }, 100);
+            forceRefresh().finally(() => {
+              // After refresh completes (success or failure), remove from pending toasts
+              pendingToastsRef.current.delete(toastId);
+            });
+          }, 300);
+          
+          // Clear any network error toast after reconnection grace period
+          // This ensures users don't see a persistent error if reconnection was successful
+          if (reconnectionTimeoutRef.current) {
+            clearTimeout(reconnectionTimeoutRef.current);
+          }
+          
+          reconnectionTimeoutRef.current = setTimeout(() => {
+            // After 5 seconds, allow network error toasts again
+            pendingToastsRef.current.delete(toastId);
+            reconnectionTimeoutRef.current = null;
+          }, 5000);
         }
         
         // Show stale banner only for very long absences
@@ -218,10 +277,41 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     };
     
+    // Override toast.error to filter out network error toasts during reconnection
+    const originalErrorToast = toast.error;
+    toast.error = (...args: Parameters<typeof toast.error>) => {
+      const [message] = args;
+      
+      // Check if this is a network error and if we're suppressing toasts
+      if (
+        typeof message === 'string' && 
+        pendingToastsRef.current.size > 0 &&
+        (
+          message.includes('network') || 
+          message.includes('connection') || 
+          message.includes('timeout') ||
+          message.includes('timed out')
+        )
+      ) {
+        console.log('Suppressing network error toast during reconnection:', message);
+        // Return a fake toast ID
+        return 'suppressed-toast';
+      }
+      
+      // Otherwise, show the toast normally
+      return originalErrorToast(...args);
+    };
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // Restore original toast.error function
+      toast.error = originalErrorToast;
+      
+      if (reconnectionTimeoutRef.current) {
+        clearTimeout(reconnectionTimeoutRef.current);
+      }
     };
   }, [forceRefresh]);
 

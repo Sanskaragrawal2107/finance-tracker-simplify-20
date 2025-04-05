@@ -48,7 +48,7 @@ const AdminDashboard: React.FC = () => {
       toast.error('Network request timeout. Please try again.');
       setSupervisorsList([]);
       setSupervisorStats({});
-    }, 10000); // 10 second timeout
+    }, 10000);
     
     try {
       // Step 1: Get all supervisors
@@ -68,6 +68,7 @@ const AdminDashboard: React.FC = () => {
       if (!supervisorsData || supervisorsData.length === 0) {
         setSupervisorsList([]);
         setSupervisorStats({});
+        setLoadingSupervisors(false);
         return;
       }
       
@@ -83,6 +84,7 @@ const AdminDashboard: React.FC = () => {
         toast.error('Error loading sites data. Please refresh the page.');
         // Don't reset supervisorsList but set empty stats
         setSupervisorStats({});
+        setLoadingSupervisors(false);
         return;
       }
       
@@ -111,7 +113,10 @@ const AdminDashboard: React.FC = () => {
       setSupervisorStats({});
     } finally {
       clearTimeout(fetchTimeout);
-      setLoadingSupervisors(false);
+      // Add a small delay before turning off loading to prevent flickering
+      setTimeout(() => {
+        setLoadingSupervisors(false);
+      }, 300);
     }
   };
   
@@ -311,7 +316,7 @@ const AdminDashboard: React.FC = () => {
               </div>
             )}
             
-            {(!selectedSupervisorId || loadingSupervisors) && (
+            {(!selectedSupervisorId) && (
               <div className="text-center py-6">
                 <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                 <h3 className="text-lg font-medium mb-2">
@@ -320,7 +325,9 @@ const AdminDashboard: React.FC = () => {
                 <p className="text-muted-foreground max-w-md mx-auto">
                   {loadingSupervisors 
                     ? 'Please wait while we fetch the supervisor data.'
-                    : 'Choose a supervisor from the dropdown to view their sites and performance statistics.'}
+                    : supervisorsList.length > 0 
+                      ? 'Choose a supervisor from the dropdown to view their sites and performance statistics.'
+                      : 'No supervisors found. Please add a supervisor first.'}
                 </p>
               </div>
             )}

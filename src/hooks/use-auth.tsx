@@ -347,17 +347,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signOut();
+      
+      // We don't have direct access to the event listener function reference
+      // so we'll use a different approach to ensure reliable logout
+      
+      // Use a timeout to prevent hanging logout
+      const logoutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Logout timed out')), 5000);
+      });
+      
+      const { error } = await Promise.race([logoutPromise, timeoutPromise]) as any;
       
       if (error) {
         throw error;
       }
       
+      // Clear user state and navigate regardless of any errors
       setUser(null);
       navigate('/');
     } catch (error: any) {
       console.error('Logout error:', error);
-      toast.error(error.message || 'An error occurred during logout');
+      
+      // Clear user data anyway to ensure logout even if API call fails
+      setUser(null);
+      
+      // Show error toast but still navigate to login
+      toast.error('Logout encountered an error, but you have been signed out locally');
+      navigate('/');
     } finally {
       setLoading(false);
     }

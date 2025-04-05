@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 // Maximum time (in ms) to wait for a connection test
-const CONNECTION_TIMEOUT = 5000;
+const CONNECTION_TIMEOUT = 3000;
 
 /**
  * Hook to manage Supabase connection state and provide connection checking utilities
@@ -12,33 +12,31 @@ export function useConnection() {
   const [isConnected, setIsConnected] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   
-  // Test connection to Supabase with timeout
+  // Test connection to Supabase with timeout - simplified
   const checkConnection = useCallback(async (showToast = false): Promise<boolean> => {
     if (isChecking) return isConnected;
     
     setIsChecking(true);
     
     try {
-      // Create a timeout promise
-      const timeoutPromise = new Promise<{data: null, error: Error}>((_, reject) => 
-        setTimeout(() => reject(new Error('Connection timeout')), CONNECTION_TIMEOUT)
-      );
+      // Simpler approach with just a timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
       
       // Perform a simple query to test the connection
-      const connectionPromise = supabase.from('users').select('count').limit(1);
+      const { error } = await supabase
+        .from('users')
+        .select('count')
+        .limit(1)
+        .abortSignal(controller.signal);
       
-      // Race the connection promise against the timeout
-      const { error } = await Promise.race([connectionPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
       
       const connected = !error;
       setIsConnected(connected);
       
-      if (showToast) {
-        if (connected) {
-          toast.success('Connection restored');
-        } else {
-          toast.error('Connection failed. Please refresh the page.');
-        }
+      if (showToast && !connected) {
+        toast.error('Connection failed. Please refresh the page.');
       }
       
       return connected;
@@ -56,7 +54,7 @@ export function useConnection() {
     }
   }, [isChecking, isConnected]);
   
-  // Utility to retry a function with connection checking
+  // Utility to retry a function with connection checking - simplified
   const withConnectionCheck = useCallback(<T,>(
     fn: () => Promise<T>,
     options: {
@@ -75,22 +73,25 @@ export function useConnection() {
     
     const tryOperation = async (): Promise<T> => {
       try {
+        // Just try the operation directly first
         return await fn();
       } catch (error) {
-        console.error('Operation failed, checking connection:', error);
+        console.error('Operation failed:', error);
         attempts++;
         
-        // Check if it's a connection issue
-        const connected = await checkConnection(attempts === maxRetries);
-        
-        if (!connected) {
-          if (onConnectionError) onConnectionError();
+        // Only check connection on retry
+        if (attempts <= maxRetries) {
+          console.log(`Retrying operation (${attempts}/${maxRetries})...`);
           
-          if (attempts < maxRetries) {
-            toast.info(`Retrying operation... (${attempts}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            return tryOperation();
-          }
+          // Simple delay without toast to avoid flickering
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return tryOperation();
+        }
+        
+        // If all retries failed, check if it's a connection issue
+        const connected = await checkConnection(true);
+        if (!connected && onConnectionError) {
+          onConnectionError();
         }
         
         throw error;
@@ -99,8 +100,6 @@ export function useConnection() {
     
     return tryOperation();
   }, [checkConnection]);
-  
-  // We've removed the automatic visibility change effect that was causing flickering
   
   return {
     isConnected,

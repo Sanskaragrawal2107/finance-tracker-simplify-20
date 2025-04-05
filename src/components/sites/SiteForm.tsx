@@ -82,22 +82,29 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Handle visibility changes
   useEffect(() => {
-    // Flag to track if we're currently submitting the form
-    let isSubmitting = false;
+    // Use a proper ref for the submission state to avoid closure issues
+    const isSubmittingRef = useRef(false);
+    
+    // Better click handler with proper reference
+    const handleSubmitClick = () => {
+      console.log('Submit button clicked, disabling visibility changes');
+      isSubmittingRef.current = true;
+      // Reset after a reasonable period
+      setTimeout(() => { 
+        isSubmittingRef.current = false;
+        console.log('Re-enabling visibility changes');
+      }, 15000);
+    };
     
     // Listen for form submission to prevent visibility handler interference
     const submitButton = document.querySelector('form button[type="submit"]');
     if (submitButton) {
-      submitButton.addEventListener('click', () => {
-        isSubmitting = true;
-        // Reset after a reasonable period
-        setTimeout(() => { isSubmitting = false }, 10000);
-      });
+      submitButton.addEventListener('click', handleSubmitClick);
     }
     
     const handleVisibilityChange = () => {
       // Don't do anything if we're in the process of submitting
-      if (isSubmitting) {
+      if (isSubmittingRef.current) {
         console.log('Ignoring visibility change during form submission');
         return;
       }
@@ -107,10 +114,9 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       } else if (document.visibilityState === 'visible' && lastHiddenTimeRef.current) {
         const hiddenDuration = Date.now() - lastHiddenTimeRef.current;
         
-        // Only refresh supervisors for very long absences (2+ minutes)
-        // to avoid unnecessary refreshes when quickly switching tabs
-        if (hiddenDuration > 120000) {
-          console.log('Tab was hidden for more than 2 minutes, refreshing supervisors');
+        // Longer duration to avoid any unnecessary refreshes (5 minutes)
+        if (hiddenDuration > 300000) {
+          console.log('Tab was hidden for more than 5 minutes, refreshing supervisors');
           refreshSupervisors();
         }
         
@@ -122,11 +128,9 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      // Clean up any event listeners on submit button
+      // Clean up with the correct reference
       if (submitButton) {
-        submitButton.removeEventListener('click', () => {
-          isSubmitting = true;
-        });
+        submitButton.removeEventListener('click', handleSubmitClick);
       }
     };
   }, []);
@@ -196,168 +200,149 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const onFormSubmit = async (values: SiteFormValues) => {
     setIsLoading(true);
     
-    // Convert all string values to uppercase for consistency
-    const uppercaseValues = {
-      ...values,
-      name: values.name.toUpperCase(),
-      jobName: values.jobName.toUpperCase(),
-      posNo: values.posNo.toUpperCase(),
-      location: values.location.toUpperCase(),
-    };
-    
-    // Use withConnectionCheck to handle potential connection issues
-    await withConnectionCheck(async () => {
-      let siteData = null;
-      let lastError: any = null;
-      let retryCount = 0;
+    try {
+      // Convert all string values to uppercase for consistency
+      const uppercaseValues = {
+        ...values,
+        name: values.name.toUpperCase(),
+        jobName: values.jobName.toUpperCase(),
+        posNo: values.posNo.toUpperCase(),
+        location: values.location.toUpperCase(),
+      };
       
-      // Implementation with retry logic
-      while (retryCount < 3) {
-        try {
-          console.log(`Attempting to create site (attempt ${retryCount + 1})`);
-          
-          // Create abort controller with a reasonable timeout (8 seconds)
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-          
-          const { data, error } = await supabase
-            .from('sites')
-            .insert([{
-              name: uppercaseValues.name,
-              job_name: uppercaseValues.jobName,
-              pos_no: uppercaseValues.posNo,
-              location: uppercaseValues.location,
-              start_date: uppercaseValues.startDate.toISOString(),
-              completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
-              supervisor_id: uppercaseValues.supervisorId,
-              created_by: user?.id || null,
-              is_completed: false,
-              funds: 0,
-              total_funds: 0
-            }])
-            .select()
-            .abortSignal(controller.signal);
-          
-          // Clear the timeout since the request completed
-          clearTimeout(timeoutId);
-          
-          if (error) {
-            console.error(`Error creating site (attempt ${retryCount + 1}):`, error);
+      // Use withConnectionCheck to handle potential connection issues
+      await withConnectionCheck(async () => {
+        let siteData = null;
+        let lastError: any = null;
+        let retryCount = 0;
+        
+        // Implementation with retry logic
+        while (retryCount < 3) {
+          try {
+            console.log(`Attempting to create site (attempt ${retryCount + 1})`);
+            
+            // Create abort controller with a reasonable timeout (12 seconds)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+              console.log('Site creation request timed out, aborting');
+              controller.abort();
+            }, 12000);
+            
+            try {
+              const { data, error } = await supabase
+                .from('sites')
+                .insert([{
+                  name: uppercaseValues.name,
+                  job_name: uppercaseValues.jobName,
+                  pos_no: uppercaseValues.posNo,
+                  location: uppercaseValues.location,
+                  start_date: uppercaseValues.startDate.toISOString(),
+                  completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
+                  supervisor_id: uppercaseValues.supervisorId,
+                  created_by: user?.id || null,
+                  is_completed: false,
+                  funds: 0,
+                  total_funds: 0
+                }])
+                .select()
+                .abortSignal(controller.signal);
+              
+              // Clear the timeout since the request completed
+              clearTimeout(timeoutId);
+              
+              if (error) {
+                console.error(`Error creating site (attempt ${retryCount + 1}):`, error);
+                lastError = error;
+                retryCount++;
+                
+                // Provide more user-friendly error messages for specific error cases
+                if (error.code === '23505') {
+                  if (error.message.includes('name')) {
+                    toast.error(`A site with the name "${uppercaseValues.name}" already exists`);
+                  } else if (error.message.includes('pos_no')) {
+                    toast.error(`A site with the P.O. number "${uppercaseValues.posNo}" already exists`);
+                  } else {
+                    toast.error('A site with these details already exists');
+                  }
+                  // Don't retry uniqueness constraint violations
+                  break;
+                }
+                
+                // Simple connection check without additional timeouts
+                const connected = await pingSupabase();
+                if (!connected) {
+                  toast.error('Connection issues detected. Please try again.');
+                  break;
+                }
+                
+                // Add delay before retry
+                if (retryCount < 3) {
+                  toast.info(`Retrying... (${retryCount}/3)`);
+                  await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                }
+              } else {
+                siteData = data;
+                break;
+              }
+            } catch (innerError: any) {
+              clearTimeout(timeoutId);
+              throw innerError; // Rethrow to be caught by the outer catch
+            }
+          } catch (error: any) {
+            console.error(`Exception creating site (attempt ${retryCount + 1}):`, error);
+            
+            // Handle AbortError specially
+            if (error.name === 'AbortError') {
+              toast.error('Request timed out. Please check your network and try again.');
+              lastError = new Error('Request timed out');
+              break;
+            }
+            
             lastError = error;
             retryCount++;
             
-            // Provide more user-friendly error messages for specific error cases
-            if (error.code === '23505') {
-              if (error.message.includes('name')) {
-                toast.error(`A site with the name "${uppercaseValues.name}" already exists`);
-              } else if (error.message.includes('pos_no')) {
-                toast.error(`A site with the P.O. number "${uppercaseValues.posNo}" already exists`);
-              } else {
-                toast.error('A site with these details already exists');
-              }
-              // Don't retry uniqueness constraint violations
+            // Simple connection check
+            const connected = await pingSupabase();
+            if (!connected) {
+              toast.error('Connection issues detected. Please try again.');
               break;
             }
             
-            // Check if it's a connection issue with a shorter timeout
-            try {
-              const controller = new AbortController();
-              const pingTimeoutId = setTimeout(() => controller.abort(), 2000);
-              
-              const connected = await pingSupabase();
-              clearTimeout(pingTimeoutId);
-              
-              if (!connected) {
-                toast.error('Connection issues detected. Please try again or refresh the page.');
-                break;
-              }
-            } catch (pingError) {
-              console.error('Error checking connection:', pingError);
-              toast.error('Network connection unstable. Please try again when your connection improves.');
-              break;
-            }
-            
-            // Add delay before retry
             if (retryCount < 3) {
-              toast.info(`Retrying site creation... (${retryCount}/3)`);
+              toast.info(`Retrying... (${retryCount}/3)`);
               await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
             }
-          } else {
-            siteData = data;
-            break;
-          }
-        } catch (error: any) {
-          console.error(`Exception creating site (attempt ${retryCount + 1}):`, error);
-          
-          // Handle AbortError specially
-          if (error.name === 'AbortError') {
-            toast.error('Request timed out. Please try again when your connection is more stable.');
-            lastError = new Error('Request timed out');
-            break;
-          }
-          
-          lastError = error;
-          retryCount++;
-          
-          // Check connection with a short timeout
-          try {
-            const controller = new AbortController();
-            const pingTimeoutId = setTimeout(() => controller.abort(), 2000);
-            
-            const connected = await pingSupabase();
-            clearTimeout(pingTimeoutId);
-            
-            if (!connected) {
-              toast.error('Connection issues detected. Please try again or refresh the page.');
-              break;
-            }
-          } catch (pingError) {
-            console.error('Error checking connection:', pingError);
-            toast.error('Network connection unstable. Please try again.');
-            break;
-          }
-          
-          if (retryCount < 3) {
-            toast.info(`Retrying site creation... (${retryCount}/3)`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
           }
         }
-      }
-      
-      if (!siteData) {
-        // Show a more specific error message based on the error type
-        if (lastError?.message?.includes('timeout') || lastError?.name === 'AbortError') {
-          throw new Error('Network timeout. Please try again when your connection is more stable.');
+        
+        if (!siteData) {
+          throw lastError || new Error('Failed to create site');
         }
-        throw lastError || new Error('Failed to create site after multiple attempts');
-      }
-      
-      console.log('Site created successfully:', siteData);
-      
-      // No need for verification - if we got here, the site was created
-      // Skip the verification step that could cause additional timeouts
-      
-      // Close the form first for better UX
-      onClose();
-      form.reset();
-      
-      // Then trigger onSubmit callback
-      onSubmit(uppercaseValues);
-      
-      toast.success('Site created successfully');
-    }, {
-      onConnectionError: () => {
-        toast.error('Connection failed during site creation. Please try again when your network is stable.');
-      },
-      maxRetries: 1, // Reduce retries here since we have our own retry logic above
-      retryDelay: 1000
-    }).catch(error => {
+        
+        console.log('Site created successfully:', siteData);
+        
+        // Close the form first for better UX
+        onClose();
+        form.reset();
+        
+        // Then trigger onSubmit callback
+        onSubmit(uppercaseValues);
+        
+        toast.success('Site created successfully');
+      }, {
+        onConnectionError: () => {
+          toast.error('Connection failed. Please check your network and try again.');
+        },
+        maxRetries: 1
+      });
+    } catch (error: any) {
       // Handle any uncaught errors
       console.error('Unhandled error in site creation:', error);
       toast.error(error.message || 'Failed to create site. Please try again.');
-    }).finally(() => {
+    } finally {
+      // Always ensure loading state is reset
       setIsLoading(false);
-    });
+    }
   };
 
   return (

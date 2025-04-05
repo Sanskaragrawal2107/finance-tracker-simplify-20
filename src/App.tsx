@@ -21,6 +21,7 @@ import { refreshSchemaCache, supabase } from "./integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
+// Create a singleton QueryClient instance to be shared across the application
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -30,6 +31,10 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Set the QueryClient as a global variable for access outside of React components
+// @ts-ignore
+window.__REACT_QUERY_GLOBALINSTANCE = queryClient;
 
 // Create a context for visibility change handling
 export const VisibilityContext = createContext<{
@@ -53,6 +58,8 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Clear all loading states and force a refresh only when explicitly called
   const forceRefresh = useCallback(async () => {
+    console.log('Forcing application refresh...');
+    
     // Reset all loading states to false
     Object.keys(loadingStatesRef.current).forEach(key => {
       loadingStatesRef.current[key] = false;
@@ -65,26 +72,50 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setAppStale(false);
     
     // Reconnect Supabase channels
-    supabase.removeAllChannels();
+    try {
+      console.log('Reconnecting Supabase channels and connections...');
+      // First remove any existing channels
+      supabase.removeAllChannels();
+      
+      // Execute a ping query to establish a new connection
+      await supabase.from('users').select('count').limit(1).single();
+      
+      // Create a new channel
+      const channel = supabase.channel('system');
+      channel.subscribe((status) => {
+        console.log(`Supabase channel status: ${status}`);
+      });
+      
+      console.log('Supabase connections restored');
+    } catch (error) {
+      console.error('Error reconnecting Supabase:', error);
+    }
     
     try {
-      // Try to refresh the auth session too (this will be properly initialized once AuthProvider mounts)
+      // Try to refresh the auth session too
       if (authContextRef.current && authContextRef.current.refreshSession) {
         console.log('Refreshing auth session through forceRefresh');
         await authContextRef.current.refreshSession();
       }
-      
-      setTimeout(() => {
-        try {
-          supabase.channel('system').subscribe();
-          console.log('Reconnected Supabase channels');
-        } catch (error) {
-          console.error('Error reconnecting Supabase channels:', error);
-        }
-      }, 100);
     } catch (error) {
-      console.error('Error in forceRefresh:', error);
+      console.error('Error refreshing session in forceRefresh:', error);
     }
+    
+    // Find the QueryClient instance - this addition will help refresh data
+    try {
+      // This will access the window object to find React Query's client
+      // @ts-ignore
+      const queryClient = window.__REACT_QUERY_GLOBALINSTANCE;
+      if (queryClient) {
+        console.log('Found React Query client, invalidating all queries...');
+        queryClient.invalidateQueries();
+        queryClient.refetchQueries();
+      }
+    } catch (err) {
+      console.error('Error refreshing React Query cache:', err);
+    }
+    
+    console.log('Application refresh complete');
   }, []);
 
   // Register a loading state from a component
@@ -122,20 +153,26 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const timeHidden = hiddenTimeRef.current ? currentTime - hiddenTimeRef.current : 0;
         console.log(`Tab became visible after ${timeHidden}ms`);
         
-        // Only clear loading states without refreshing data
+        // Clear any loading states to prevent UI from being stuck
         Object.keys(loadingStatesRef.current).forEach(key => {
           loadingStatesRef.current[key] = false;
         });
         
-        // If the tab was hidden for more than 30 seconds, mark the app as stale
-        // This will display a banner prompting the user to refresh
-        if (timeHidden > 30000) {
-          console.log('App marked as stale after long inactivity');
-          setAppStale(true);
-          toast.info('Tab was inactive for a while. Click buttons again or refresh the page if functionality is limited.');
+        // Force data refresh after ANY tab switch to ensure data is always fresh
+        // This resolves issues where admin page data isn't loading after tab switches
+        if (timeHidden > 1000) { // Only do this for actual tab switches (more than 1 second)
+          console.log('Forcing data refresh after tab switch');
           
-          // Try to reconnect Supabase
+          // Try to reconnect Supabase and refresh data
           try {
+            // Execute a simple query to wake up the connection
+            await supabase.from('users').select('count').limit(1).single();
+            
+            // Immediately force a refresh to reload all data
+            setTimeout(() => {
+              forceRefresh();
+            }, 100);
+            
             // Try to refresh the auth session
             if (authContextRef.current && authContextRef.current.refreshSession) {
               console.log('Refreshing auth session after tab visibility change');
@@ -146,15 +183,22 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 console.warn('Auth session refresh failed');
               }
             }
-            
-            supabase.removeAllChannels();
-            setTimeout(() => {
-              supabase.channel('system').subscribe();
-              console.log('Attempted to reconnect Supabase after inactivity');
-            }, 100);
           } catch (err) {
-            console.error('Error reconnecting after inactivity:', err);
+            console.error('Error reconnecting after tab switch:', err);
+            // Still try to force refresh even if the initial reconnection failed
+            setTimeout(() => {
+              forceRefresh();
+            }, 500);
           }
+        }
+        
+        // Show stale data banner only for very long absences (more than 30 seconds)
+        if (timeHidden > 30000) {
+          console.log('App marked as stale after long inactivity');
+          setAppStale(true);
+          toast.info('Tab was inactive for a while. Click buttons again or refresh the page if functionality is limited.');
+          
+          // Additional reconnection logic for long absences already exists below
         }
         
         hiddenTimeRef.current = null;
@@ -230,8 +274,9 @@ const AppContent = () => {
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const { forceRefresh } = useContext(VisibilityContext);
   const queryClient = useQueryClient();
+  const reconnectAttemptRef = useRef(0);
 
-  // Monitor connection to Supabase
+  // Monitor connection to Supabase with enhanced error recovery
   useEffect(() => {
     let pingInterval: NodeJS.Timeout;
     let mounted = true;
@@ -247,25 +292,54 @@ const AppContent = () => {
             console.warn('Supabase connection lost:', error.message);
             setConnectionStatus('offline');
             toast.error('Connection to server lost. Retrying...');
+            
+            // Schedule more frequent reconnection attempts
+            reconnectAttemptRef.current = 0;
+            scheduleReconnect();
           }
         } else {
           if (mounted && connectionStatus !== 'online') {
             if (connectionStatus === 'offline') {
               toast.success('Connection to server restored');
               
-              // Refresh data when connection is restored
-              queryClient.invalidateQueries();
+              // Force a complete data refresh when connection is restored
+              forceRefresh();
             }
             setConnectionStatus('online');
           }
+          // Reset reconnection attempts counter on successful connection
+          reconnectAttemptRef.current = 0;
         }
       } catch (error) {
         if (mounted && connectionStatus !== 'offline') {
           console.error('Error checking connection:', error);
           setConnectionStatus('offline');
           toast.error('Connection to server lost. Retrying...');
+          
+          // Schedule reconnection attempts
+          reconnectAttemptRef.current = 0;
+          scheduleReconnect();
         }
       }
+    };
+    
+    // Schedule reconnection with exponential backoff
+    const scheduleReconnect = () => {
+      // Increase attempts counter
+      reconnectAttemptRef.current += 1;
+      
+      // Calculate delay with exponential backoff (1s, 2s, 4s, 8s, max 30s)
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 30000);
+      
+      console.log(`Scheduling reconnection attempt ${reconnectAttemptRef.current} in ${delay}ms`);
+      
+      // Schedule reconnection attempt
+      setTimeout(() => {
+        if (mounted && connectionStatus === 'offline') {
+          console.log(`Attempting reconnection #${reconnectAttemptRef.current}...`);
+          checkConnection();
+        }
+      }, delay);
     };
 
     // Initial check
@@ -289,7 +363,7 @@ const AppContent = () => {
       clearInterval(pingInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [connectionStatus, queryClient]);
+  }, [connectionStatus, forceRefresh, queryClient]);
 
   return (
     <>

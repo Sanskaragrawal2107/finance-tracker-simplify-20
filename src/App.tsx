@@ -36,9 +36,11 @@ const queryClient = new QueryClient({
 export const VisibilityContext = createContext<{
   forceRefresh: () => void;
   registerLoadingState: (id: string, isLoading: boolean) => void;
+  registerAuthContext: (authContext: any) => void;
 }>({
   forceRefresh: () => {},
-  registerLoadingState: () => {}
+  registerLoadingState: () => {},
+  registerAuthContext: () => {}
 });
 
 // Visibility Provider component to make visibility state available app-wide
@@ -48,9 +50,10 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [appStale, setAppStale] = useState(false);
   const hiddenTimeRef = useRef<number | null>(null);
+  const authContextRef = useRef<any>(null);
 
   // Clear all loading states and force a refresh only when explicitly called
-  const forceRefresh = useCallback(() => {
+  const forceRefresh = useCallback(async () => {
     // Reset all loading states to false
     Object.keys(loadingStatesRef.current).forEach(key => {
       loadingStatesRef.current[key] = false;
@@ -64,14 +67,25 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     
     // Reconnect Supabase channels
     supabase.removeAllChannels();
-    setTimeout(() => {
-      try {
-        supabase.channel('system').subscribe();
-        console.log('Reconnected Supabase channels');
-      } catch (error) {
-        console.error('Error reconnecting Supabase channels:', error);
+    
+    try {
+      // Try to refresh the auth session too (this will be properly initialized once AuthProvider mounts)
+      if (authContextRef.current && authContextRef.current.refreshSession) {
+        console.log('Refreshing auth session through forceRefresh');
+        await authContextRef.current.refreshSession();
       }
-    }, 100);
+      
+      setTimeout(() => {
+        try {
+          supabase.channel('system').subscribe();
+          console.log('Reconnected Supabase channels');
+        } catch (error) {
+          console.error('Error reconnecting Supabase channels:', error);
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Error in forceRefresh:', error);
+    }
   }, []);
 
   // Register a loading state from a component
@@ -95,9 +109,15 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, []);
 
+  // Register auth context for refreshing
+  const registerAuthContext = useCallback((authContext: any) => {
+    console.log('Auth context registered for visibility refresh');
+    authContextRef.current = authContext;
+  }, []);
+
   // Handle document visibility changes - with improved reconnection
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         const currentTime = Date.now();
         const timeHidden = hiddenTimeRef.current ? currentTime - hiddenTimeRef.current : 0;
@@ -117,6 +137,17 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           
           // Try to reconnect Supabase
           try {
+            // Try to refresh the auth session
+            if (authContextRef.current && authContextRef.current.refreshSession) {
+              console.log('Refreshing auth session after tab visibility change');
+              const refreshed = await authContextRef.current.refreshSession();
+              if (refreshed) {
+                console.log('Auth session refreshed successfully');
+              } else {
+                console.warn('Auth session refresh failed');
+              }
+            }
+            
             supabase.removeAllChannels();
             setTimeout(() => {
               supabase.channel('system').subscribe();
@@ -147,7 +178,11 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   return (
-    <VisibilityContext.Provider value={{ forceRefresh, registerLoadingState }}>
+    <VisibilityContext.Provider value={{ 
+      forceRefresh, 
+      registerLoadingState,
+      registerAuthContext
+    }}>
       {appStale && (
         <div className="fixed top-16 left-0 w-full bg-yellow-100 text-yellow-800 p-2 text-center z-50 shadow-md">
           <div className="flex items-center justify-center gap-2">

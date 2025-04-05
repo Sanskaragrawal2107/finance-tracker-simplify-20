@@ -1,8 +1,9 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { UserRole, AuthUser } from '@/lib/types';
+import { VisibilityContext } from '@/App';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -11,6 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   signUp: (email: string, password: string, name: string, role?: UserRole) => Promise<void>;
+  refreshSession: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,6 +22,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const lastVisibilityChangeRef = useRef(Date.now());
+  const { registerAuthContext } = useContext(VisibilityContext);
+
+  // Register this auth context with the visibility system when it's available
+  useEffect(() => {
+    // This helps the visibility system refresh auth when needed
+    const authInterface = {
+      refreshSession,
+      user,
+    };
+    
+    registerAuthContext(authInterface);
+  }, [registerAuthContext, user]);
 
   const fetchUserProfile = async (userId: string) => {
     try {
@@ -43,6 +58,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
   };
+
+  // Function to refresh the session token
+  const refreshSession = useCallback(async (): Promise<boolean> => {
+    try {
+      console.log('Manually refreshing auth session');
+      const { data, error } = await supabase.auth.refreshSession();
+      
+      if (error) {
+        console.error('Error refreshing session:', error);
+        return false;
+      }
+
+      if (data?.session) {
+        // Fetch user profile with the refreshed token
+        if (data.session.user.id) {
+          const profile = await fetchUserProfile(data.session.user.id);
+          if (profile) {
+            setUser(profile);
+            console.log('Auth session refreshed successfully');
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (err) {
+      console.error('Error in refreshSession:', err);
+      return false;
+    }
+  }, []);
 
   // Check active session and fetch user data on mount
   useEffect(() => {
@@ -164,12 +209,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
+    // Handle tab visibility changes to refresh auth when needed
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        const currentTime = Date.now();
+        const timeHidden = currentTime - lastVisibilityChangeRef.current;
+        lastVisibilityChangeRef.current = currentTime;
+        
+        // If tab was hidden for more than 1 minute, refresh auth
+        if (timeHidden > 60000 && user) {
+          console.log(`Tab was hidden for ${timeHidden}ms, refreshing auth session`);
+          const refreshed = await refreshSession();
+          if (!refreshed) {
+            console.warn('Failed to refresh session on tab visibility change');
+            
+            // Check if we can still access the API
+            try {
+              const { error } = await supabase.from('users').select('count').limit(1);
+              if (error) {
+                console.error('API connection test failed after tab switch:', error);
+                toast.error('Connection issues detected. Try refreshing the page.');
+              }
+            } catch (err) {
+              console.error('Error testing API connection:', err);
+            }
+          }
+        }
+      } else {
+        // Tab is being hidden, update the timestamp
+        lastVisibilityChangeRef.current = Date.now();
+      }
+    };
+    
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
       subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [navigate]);
+  }, [navigate, loading, refreshSession, user]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -288,7 +369,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     error,
     login,
     logout,
-    signUp
+    signUp,
+    refreshSession
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -203,48 +203,125 @@ const SupervisorSites: React.FC = () => {
   }, [sites, activeTab, searchQuery]);
 
   const handleCreateSite = async (newSite: Partial<Site>) => {
+    if (!user) {
+      toast({
+        title: 'Authentication Error',
+        description: 'You must be logged in to create a site. Please refresh and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       console.log('Creating new site:', newSite);
 
-      // First, check connection
+      // First, refresh the auth session to ensure we have a valid token
+      const { refreshSession } = useAuth();
+      const refreshed = await refreshSession();
+      
+      if (!refreshed) {
+        console.warn('Session refresh failed, attempting API connection test');
+        // Check if API is still responsive
+        try {
+          const { error } = await supabase.from('users').select('count').limit(1);
+          if (error) {
+            console.error('API connection test failed:', error);
+            throw new Error('Connection to server lost. Please refresh the page and try again.');
+          }
+        } catch (apiError) {
+          console.error('API test error:', apiError);
+          throw new Error('Connection issues detected. Please refresh the page.');
+        }
+      }
+      
+      // Double-check connection with ping
       const isConnected = await pingSupabase();
       if (!isConnected) {
         throw new Error('Connection to the server is unstable. Please refresh the page.');
       }
       
-      // Create the site
-      const { data, error } = await supabase
-        .from('sites')
-        .insert([
-          {
-            name: newSite.name,
-            job_name: newSite.jobName,
-            pos_no: newSite.posNo,
-            start_date: newSite.startDate?.toISOString().split('T')[0],
-            location: newSite.location,
-            supervisor_id: user?.id,
-            supervisor_name: user?.name || 'Unknown',
-            is_completed: false,
-          },
-        ])
-        .select()
-        .single();
+      // Create the site with retries
+      let retryCount = 0;
+      let siteData = null;
+      let lastError = null;
+      
+      while (retryCount < 3 && !siteData) {
+        try {
+          const { data, error } = await supabase
+            .from('sites')
+            .insert([
+              {
+                name: newSite.name,
+                job_name: newSite.jobName,
+                pos_no: newSite.posNo,
+                start_date: newSite.startDate?.toISOString().split('T')[0],
+                location: newSite.location,
+                supervisor_id: user.id,
+                supervisor_name: user.name || 'Unknown',
+                is_completed: false,
+              },
+            ])
+            .select()
+            .single();
 
-      if (error) {
-        console.error('Error creating site:', error);
-        throw error;
+          if (error) {
+            console.error(`Error creating site (attempt ${retryCount + 1}):`, error);
+            lastError = error;
+            retryCount++;
+            
+            // Wait before retrying
+            if (retryCount < 3) {
+              await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            }
+          } else {
+            siteData = data;
+            break;
+          }
+        } catch (error) {
+          console.error(`Exception creating site (attempt ${retryCount + 1}):`, error);
+          lastError = error;
+          retryCount++;
+          
+          if (retryCount < 3) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          }
+        }
+      }
+      
+      if (!siteData) {
+        throw lastError || new Error('Failed to create site after multiple attempts');
+      }
+      
+      // Verify the site was actually created by checking
+      try {
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('sites')
+          .select('id')
+          .eq('id', siteData.id)
+          .single();
+          
+        if (verifyError || !verifyData) {
+          console.error('Site verification failed:', verifyError);
+          throw new Error('Site was not properly saved. Please try again.');
+        }
+      } catch (verifyError) {
+        console.error('Exception during site verification:', verifyError);
+        // Continue anyway as the site might have been created
       }
 
       // Add the new site to our list and refresh
-      console.log('Site created successfully:', data);
-      await fetchSites();
-      
-      setShowNewSiteForm(false);
+      console.log('Site created successfully:', siteData);
       toast({
         title: 'Success',
         description: 'Site created successfully',
       });
+      
+      // Close the form first for better UX
+      setShowNewSiteForm(false);
+      
+      // Then refresh the sites list
+      await fetchSites();
     } catch (error: any) {
       console.error('Failed to create site:', error);
       toast({

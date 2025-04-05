@@ -128,6 +128,21 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         location: values.location.toUpperCase(),
       };
       
+      // Add visibility change detection to reset loading state if tab is switched
+      const visibilityHandler = () => {
+        if (document.visibilityState === 'hidden') {
+          console.log('Tab hidden during site creation, will reset loading state when visible again');
+        } else if (document.visibilityState === 'visible' && isLoading) {
+          console.log('Tab visible again after being hidden during site creation, resetting loading state');
+          setIsLoading(false);
+          toast.error('Site creation interrupted. Please try again.');
+          document.removeEventListener('visibilitychange', visibilityHandler);
+        }
+      };
+      
+      // Add visibility change listener
+      document.addEventListener('visibilitychange', visibilityHandler);
+      
       // Extremely simplified site creation - no retries, just one attempt with a long timeout
       const { data, error } = await supabase
         .from('sites')
@@ -145,6 +160,9 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           total_funds: 0
         }])
         .select();
+      
+      // Remove visibility change listener as operation has completed
+      document.removeEventListener('visibilitychange', visibilityHandler);
       
       // Handle errors
       if (error) {
@@ -186,6 +204,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     } finally {
       // Always turn off loading state
       setIsLoading(false);
+      // Cleanup any stray visibility listeners that might have been missed
+      document.removeEventListener('visibilitychange', (e) => console.log('Removed stray visibility listener'));
     }
   };
 

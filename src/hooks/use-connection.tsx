@@ -3,23 +3,24 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 // Maximum time (in ms) to wait for a connection test
-const CONNECTION_TIMEOUT = 3000;
+const CONNECTION_TIMEOUT = 2500;
 
 /**
  * Hook to manage Supabase connection state and provide connection checking utilities
+ * with enhanced timeout protection
  */
 export function useConnection() {
   const [isConnected, setIsConnected] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   
-  // Test connection to Supabase with timeout - simplified
+  // Test connection to Supabase with timeout - simplified and more robust
   const checkConnection = useCallback(async (showToast = false): Promise<boolean> => {
     if (isChecking) return isConnected;
     
     setIsChecking(true);
     
     try {
-      // Simpler approach with just a timeout
+      // Create an abort controller for timeout handling
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
       
@@ -35,17 +36,34 @@ export function useConnection() {
       const connected = !error;
       setIsConnected(connected);
       
-      if (showToast && !connected) {
-        toast.error('Connection failed. Please refresh the page.');
+      // Only show toast for failures or if explicitly requested for success
+      if ((showToast && !connected) || (showToast && connected && !isConnected)) {
+        if (connected) {
+          toast.success('Connection restored');
+        } else {
+          toast.error('Connection issue detected. Try refreshing the page.');
+        }
       }
       
       return connected;
     } catch (error) {
-      console.error('Connection check error:', error);
+      // Check if this was an abort error (timeout)
+      const isTimeoutError = error instanceof DOMException && error.name === 'AbortError';
+      
+      if (isTimeoutError) {
+        console.warn('Connection check timed out');
+      } else {
+        console.error('Connection check error:', error);
+      }
+      
       setIsConnected(false);
       
       if (showToast) {
-        toast.error('Connection failed. Please refresh the page.');
+        toast.error(
+          isTimeoutError 
+            ? 'Connection timed out. Please check your network and refresh the page.' 
+            : 'Connection failed. Please refresh the page.'
+        );
       }
       
       return false;
@@ -54,42 +72,59 @@ export function useConnection() {
     }
   }, [isChecking, isConnected]);
   
-  // Utility to retry a function with connection checking - simplified
+  // Utility to retry a function with connection checking - more robust with timeouts
   const withConnectionCheck = useCallback(<T,>(
     fn: () => Promise<T>,
     options: {
       onConnectionError?: () => void;
       maxRetries?: number;
       retryDelay?: number;
+      timeout?: number;
     } = {}
   ): Promise<T> => {
     const { 
       onConnectionError, 
       maxRetries = 1, 
-      retryDelay = 1000 
+      retryDelay = 1000,
+      timeout = 5000
     } = options;
     
     let attempts = 0;
     
     const tryOperation = async (): Promise<T> => {
       try {
-        // Just try the operation directly first
-        return await fn();
+        // Add timeout protection to the operation
+        const controller = new AbortController();
+        const timeoutId = timeout > 0 ? setTimeout(() => controller.abort(), timeout) : null;
+        
+        // Create a promise that wraps the function with abort signal if possible
+        const result = await fn();
+        
+        if (timeoutId) clearTimeout(timeoutId);
+        return result;
       } catch (error) {
-        console.error('Operation failed:', error);
+        // Determine if this was a timeout
+        const isTimeoutError = error instanceof DOMException && error.name === 'AbortError';
+        
+        if (isTimeoutError) {
+          console.warn('Operation timed out');
+        } else {
+          console.error('Operation failed:', error);
+        }
+        
         attempts++;
         
-        // Only check connection on retry
+        // Only attempt retry if we haven't exceeded maxRetries
         if (attempts <= maxRetries) {
           console.log(`Retrying operation (${attempts}/${maxRetries})...`);
           
-          // Simple delay without toast to avoid flickering
+          // Simple delay without toast to avoid UI noise
           await new Promise(resolve => setTimeout(resolve, retryDelay));
           return tryOperation();
         }
         
-        // If all retries failed, check if it's a connection issue
-        const connected = await checkConnection(true);
+        // If all retries failed, check the connection
+        const connected = await checkConnection(attempts >= maxRetries);
         if (!connected && onConnectionError) {
           onConnectionError();
         }

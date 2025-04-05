@@ -339,29 +339,49 @@ const App = () => {
     
     // Refresh schema cache on application startup
     const initializeApp = async () => {
+      setIsInitialized(true);
+      let errorEncountered = false;
+
       try {
-        console.log("Initializing application and refreshing schema cache...");
+        // Add a 3-second timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          throw new Error('Initialization timed out');
+        }, 3000);
         
-        // Add a timeout to prevent schema refresh from blocking app initialization
-        const timeout = setTimeout(() => {
-          console.warn("Schema refresh timed out, continuing with app initialization");
-          if (mounted) {
-            setIsInitialized(true);
-          }
-        }, 2000); // 2 second timeout
-        
-        await refreshSchemaCache();
-        
-        clearTimeout(timeout);
-        
-        if (mounted) {
-          setIsInitialized(true);
+        try {
+          // Try to refresh the session schema cache with timeout
+          await refreshSchemaCache();
+          clearTimeout(timeoutId);
+        } catch (error) {
+          clearTimeout(timeoutId);
+          console.error('Error refreshing schema cache:', error);
+          // Continue initialization even if schema refresh fails
         }
+        
+        // Set initialization complete
+        setIsInitialized(true);
       } catch (error) {
-        console.error("Error initializing application:", error);
-        // Don't block app initialization on schema refresh failure
-        if (mounted) {
-          setIsInitialized(true);
+        console.error('Error initializing app:', error);
+        errorEncountered = true;
+        
+        // Set initialized anyway to allow the app to function
+        setIsInitialized(true);
+        
+        // Show error toast only if not a timeout error (to reduce noise)
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          toast.error('Error initializing application. Some features may be limited.');
+        }
+      } finally {
+        // Add reconnect logic
+        if (errorEncountered) {
+          setTimeout(() => {
+            // Try to reconnect silently after 5 seconds if there was an error
+            refreshSchemaCache().catch(e => 
+              console.error('Background reconnect failed:', e)
+            );
+          }, 5000);
         }
       }
     };

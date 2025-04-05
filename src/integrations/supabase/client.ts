@@ -63,32 +63,27 @@ async function withRetry<T>(
   throw lastError;
 }
 
-// Function to ping Supabase and reconnect if needed
+/**
+ * Enhanced pingSupabase function with better timeout handling
+ * This function is used to check if the Supabase API is reachable
+ */
 export const pingSupabase = async (): Promise<boolean> => {
   try {
-    const start = Date.now();
-    const { data, error } = await supabase.from('users').select('count').limit(1);
-    const duration = Date.now() - start;
+    // Create an abort controller with a timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
     
-    console.log(`Supabase ping response time: ${duration}ms`);
+    // Simple query that should return quickly
+    const { error } = await supabase
+      .from('users')
+      .select('count')
+      .limit(1)
+      .abortSignal(controller.signal);
     
-    if (error) {
-      console.error('Supabase ping failed:', error);
-      return false;
-    }
-    
-    // Reconnect Supabase realtime channels
-    try {
-      supabase.removeAllChannels();
-      supabase.channel('system').subscribe();
-      console.log('Reconnected Supabase channels');
-    } catch (err) {
-      console.error('Error reconnecting Supabase channels:', err);
-    }
-    
-    return true;
+    clearTimeout(timeoutId);
+    return !error;
   } catch (error) {
-    console.error('Error pinging Supabase:', error);
+    console.error('Ping Supabase error:', error);
     return false;
   }
 };

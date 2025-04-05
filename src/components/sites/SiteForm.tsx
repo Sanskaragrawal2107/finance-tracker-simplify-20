@@ -170,12 +170,13 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     fetchSupervisors();
   }, []);
   
-  // Improved form submission with timeout handling and session verification
+  // Improved form submission with better timeout handling
   const onFormSubmit = async (values: SiteFormValues) => {
     setIsLoading(true);
-    console.log('Form submission started with values:', values);
+    console.log(`${new Date().toISOString()} - Form submission started`);
     
-    // Log supervisorId information to help debug
+    // Log form values and supervisorId for debugging
+    console.log('Form values:', JSON.stringify(values, null, 2));
     console.log('SupervisorId details:', {
       formValue: values.supervisorId,
       refValue: supervisorIdRef.current,
@@ -183,26 +184,47 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     });
     
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
-    console.log('Creating site with supervisorId:', currentSupervisorId);
     
-    // Setup timeout but don't use AbortController as it might be causing issues
-    const timeoutId = setTimeout(() => {
-      console.log('Site creation request timeout triggered after 15 seconds');
-      setIsLoading(false); // Force loading state to false if timeout occurs
-      toast.error('Request timed out. Please try again.');
-    }, 15000);
+    // Define a longer timeout (30 seconds) for slower connections
+    const TIMEOUT_MS = 30000;
+    let timedOut = false;
+    
+    // Create a promise that resolves after the timeout
+    const timeoutPromise = new Promise<null>((_, reject) => {
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        console.log(`${new Date().toISOString()} - Request timed out after ${TIMEOUT_MS}ms`);
+        reject(new Error('Request timed out'));
+      }, TIMEOUT_MS);
+      
+      // Store the timeout ID so we can clear it if the request completes
+      // @ts-ignore - Adding a property to the promise
+      timeoutPromise.timeoutId = timeoutId;
+    });
     
     try {
+      console.log(`${new Date().toISOString()} - Checking session`);
       // Check session first
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const sessionResponse = await Promise.race([
+        supabase.auth.getSession(),
+        timeoutPromise
+      ]);
       
-      if (sessionError || !session) {
+      const { data: { session }, error: sessionError } = sessionResponse;
+      
+      if (sessionError) {
         console.error('Session error:', sessionError);
         toast.error('Your session has expired. Please refresh the page to log in again.');
-        setIsLoading(false);
-        clearTimeout(timeoutId);
         return;
       }
+      
+      if (!session) {
+        console.error('No session found');
+        toast.error('No active session found. Please refresh the page to log in again.');
+        return;
+      }
+      
+      console.log(`${new Date().toISOString()} - Session valid, preparing data`);
       
       // Prepare site data with uppercase values
       const siteData = {
@@ -219,68 +241,95 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         total_funds: 0
       };
       
-      console.log('Submitting site data to Supabase:', siteData);
+      console.log(`${new Date().toISOString()} - Submitting site data to Supabase`);
       
-      // Simplify request - don't use abort signal
-      const { data, error } = await supabase
-        .from('sites')
-        .insert([siteData])
-        .select();
-      
-      // Clear timeout as request has completed
-      clearTimeout(timeoutId);
-      
-      if (error) {
-        console.error('Error creating site:', error);
+      // Use a separate try/catch for the site creation request
+      try {
+        // Race the site creation request against the timeout
+        const insertResponse = await Promise.race([
+          supabase.from('sites').insert([siteData]).select(),
+          timeoutPromise
+        ]);
         
-        if (error.code === 'PGRST301' || error.code === '401' || error.message?.includes('JWT')) {
-          toast.error('Your session has expired. Please refresh the page to log in again.');
-        } else if (error.code === '23505') {
-          if (error.message?.includes('name')) {
-            toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
-          } else if (error.message?.includes('pos_no')) {
-            toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
+        // If we made it here, the request didn't time out
+        // Clear the timeout to prevent it from firing after the request completes
+        // @ts-ignore - Accessing the timeoutId property we added
+        clearTimeout(timeoutPromise.timeoutId);
+        
+        const { data, error } = insertResponse;
+        
+        console.log(`${new Date().toISOString()} - Response received from Supabase`);
+        
+        if (error) {
+          console.error('Error creating site:', error);
+          
+          if (error.code === 'PGRST301' || error.code === '401' || error.message?.includes('JWT')) {
+            toast.error('Your session has expired. Please refresh the page to log in again.');
+          } else if (error.code === '23505') {
+            if (error.message?.includes('name')) {
+              toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
+            } else if (error.message?.includes('pos_no')) {
+              toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
+            } else {
+              toast.error('A site with these details already exists');
+            }
           } else {
-            toast.error('A site with these details already exists');
+            toast.error('Failed to create site: ' + error.message);
           }
+        } else if (data && data.length > 0) {
+          console.log(`${new Date().toISOString()} - Site created successfully:`, data);
+          
+          // Close form and reset
+          const uppercaseValues = {
+            ...values,
+            name: values.name.toUpperCase(),
+            jobName: values.jobName.toUpperCase(),
+            posNo: values.posNo.toUpperCase(),
+            location: values.location.toUpperCase(),
+            supervisorId: currentSupervisorId
+          };
+          
+          // Call onSubmit before closing the dialog to ensure the parent component sees the update
+          onSubmit(uppercaseValues);
+          toast.success('Site created successfully');
+          onClose();
         } else {
-          toast.error('Failed to create site: ' + error.message);
+          console.warn('No data returned but no error either');
+          toast.error('Site creation returned no data. Please try again.');
         }
-      } else if (data) {
-        console.log('Site created successfully:', data);
+      } catch (insertError: any) {
+        console.error(`${new Date().toISOString()} - Error during site insertion:`, insertError);
         
-        // Close form and reset
-        const uppercaseValues = {
-          ...values,
-          name: values.name.toUpperCase(),
-          jobName: values.jobName.toUpperCase(),
-          posNo: values.posNo.toUpperCase(),
-          location: values.location.toUpperCase(),
-          supervisorId: currentSupervisorId
-        };
-        
-        toast.success('Site created successfully');
-        onSubmit(uppercaseValues);
-        onClose();
-      } else {
-        // This should never happen, but just in case
-        console.warn('No data returned but no error either');
-        toast.error('Site creation returned no data. Please try again.');
+        if (timedOut) {
+          toast.error('Request timed out. The site might have been created but we lost connection. Please check before trying again.');
+        } else if (insertError.message?.includes('fetch') || insertError.message?.includes('network')) {
+          toast.error('Network error. Please check your connection and try again.');
+        } else {
+          toast.error('Failed to create site: ' + (insertError.message || 'Unknown error'));
+        }
       }
     } catch (error: any) {
-      console.error('Exception in site creation:', error);
+      console.error(`${new Date().toISOString()} - Exception in site creation:`, error);
       
-      if (error.message?.includes('fetch')) {
+      if (timedOut) {
+        toast.error('Request timed out. Please check your connection and try again.');
+      } else if (error.message?.includes('fetch') || error.message?.includes('network')) {
         toast.error('Network error. Please check your connection and try again.');
       } else if (error.message?.includes('auth') || error.message?.includes('session')) {
         toast.error('Your session has expired. Please refresh the page to log in again.');
       } else {
         toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
       }
+      
+      // If there was a timeout, clear it
+      // @ts-ignore - Accessing the timeoutId property we added
+      if (timeoutPromise.timeoutId) {
+        // @ts-ignore - Accessing the timeoutId property we added
+        clearTimeout(timeoutPromise.timeoutId);
+      }
     } finally {
-      console.log('Form submission completed');
+      console.log(`${new Date().toISOString()} - Form submission completed`);
       setIsLoading(false);
-      clearTimeout(timeoutId);
     }
   };
 

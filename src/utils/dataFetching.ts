@@ -2,11 +2,15 @@ import { toast } from 'sonner';
 import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+// Create a safer approach to toast filtering without overriding functions
+type ToastFilter = (message: string) => boolean;
+
 // Track if we're currently reconnecting from a tab switch
 // This helps prevent showing error toasts during reconnection
 const reconnectionState = {
   isReconnecting: false,
   suppressNetworkErrors: false,
+  toastFilters: new Set<ToastFilter>(),
   setReconnecting: (value: boolean) => {
     reconnectionState.isReconnecting = value;
     
@@ -20,6 +24,32 @@ const reconnectionState = {
   }
 };
 
+// Create a safe wrapper around toast.error that respects filters
+const originalErrorToast = toast.error;
+toast.error = function safeErrorToast(...args: Parameters<typeof originalErrorToast>) {
+  const [message] = args;
+  
+  // Only filter string messages
+  if (typeof message === 'string') {
+    // Run through all filters - if any return false, don't show the toast
+    for (const filter of reconnectionState.toastFilters) {
+      try {
+        if (!filter(message)) {
+          // Filter rejected this message
+          console.log('Toast suppressed by filter:', message);
+          return 'suppressed-toast-id';
+        }
+      } catch (err) {
+        // If a filter throws an error, still allow the toast
+        console.error('Error in toast filter:', err);
+      }
+    }
+  }
+  
+  // If we get here, either it's not a string message or all filters passed
+  return originalErrorToast(...args);
+};
+
 // Export for global access
 export const tabSwitchState = {
   suppressNetworkToasts: () => {
@@ -29,7 +59,14 @@ export const tabSwitchState = {
     reconnectionState.setReconnecting(false);
     reconnectionState.suppressNetworkErrors = false;
   },
-  isReconnecting: () => reconnectionState.isReconnecting
+  isReconnecting: () => reconnectionState.isReconnecting,
+  // Add new methods for toast filters
+  registerToastFilter: (filter: ToastFilter) => {
+    reconnectionState.toastFilters.add(filter);
+  },
+  removeToastFilter: (filter: ToastFilter) => {
+    reconnectionState.toastFilters.delete(filter);
+  }
 };
 
 interface FetchOptions {

@@ -206,6 +206,30 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const pendingToastsRef = useRef<Set<string>>(new Set());
     const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     
+    // Create a safer toast interceptor without overriding built-in functions
+    const networkErrorFilter = (message: string) => {
+      if (typeof message !== 'string') return true;
+      
+      // Check if this is a network error and if we're suppressing toasts
+      if (
+        pendingToastsRef.current.size > 0 &&
+        (
+          message.includes('network') || 
+          message.includes('connection') || 
+          message.includes('timeout') ||
+          message.includes('timed out')
+        )
+      ) {
+        console.log('Suppressing network error toast during reconnection:', message);
+        return false; // Don't show this toast
+      }
+      
+      return true; // Show the toast
+    };
+    
+    // Register the network error filter with tabSwitchState
+    tabSwitchState.registerToastFilter(networkErrorFilter);
+    
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         const currentTime = Date.now();
@@ -277,37 +301,13 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     };
     
-    // Override toast.error to filter out network error toasts during reconnection
-    const originalErrorToast = toast.error;
-    toast.error = (...args: Parameters<typeof toast.error>) => {
-      const [message] = args;
-      
-      // Check if this is a network error and if we're suppressing toasts
-      if (
-        typeof message === 'string' && 
-        pendingToastsRef.current.size > 0 &&
-        (
-          message.includes('network') || 
-          message.includes('connection') || 
-          message.includes('timeout') ||
-          message.includes('timed out')
-        )
-      ) {
-        console.log('Suppressing network error toast during reconnection:', message);
-        // Return a fake toast ID
-        return 'suppressed-toast';
-      }
-      
-      // Otherwise, show the toast normally
-      return originalErrorToast(...args);
-    };
-    
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      // Restore original toast.error function
-      toast.error = originalErrorToast;
+      
+      // Remove our toast filter when unmounting
+      tabSwitchState.removeToastFilter(networkErrorFilter);
       
       if (reconnectionTimeoutRef.current) {
         clearTimeout(reconnectionTimeoutRef.current);

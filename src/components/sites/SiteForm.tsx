@@ -193,6 +193,16 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
       console.log('Using supervisorId:', currentSupervisorId);
       
+      // Ensure the Supabase connection is active before submitting
+      try {
+        // Quick connection check
+        await supabase.from('users').select('count').limit(1);
+      } catch (connectionError) {
+        console.error('Connection error before form submission:', connectionError);
+        // Try to refresh the connection
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
       // First check if session is valid
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
@@ -219,56 +229,73 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Submitting site data to Supabase:', siteData);
       
-      // Insert the site with a direct approach - no complex handling that might be affected by tab switches
-      const { data, error } = await supabase
-        .from('sites')
-        .insert([siteData])
-        .select();
+      // Use a more robust approach with timeout handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
       
-      if (error) {
-        console.error('Error creating site:', error);
+      try {
+        // Insert the site with abort signal for timeout handling
+        const { data, error } = await supabase
+          .from('sites')
+          .insert([siteData])
+          .select()
+          .abortSignal(controller.signal);
+          
+        clearTimeout(timeoutId);
         
-        if (error.code === '23505') { // Unique constraint violation
-          if (error.message?.includes('name')) {
-            toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
-          } else if (error.message?.includes('pos_no')) {
-            toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
+        if (error) {
+          console.error('Error creating site:', error);
+          
+          if (error.code === '23505') { // Unique constraint violation
+            if (error.message?.includes('name')) {
+              toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
+            } else if (error.message?.includes('pos_no')) {
+              toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
+            } else {
+              toast.error('A site with these details already exists');
+            }
           } else {
-            toast.error('A site with these details already exists');
+            toast.error('Failed to create site: ' + error.message);
           }
-        } else {
-          toast.error('Failed to create site: ' + error.message);
+          
+          return;
         }
         
-        return;
+        if (!data || data.length === 0) {
+          console.warn('No data returned from site creation');
+          toast.error('No data returned from site creation. Please try again.');
+          return;
+        }
+        
+        console.log('Site created successfully:', data);
+        
+        // Create uppercase version of values for parent component
+        const uppercaseValues = {
+          ...values,
+          name: values.name.toUpperCase(),
+          jobName: values.jobName.toUpperCase(),
+          posNo: values.posNo.toUpperCase(),
+          location: values.location.toUpperCase(),
+          supervisorId: currentSupervisorId
+        };
+        
+        // First call onSubmit to notify parent component 
+        onSubmit(uppercaseValues);
+        
+        // Show success message
+        toast.success('Site created successfully');
+        
+        // Close the dialog and reset form
+        onClose();
+      } catch (abortError) {
+        clearTimeout(timeoutId);
+        if (abortError.name === 'AbortError') {
+          console.error('Site creation request timed out');
+          toast.error('Request timed out. Please try again.');
+        } else {
+          throw abortError; // Re-throw for the outer catch
+        }
       }
-      
-      if (!data || data.length === 0) {
-        console.warn('No data returned from site creation');
-        toast.error('No data returned from site creation. Please try again.');
-        return;
-      }
-      
-      console.log('Site created successfully:', data);
-      
-      // Create uppercase version of values for parent component
-      const uppercaseValues = {
-        ...values,
-        name: values.name.toUpperCase(),
-        jobName: values.jobName.toUpperCase(),
-        posNo: values.posNo.toUpperCase(),
-        location: values.location.toUpperCase(),
-        supervisorId: currentSupervisorId
-      };
-      
-      // First call onSubmit to notify parent component 
-      onSubmit(uppercaseValues);
-      
-      // Show success message
-      toast.success('Site created successfully');
-      
-      // Close the dialog and reset form
-      onClose();
     } catch (error: any) {
       console.error('Exception in site creation:', error);
       

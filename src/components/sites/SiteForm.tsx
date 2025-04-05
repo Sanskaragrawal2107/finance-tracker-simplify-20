@@ -80,12 +80,17 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     supervisorId: supervisorId || '',
   };
   
+  // Use a proper ref for the submission state to avoid closure issues
+  const isSubmittingRef = useRef(false);
+  
+  // Track form submission state through the isLoading state - MOVED OUTSIDE
+  useEffect(() => {
+    isSubmittingRef.current = isLoading;
+  }, [isLoading]);
+  
   // Handle visibility changes
   useEffect(() => {
-    // Use a proper ref for the submission state to avoid closure issues
-    const isSubmittingRef = useRef(false);
-    
-    // Use a safer approach than direct DOM access for event handlers
+    // Handle visibility changes properly
     const handleVisibilityChange = () => {
       // Skip visibility handling during form submission
       if (isLoading || isSubmittingRef.current) {
@@ -107,11 +112,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         lastHiddenTimeRef.current = null;
       }
     };
-    
-    // Track form submission state through the isLoading state
-    useEffect(() => {
-      isSubmittingRef.current = isLoading;
-    }, [isLoading]);
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
     

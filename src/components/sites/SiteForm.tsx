@@ -85,27 +85,11 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     // Use a proper ref for the submission state to avoid closure issues
     const isSubmittingRef = useRef(false);
     
-    // Better click handler with proper reference
-    const handleSubmitClick = () => {
-      console.log('Submit button clicked, disabling visibility changes');
-      isSubmittingRef.current = true;
-      // Reset after a reasonable period
-      setTimeout(() => { 
-        isSubmittingRef.current = false;
-        console.log('Re-enabling visibility changes');
-      }, 15000);
-    };
-    
-    // Listen for form submission to prevent visibility handler interference
-    const submitButton = document.querySelector('form button[type="submit"]');
-    if (submitButton) {
-      submitButton.addEventListener('click', handleSubmitClick);
-    }
-    
+    // Use a safer approach than direct DOM access for event handlers
     const handleVisibilityChange = () => {
-      // Don't do anything if we're in the process of submitting
-      if (isSubmittingRef.current) {
-        console.log('Ignoring visibility change during form submission');
+      // Skip visibility handling during form submission
+      if (isLoading || isSubmittingRef.current) {
+        console.log('Ignoring visibility change during form submission or loading');
         return;
       }
       
@@ -124,16 +108,17 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
     };
     
+    // Track form submission state through the isLoading state
+    useEffect(() => {
+      isSubmittingRef.current = isLoading;
+    }, [isLoading]);
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      // Clean up with the correct reference
-      if (submitButton) {
-        submitButton.removeEventListener('click', handleSubmitClick);
-      }
     };
-  }, []);
+  }, [isLoading]);
   
   // Define form
   const form = useForm<SiteFormValues>({

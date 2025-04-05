@@ -71,6 +71,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const supervisorIdRef = useRef<string | undefined>(supervisorId);
   // Create lastActiveTimestamp ref at component level, not inside useEffect
   const lastActiveTimestampRef = useRef(Date.now());
+  // Add a ref to track form submission status
+  const isSubmittingRef = useRef(false);
   
   // Update the ref whenever the prop changes
   useEffect(() => {
@@ -79,6 +81,10 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Single combined visibility change handler to avoid multiple listeners
   useEffect(() => {
+    // Minimum time (in ms) tab needs to be hidden before we consider it a "real" tab switch
+    // This prevents copy-paste operations from triggering the visibility change handler
+    const MIN_HIDDEN_TIME = 1000; // 1 second threshold
+    
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         // Check how long the tab was hidden
@@ -86,21 +92,25 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         const inactiveTime = currentTime - lastActiveTimestampRef.current;
         
         // Remove the loading state reset to allow form submission to continue
-        // Check if we need to refresh the session (only if tab was hidden for >5 minutes)
-        if (inactiveTime > 300000) { // 5 minutes
-          console.log('Tab was hidden for over 5 minutes, checking session...');
-          try {
-            // Try to refresh the session
-            const { data, error } = await supabase.auth.refreshSession();
-            
-            if (error || !data?.session) {
-              console.warn('Session expired during inactivity:', error);
-              toast.error('Your session expired during inactivity. Please refresh the page to continue.');
-            } else {
-              console.log('Session refreshed successfully after inactivity');
+        // Only consider it a real tab switch if it was hidden for longer than the threshold
+        // AND the form is not currently submitting
+        if (inactiveTime > MIN_HIDDEN_TIME && !isSubmittingRef.current) {
+          // Check if we need to refresh the session (only if tab was hidden for >5 minutes)
+          if (inactiveTime > 300000) { // 5 minutes
+            console.log('Tab was hidden for over 5 minutes, checking session...');
+            try {
+              // Try to refresh the session
+              const { data, error } = await supabase.auth.refreshSession();
+              
+              if (error || !data?.session) {
+                console.warn('Session expired during inactivity:', error);
+                toast.error('Your session expired during inactivity. Please refresh the page to continue.');
+              } else {
+                console.log('Session refreshed successfully after inactivity');
+              }
+            } catch (err) {
+              console.error('Error refreshing session after inactivity:', err);
             }
-          } catch (err) {
-            console.error('Error refreshing session after inactivity:', err);
           }
         }
         
@@ -172,6 +182,9 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Improved form submission with better timeout handling
   const onFormSubmit = async (values: SiteFormValues) => {
+    // Set our submission tracking ref to true
+    isSubmittingRef.current = true;
+    
     try {
       setIsLoading(true);
       console.log('Form submission started with values:', values);
@@ -186,7 +199,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       if (sessionError || !session) {
         console.error('Session error or no session:', sessionError);
         toast.error('Your session has expired. Please refresh the page and try again.');
-        setIsLoading(false);
         return;
       }
       
@@ -207,7 +219,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Submitting site data to Supabase:', siteData);
       
-      // Insert the site with a simpler approach - no timeoutPromise or race conditions
+      // Insert the site with a direct approach - no complex handling that might be affected by tab switches
       const { data, error } = await supabase
         .from('sites')
         .insert([siteData])
@@ -249,7 +261,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         supervisorId: currentSupervisorId
       };
       
-      // First call onSubmit to notify parent component
+      // First call onSubmit to notify parent component 
       onSubmit(uppercaseValues);
       
       // Show success message
@@ -267,8 +279,9 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         toast.error('Error creating site: ' + (error.message || 'Unknown error'));
       }
     } finally {
-      // Always reset loading state
+      // Always reset loading state and submission tracking
       setIsLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 

@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { UserRole, AuthUser } from '@/lib/types';
 import { VisibilityContext } from '@/App';
-import { fetchWithRetry } from '@/utils/dataFetching';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -64,47 +63,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refreshSession = useCallback(async (): Promise<boolean> => {
     try {
       console.log('Manually refreshing auth session');
+      const { data, error } = await supabase.auth.refreshSession();
       
-      // Use fetchWithRetry to add resilience to the session refresh
-      const sessionData = await fetchWithRetry(
-        async () => {
-          const { data, error } = await supabase.auth.refreshSession();
-          if (error) throw error;
-          return data;
-        },
-        { 
-          maxRetries: 2, 
-          showToast: false,
-          context: 'authentication session'
-        }
-      );
-      
-      if (!sessionData || !sessionData.session) {
-        console.warn('No valid session after refresh attempt');
+      if (error) {
+        console.error('Error refreshing session:', error);
         return false;
       }
 
-      // Fetch user profile with the refreshed token
-      if (sessionData.session.user.id) {
-        // Use fetchWithRetry for profile fetch too
-        const profile = await fetchWithRetry(
-          () => fetchUserProfile(sessionData.session.user.id), 
-          { showToast: false, context: 'user profile' }
-        );
-        
-        if (profile) {
-          setUser(profile);
-          console.log('Auth session refreshed successfully');
-          return true;
-        } else {
-          console.warn('Profile fetch failed after session refresh');
+      if (data?.session) {
+        // Fetch user profile with the refreshed token
+        if (data.session.user.id) {
+          const profile = await fetchUserProfile(data.session.user.id);
+          if (profile) {
+            setUser(profile);
+            console.log('Auth session refreshed successfully');
+            return true;
+          }
         }
       }
       
       return false;
     } catch (err) {
       console.error('Error in refreshSession:', err);
-      // Don't show a toast here - this could be called silently in the background
       return false;
     }
   }, []);
@@ -259,87 +239,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Handle tab visibility changes to refresh auth when needed
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        const currentTime = Date.now();
-        const timeHidden = currentTime - lastVisibilityChangeRef.current;
-        lastVisibilityChangeRef.current = currentTime;
-        
-        // Skip refresh for very short tab switches (like F12 dev tools)
-        if (timeHidden < 1000) {
-          console.log('Tab was hidden for less than 1 second, skipping session check');
-          return;
-        }
-        
-        // Only attempt session refresh if tab was hidden for a substantial time AND user exists
-        if (timeHidden > 60000 && user) {
-          console.log(`Tab was hidden for ${timeHidden}ms, checking connectivity first`);
-          
-          // Suppress network toasts during reconnection
-          import('@/utils/dataFetching').then(({ tabSwitchState }) => {
-            tabSwitchState.suppressNetworkToasts();
-          });
-          
-          // First check if we can connect to Supabase with a simple, fast query
-          // before attempting a full session refresh
-          try {
-            // Use a controller with a short timeout for the connectivity check
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2000);
-            
-            const { error } = await supabase
-              .from('users')
-              .select('count')
-              .limit(1)
-              .abortSignal(controller.signal);
-              
-            clearTimeout(timeoutId);
-            
-            // Only attempt session refresh if the connection test was successful
-            if (!error) {
-              console.log('Connection test successful, refreshing session');
-              const refreshed = await refreshSession();
-              if (!refreshed) {
-                console.warn('Session refresh failed, but connection is working');
-                // No need to show an error toast here since connection is working
-              }
-              
-              // Re-enable network toasts
-              import('@/utils/dataFetching').then(({ tabSwitchState }) => {
-                tabSwitchState.allowNetworkToasts();
-              });
-            } else {
-              console.warn('Connection test failed after tab visibility change:', error);
-              
-              // Only show a toast if this is a substantial tab switch (> 5 seconds)
-              // to avoid flashing messages for brief tab changes
-              if (timeHidden > 5000) {
-                // Show a gentle message that doesn't mention timeout specifically
-                toast.error('Connection issues detected. Try refreshing the page if you experience problems.');
-              }
-              
-              // Re-enable network toasts after a delay
-              setTimeout(() => {
-                import('@/utils/dataFetching').then(({ tabSwitchState }) => {
-                  tabSwitchState.allowNetworkToasts();
-                });
-              }, 2000);
-            }
-          } catch (err) {
-            console.error('Error during connection test after tab switch:', err);
-            // No toast here to avoid being too noisy - we'll only show an error if actions fail
-            
-            // Re-enable network toasts
-            setTimeout(() => {
-              import('@/utils/dataFetching').then(({ tabSwitchState }) => {
-                tabSwitchState.allowNetworkToasts();
-              });
-            }, 1000);
-          }
-        }
-      } else {
-        // Tab is being hidden, update the timestamp
-        lastVisibilityChangeRef.current = Date.now();
-      }
+      // Removed this functionality as it's causing issues with form submission
+      // when users copy content from other websites
+      return;
     };
     
     // Add visibility change listener

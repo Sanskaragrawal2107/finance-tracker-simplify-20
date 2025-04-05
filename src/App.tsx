@@ -2,7 +2,7 @@ import React, { useEffect, useState, createContext, useContext, useRef, useCallb
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
@@ -20,9 +20,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { refreshSchemaCache, supabase } from "./integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { tabSwitchState } from '@/utils/dataFetching';
 
-// Create a singleton QueryClient instance to be shared across the application
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -32,10 +30,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-// Set the QueryClient as a global variable for access outside of React components
-// @ts-ignore
-window.__REACT_QUERY_GLOBALINSTANCE = queryClient;
 
 // Create a context for visibility change handling
 export const VisibilityContext = createContext<{
@@ -48,272 +42,147 @@ export const VisibilityContext = createContext<{
   registerAuthContext: () => {}
 });
 
-// Visibility Refresh Provider component - enhanced with session keep-alive
+// Visibility Provider component to make visibility state available app-wide
 const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
-  const [appStale, setAppStale] = useState(false);
   const loadingStatesRef = useRef<Record<string, boolean>>({});
-  const authContextRef = useRef<any>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [appStale, setAppStale] = useState(false);
   const hiddenTimeRef = useRef<number | null>(null);
-  const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // This function will be called by components to register their loading state
-  const registerLoadingState = useCallback((id: string, isLoading: boolean) => {
-    loadingStatesRef.current[id] = isLoading;
-  }, []);
-  
-  // Register the auth context so we can refresh sessions
-  const registerAuthContext = useCallback((authContext: any) => {
-    authContextRef.current = authContext;
-  }, []);
-  
+  const authContextRef = useRef<any>(null);
+
   // Clear all loading states and force a refresh only when explicitly called
   const forceRefresh = useCallback(async () => {
-    console.log('Forcing application refresh...');
-    
-    // Suppress network error toasts during reconnection process
-    tabSwitchState.suppressNetworkToasts();
-    
     // Reset all loading states to false
     Object.keys(loadingStatesRef.current).forEach(key => {
       loadingStatesRef.current[key] = false;
     });
     
+    // Force component refresh by updating the refresh time
+    setLastRefreshTime(Date.now());
+    
     // Reset stale state
     setAppStale(false);
     
+    // Reconnect Supabase channels
+    supabase.removeAllChannels();
+    
     try {
-      // 1. Check and refresh auth session first
-      if (authContextRef.current?.refreshSession) {
-        const sessionValid = await authContextRef.current.refreshSession();
-        if (!sessionValid) {
-          console.warn('Session invalid during refresh, redirecting to login');
-          // Redirect to login page - auth provider will handle this
-          return;
-        }
+      // Try to refresh the auth session too (this will be properly initialized once AuthProvider mounts)
+      if (authContextRef.current && authContextRef.current.refreshSession) {
+        console.log('Refreshing auth session through forceRefresh');
+        await authContextRef.current.refreshSession();
       }
       
-      // 2. Reset Supabase connections
-      supabase.removeAllChannels();
-      
-      // 3. Test connection with simple query
-      const { error } = await supabase.from('users')
-        .select('count')
-        .limit(1)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error reconnecting to Supabase:', error);
-        if (error.message?.includes('JWT') || error.message?.includes('token')) {
-          // JWT error - session is expired
-          toast.error('Your session has expired. Redirecting to login...');
-          // Force logout through auth context
-          if (authContextRef.current?.logout) {
-            await authContextRef.current.logout();
-          }
-          return;
-        }
-        
-        // Other connection errors - show toast and continue trying
-        // But only if we've spent significant time trying to reconnect (>2 sec)
-        const reconnectStarted = Date.now() - (hiddenTimeRef.current || Date.now());
-        if (reconnectStarted > 2000) {
-          toast.error('Connection error. Retrying...');
-        }
-      }
-      
-      // 4. Recreate Supabase channel
-      const channel = supabase.channel('system');
-      channel.subscribe((status) => {
-        console.log(`Supabase channel status: ${status}`);
-      });
-      
-      // 5. Refresh all React Query data
-      // @ts-ignore
-      const queryClient = window.__REACT_QUERY_GLOBALINSTANCE;
-      if (queryClient) {
-        // Invalidate all queries to trigger refetching
-        await queryClient.invalidateQueries();
-        queryClient.refetchQueries();
-      }
-      
-      // 6. Update refresh timestamp to trigger re-renders
-      setLastRefreshTime(Date.now());
-      
-      console.log('Application refresh complete');
-      
-      // Allow network toasts again after a successful refresh
-      // We delay this slightly to avoid any race conditions
       setTimeout(() => {
-        tabSwitchState.allowNetworkToasts();
-      }, 500);
+        try {
+          supabase.channel('system').subscribe();
+          console.log('Reconnected Supabase channels');
+        } catch (error) {
+          console.error('Error reconnecting Supabase channels:', error);
+        }
+      }, 100);
     } catch (error) {
-      console.error('Error during application refresh:', error);
-      
-      // Only show error toast if we've been trying for a while
-      // to avoid flashing error messages during quick tab switches
-      const reconnectAttemptDuration = Date.now() - (hiddenTimeRef.current || Date.now());
-      if (reconnectAttemptDuration > 2000) {
-        toast.error('Error refreshing data. Please reload the page.');
-      }
-      
-      // Re-enable network toasts after failed refresh attempt
-      setTimeout(() => {
-        tabSwitchState.allowNetworkToasts();
-      }, 500);
+      console.error('Error in forceRefresh:', error);
     }
   }, []);
 
-  // Set up session keep-alive functionality
-  useEffect(() => {
-    // Keep the session alive by pinging every 10 minutes
-    // This prevents session timeout during active use even if the tab is inactive
-    const KEEP_ALIVE_INTERVAL = 600000; // 10 minutes
+  // Register a loading state from a component
+  const registerLoadingState = useCallback((id: string, isLoading: boolean) => {
+    loadingStatesRef.current[id] = isLoading;
     
-    const setupKeepAlive = async () => {
-      keepAliveIntervalRef.current = setInterval(async () => {
-        // Only ping if the user is authenticated
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          console.log('Executing session keep-alive ping');
-          try {
-            // Simple lightweight query to keep the connection active
-            await supabase.from('users').select('count').limit(1);
-          } catch (error) {
-            console.error('Keep-alive ping failed:', error);
-          }
-        } else {
-          // No active session, clear the interval
-          if (keepAliveIntervalRef.current) {
-            clearInterval(keepAliveIntervalRef.current);
-            keepAliveIntervalRef.current = null;
-          }
-        }
-      }, KEEP_ALIVE_INTERVAL);
-    };
-    
-    setupKeepAlive();
-    
-    return () => {
-      if (keepAliveIntervalRef.current) {
-        clearInterval(keepAliveIntervalRef.current);
-      }
-    };
+    // If anything is loading, set a timeout to clear all loading states
+    // This prevents infinite loading states
+    if (isLoading && !timeoutRef.current) {
+      timeoutRef.current = setTimeout(() => {
+        console.warn("Forcing loading states to clear after timeout");
+        Object.keys(loadingStatesRef.current).forEach(key => {
+          loadingStatesRef.current[key] = false;
+        });
+        timeoutRef.current = null;
+      }, 10000); // 10 second timeout
+    } else if (!isLoading && timeoutRef.current) {
+      // If nothing is loading anymore, clear the timeout
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
   }, []);
-  
+
+  // Register auth context for refreshing
+  const registerAuthContext = useCallback((authContext: any) => {
+    console.log('Auth context registered for visibility refresh');
+    authContextRef.current = authContext;
+  }, []);
+
   // Handle document visibility changes - with improved reconnection
   useEffect(() => {
-    const pendingToastsRef = useRef<Set<string>>(new Set());
-    const reconnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    
-    // Create a safer toast interceptor without overriding built-in functions
-    const networkErrorFilter = (message: string) => {
-      if (typeof message !== 'string') return true;
-      
-      // Check if this is a network error and if we're suppressing toasts
-      if (
-        pendingToastsRef.current.size > 0 &&
-        (
-          message.includes('network') || 
-          message.includes('connection') || 
-          message.includes('timeout') ||
-          message.includes('timed out')
-        )
-      ) {
-        console.log('Suppressing network error toast during reconnection:', message);
-        return false; // Don't show this toast
-      }
-      
-      return true; // Show the toast
-    };
-    
-    // Register the network error filter with tabSwitchState
-    tabSwitchState.registerToastFilter(networkErrorFilter);
-    
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         const currentTime = Date.now();
         const timeHidden = hiddenTimeRef.current ? currentTime - hiddenTimeRef.current : 0;
-        console.log(`Tab became visible after ${timeHidden}ms`);
         
-        // Clear any loading states to prevent UI from being stuck
-        Object.keys(loadingStatesRef.current).forEach(key => {
-          loadingStatesRef.current[key] = false;
-        });
-        
-        // For very brief tab changes (< 1 second), don't trigger a refresh or reconnection
-        // This prevents unnecessary network errors for quick tab switches or F12 dev tools
+        // If the tab was hidden for less than 1 second, ignore it completely
+        // This helps with copy-paste operations that briefly change tab focus
         if (timeHidden < 1000) {
-          console.log('Tab hidden for less than 1 second, skipping refresh');
+          console.log(`Tab was only hidden for ${timeHidden}ms - ignoring visibility change`);
           hiddenTimeRef.current = null;
           return;
         }
         
-        // Suppress network error toasts for a short period after tab change
-        // This prevents temporary connection error toasts from flashing during reconnection
-        const toastId = 'tab-switch-reconnecting';
+        console.log(`Tab became visible after ${timeHidden}ms`);
         
-        // Always refresh data on tab focus for admin pages
-        // Check the current path to see if we're on an admin page
-        const currentPath = window.location.pathname;
-        const isAdminPage = currentPath.includes('/admin');
+        // Only clear loading states without refreshing data
+        Object.keys(loadingStatesRef.current).forEach(key => {
+          loadingStatesRef.current[key] = false;
+        });
         
-        // For admin pages, always refresh data
-        // For non-admin pages, only refresh after a significant time away (5 seconds)
-        if (isAdminPage || timeHidden > 5000) {
-          console.log(`${isAdminPage ? 'Admin page' : 'Page'} detected, refreshing data after tab switch`);
-          
-          // Mark that we're in the process of reconnecting
-          pendingToastsRef.current.add(toastId);
-          
-          // Add short delay before refresh to ensure UI is responsive first
-          // and to allow initial network connections to resume
-          setTimeout(() => {
-            forceRefresh().finally(() => {
-              // After refresh completes (success or failure), remove from pending toasts
-              pendingToastsRef.current.delete(toastId);
-            });
-          }, 300);
-          
-          // Clear any network error toast after reconnection grace period
-          // This ensures users don't see a persistent error if reconnection was successful
-          if (reconnectionTimeoutRef.current) {
-            clearTimeout(reconnectionTimeoutRef.current);
-          }
-          
-          reconnectionTimeoutRef.current = setTimeout(() => {
-            // After 5 seconds, allow network error toasts again
-            pendingToastsRef.current.delete(toastId);
-            reconnectionTimeoutRef.current = null;
-          }, 5000);
-        }
-        
-        // Show stale banner only for very long absences
+        // Only mark app as stale after substantial inactivity (>30 seconds)
         if (timeHidden > 30000) {
+          console.log('App marked as stale after long inactivity');
           setAppStale(true);
-          toast.info('Tab was inactive for a while. Click refresh if functionality is limited.');
+          toast.info('Tab was inactive for a while. Click buttons again or refresh the page if functionality is limited.');
+          
+          // Try to reconnect Supabase
+          try {
+            // Try to refresh the auth session
+            if (authContextRef.current && authContextRef.current.refreshSession) {
+              console.log('Refreshing auth session after tab visibility change');
+              const refreshed = await authContextRef.current.refreshSession();
+              if (refreshed) {
+                console.log('Auth session refreshed successfully');
+              } else {
+                console.warn('Auth session refresh failed');
+              }
+            }
+            
+            supabase.removeAllChannels();
+            setTimeout(() => {
+              supabase.channel('system').subscribe();
+              console.log('Attempted to reconnect Supabase after inactivity');
+            }, 100);
+          } catch (err) {
+            console.error('Error reconnecting after inactivity:', err);
+          }
         }
         
         hiddenTimeRef.current = null;
       } else {
-        // Tab is being hidden
+        // Tab is being hidden, store the current time
         hiddenTimeRef.current = Date.now();
       }
     };
-    
+
+    // Listen for visibility changes
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      
-      // Remove our toast filter when unmounting
-      tabSwitchState.removeToastFilter(networkErrorFilter);
-      
-      if (reconnectionTimeoutRef.current) {
-        clearTimeout(reconnectionTimeoutRef.current);
+      // Clear any pending timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
     };
-  }, [forceRefresh]);
+  }, []);
 
   return (
     <VisibilityContext.Provider value={{ 
@@ -367,11 +236,8 @@ const RoleBasedRedirect = () => {
 // Main App
 const AppContent = () => {
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-  const { forceRefresh } = useContext(VisibilityContext);
-  const queryClient = useQueryClient();
-  const reconnectAttemptRef = useRef(0);
 
-  // Monitor connection to Supabase with enhanced error recovery
+  // Monitor connection to Supabase
   useEffect(() => {
     let pingInterval: NodeJS.Timeout;
     let mounted = true;
@@ -387,54 +253,22 @@ const AppContent = () => {
             console.warn('Supabase connection lost:', error.message);
             setConnectionStatus('offline');
             toast.error('Connection to server lost. Retrying...');
-            
-            // Schedule more frequent reconnection attempts
-            reconnectAttemptRef.current = 0;
-            scheduleReconnect();
           }
         } else {
           if (mounted && connectionStatus !== 'online') {
             if (connectionStatus === 'offline') {
               toast.success('Connection to server restored');
-              
-              // Force a complete data refresh when connection is restored
-              forceRefresh();
             }
             setConnectionStatus('online');
           }
-          // Reset reconnection attempts counter on successful connection
-          reconnectAttemptRef.current = 0;
         }
       } catch (error) {
         if (mounted && connectionStatus !== 'offline') {
           console.error('Error checking connection:', error);
           setConnectionStatus('offline');
           toast.error('Connection to server lost. Retrying...');
-          
-          // Schedule reconnection attempts
-          reconnectAttemptRef.current = 0;
-          scheduleReconnect();
         }
       }
-    };
-    
-    // Schedule reconnection with exponential backoff
-    const scheduleReconnect = () => {
-      // Increase attempts counter
-      reconnectAttemptRef.current += 1;
-      
-      // Calculate delay with exponential backoff (1s, 2s, 4s, 8s, max 30s)
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 30000);
-      
-      console.log(`Scheduling reconnection attempt ${reconnectAttemptRef.current} in ${delay}ms`);
-      
-      // Schedule reconnection attempt
-      setTimeout(() => {
-        if (mounted && connectionStatus === 'offline') {
-          console.log(`Attempting reconnection #${reconnectAttemptRef.current}...`);
-          checkConnection();
-        }
-      }, delay);
     };
 
     // Initial check
@@ -443,22 +277,11 @@ const AppContent = () => {
     // Set up interval to periodically check connection
     pingInterval = setInterval(checkConnection, 30000); // Check every 30 seconds
 
-    // Add an event listener for the visibility change event to enhance tab switching behavior
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('Tab became visible, checking connection immediately');
-        checkConnection();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       mounted = false;
       clearInterval(pingInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [connectionStatus, forceRefresh, queryClient]);
+  }, [connectionStatus]);
 
   return (
     <>

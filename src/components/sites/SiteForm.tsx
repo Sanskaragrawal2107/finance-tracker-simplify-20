@@ -71,60 +71,33 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const supervisorIdRef = useRef<string | undefined>(supervisorId);
   // Create lastActiveTimestamp ref at component level, not inside useEffect
   const lastActiveTimestampRef = useRef(Date.now());
-  // Add a ref to track form submission status
-  const isSubmittingRef = useRef(false);
   
   // Update the ref whenever the prop changes
   useEffect(() => {
     supervisorIdRef.current = supervisorId;
   }, [supervisorId]);
   
-  // Single combined visibility change handler to avoid multiple listeners
+  // Add a safety timeout to prevent form getting stuck in loading state
   useEffect(() => {
-    // Minimum time (in ms) tab needs to be hidden before we consider it a "real" tab switch
-    // This prevents copy-paste operations from triggering the visibility change handler
-    const MIN_HIDDEN_TIME = 1000; // 1 second threshold
+    let timeoutId: NodeJS.Timeout | null = null;
     
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        // Check how long the tab was hidden
-        const currentTime = Date.now();
-        const inactiveTime = currentTime - lastActiveTimestampRef.current;
-        
-        // Remove the loading state reset to allow form submission to continue
-        // Only consider it a real tab switch if it was hidden for longer than the threshold
-        // AND the form is not currently submitting
-        if (inactiveTime > MIN_HIDDEN_TIME && !isSubmittingRef.current) {
-          // Check if we need to refresh the session (only if tab was hidden for >5 minutes)
-          if (inactiveTime > 300000) { // 5 minutes
-            console.log('Tab was hidden for over 5 minutes, checking session...');
-            try {
-              // Try to refresh the session
-              const { data, error } = await supabase.auth.refreshSession();
-              
-              if (error || !data?.session) {
-                console.warn('Session expired during inactivity:', error);
-                toast.error('Your session expired during inactivity. Please refresh the page to continue.');
-              } else {
-                console.log('Session refreshed successfully after inactivity');
-              }
-            } catch (err) {
-              console.error('Error refreshing session after inactivity:', err);
-            }
-          }
-        }
-        
-        lastActiveTimestampRef.current = currentTime;
-      } else if (document.visibilityState === 'hidden') {
-        lastActiveTimestampRef.current = Date.now();
+    // If form is in loading state, set a safety timeout to reset it
+    if (isLoading) {
+      console.log('Form loading state active, setting safety timeout');
+      timeoutId = setTimeout(() => {
+        console.warn('Form has been loading for too long, auto-resetting loading state');
+        setIsLoading(false);
+        toast.error('The form submission is taking longer than expected. The site may have been created but we lost connection. Please check before trying again.');
+      }, 20000); // 20 seconds is more than enough for any normal form submission
+    }
+    
+    // Clear timeout when component unmounts or loading state changes
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
     };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
+  }, [isLoading]);
   
   // Default form values
   const defaultValues: Partial<SiteFormValues> = {
@@ -182,9 +155,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Improved form submission with better timeout handling
   const onFormSubmit = async (values: SiteFormValues) => {
-    // Set our submission tracking ref to true
-    isSubmittingRef.current = true;
-    
     try {
       setIsLoading(true);
       console.log('Form submission started with values:', values);
@@ -193,22 +163,13 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
       console.log('Using supervisorId:', currentSupervisorId);
       
-      // Ensure the Supabase connection is active before submitting
-      try {
-        // Quick connection check
-        await supabase.from('users').select('count').limit(1);
-      } catch (connectionError) {
-        console.error('Connection error before form submission:', connectionError);
-        // Try to refresh the connection
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      
       // First check if session is valid
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session) {
         console.error('Session error or no session:', sessionError);
         toast.error('Your session has expired. Please refresh the page and try again.');
+        setIsLoading(false);
         return;
       }
       
@@ -229,73 +190,56 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Submitting site data to Supabase:', siteData);
       
-      // Use a more robust approach with timeout handling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
+      // Insert the site with a simpler approach - no timeoutPromise or race conditions
+      const { data, error } = await supabase
+        .from('sites')
+        .insert([siteData])
+        .select();
       
-      try {
-        // Insert the site with abort signal for timeout handling
-        const { data, error } = await supabase
-          .from('sites')
-          .insert([siteData])
-          .select()
-          .abortSignal(controller.signal);
-          
-        clearTimeout(timeoutId);
+      if (error) {
+        console.error('Error creating site:', error);
         
-        if (error) {
-          console.error('Error creating site:', error);
-          
-          if (error.code === '23505') { // Unique constraint violation
-            if (error.message?.includes('name')) {
-              toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
-            } else if (error.message?.includes('pos_no')) {
-              toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
-            } else {
-              toast.error('A site with these details already exists');
-            }
+        if (error.code === '23505') { // Unique constraint violation
+          if (error.message?.includes('name')) {
+            toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
+          } else if (error.message?.includes('pos_no')) {
+            toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
           } else {
-            toast.error('Failed to create site: ' + error.message);
+            toast.error('A site with these details already exists');
           }
-          
-          return;
-        }
-        
-        if (!data || data.length === 0) {
-          console.warn('No data returned from site creation');
-          toast.error('No data returned from site creation. Please try again.');
-          return;
-        }
-        
-        console.log('Site created successfully:', data);
-        
-        // Create uppercase version of values for parent component
-        const uppercaseValues = {
-          ...values,
-          name: values.name.toUpperCase(),
-          jobName: values.jobName.toUpperCase(),
-          posNo: values.posNo.toUpperCase(),
-          location: values.location.toUpperCase(),
-          supervisorId: currentSupervisorId
-        };
-        
-        // First call onSubmit to notify parent component 
-        onSubmit(uppercaseValues);
-        
-        // Show success message
-        toast.success('Site created successfully');
-        
-        // Close the dialog and reset form
-        onClose();
-      } catch (abortError) {
-        clearTimeout(timeoutId);
-        if (abortError.name === 'AbortError') {
-          console.error('Site creation request timed out');
-          toast.error('Request timed out. Please try again.');
         } else {
-          throw abortError; // Re-throw for the outer catch
+          toast.error('Failed to create site: ' + error.message);
         }
+        
+        return;
       }
+      
+      if (!data || data.length === 0) {
+        console.warn('No data returned from site creation');
+        toast.error('No data returned from site creation. Please try again.');
+        return;
+      }
+      
+      console.log('Site created successfully:', data);
+      
+      // Create uppercase version of values for parent component
+      const uppercaseValues = {
+        ...values,
+        name: values.name.toUpperCase(),
+        jobName: values.jobName.toUpperCase(),
+        posNo: values.posNo.toUpperCase(),
+        location: values.location.toUpperCase(),
+        supervisorId: currentSupervisorId
+      };
+      
+      // First call onSubmit to notify parent component
+      onSubmit(uppercaseValues);
+      
+      // Show success message
+      toast.success('Site created successfully');
+      
+      // Close the dialog and reset form
+      onClose();
     } catch (error: any) {
       console.error('Exception in site creation:', error);
       
@@ -306,9 +250,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         toast.error('Error creating site: ' + (error.message || 'Unknown error'));
       }
     } finally {
-      // Always reset loading state and submission tracking
+      // Always reset loading state
       setIsLoading(false);
-      isSubmittingRef.current = false;
     }
   };
 

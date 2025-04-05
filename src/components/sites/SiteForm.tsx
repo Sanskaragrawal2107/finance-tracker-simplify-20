@@ -173,96 +173,104 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   // Improved form submission with timeout handling and session verification
   const onFormSubmit = async (values: SiteFormValues) => {
     setIsLoading(true);
+    console.log('Form submission started with values:', values);
+    
+    // Log supervisorId information to help debug
+    console.log('SupervisorId details:', {
+      formValue: values.supervisorId,
+      refValue: supervisorIdRef.current,
+      propValue: supervisorId
+    });
+    
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     console.log('Creating site with supervisorId:', currentSupervisorId);
-    const abortController = new AbortController();
+    
+    // Setup timeout but don't use AbortController as it might be causing issues
     const timeoutId = setTimeout(() => {
-      console.log('Site creation request timed out after 15 seconds');
-      abortController.abort();
+      console.log('Site creation request timeout triggered after 15 seconds');
+      setIsLoading(false); // Force loading state to false if timeout occurs
+      toast.error('Request timed out. Please try again.');
     }, 15000);
+    
     try {
+      // Check session first
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
       if (sessionError || !session) {
-        toast.error('Your session has expired. Please refresh the page to log in again.');
         console.error('Session error:', sessionError);
+        toast.error('Your session has expired. Please refresh the page to log in again.');
+        setIsLoading(false);
+        clearTimeout(timeoutId);
         return;
       }
-      const uppercaseValues = {
-        ...values,
+      
+      // Prepare site data with uppercase values
+      const siteData = {
         name: values.name.toUpperCase(),
-        jobName: values.jobName.toUpperCase(),
-        posNo: values.posNo.toUpperCase(),
+        job_name: values.jobName.toUpperCase(),
+        pos_no: values.posNo.toUpperCase(),
         location: values.location.toUpperCase(),
-        supervisorId: currentSupervisorId
+        start_date: values.startDate.toISOString(),
+        completion_date: values.completionDate ? values.completionDate.toISOString() : null,
+        supervisor_id: currentSupervisorId,
+        created_by: user?.id || null,
+        is_completed: false,
+        funds: 0,
+        total_funds: 0
       };
-      let response;
-      try {
-        response = await supabase
-          .from('sites')
-          .insert([{
-            name: uppercaseValues.name,
-            job_name: uppercaseValues.jobName,
-            pos_no: uppercaseValues.posNo,
-            location: uppercaseValues.location,
-            start_date: uppercaseValues.startDate.toISOString(),
-            completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
-            supervisor_id: currentSupervisorId,
-            created_by: user?.id || null,
-            is_completed: false,
-            funds: 0,
-            total_funds: 0
-          }])
-          .select()
-          .abortSignal(abortController.signal);
-      } catch (signalError) {
-        console.warn('AbortSignal not supported, falling back to standard request', signalError);
-        response = await supabase
-          .from('sites')
-          .insert([{
-            name: uppercaseValues.name,
-            job_name: uppercaseValues.jobName,
-            pos_no: uppercaseValues.posNo,
-            location: uppercaseValues.location,
-            start_date: uppercaseValues.startDate.toISOString(),
-            completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
-            supervisor_id: currentSupervisorId,
-            created_by: user?.id || null,
-            is_completed: false,
-            funds: 0,
-            total_funds: 0
-          }])
-          .select();
-      }
-      const { data, error } = response;
+      
+      console.log('Submitting site data to Supabase:', siteData);
+      
+      // Simplify request - don't use abort signal
+      const { data, error } = await supabase
+        .from('sites')
+        .insert([siteData])
+        .select();
+      
+      // Clear timeout as request has completed
+      clearTimeout(timeoutId);
+      
       if (error) {
         console.error('Error creating site:', error);
+        
         if (error.code === 'PGRST301' || error.code === '401' || error.message?.includes('JWT')) {
           toast.error('Your session has expired. Please refresh the page to log in again.');
         } else if (error.code === '23505') {
           if (error.message?.includes('name')) {
-            toast.error(`A site with the name "${uppercaseValues.name}" already exists`);
+            toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
           } else if (error.message?.includes('pos_no')) {
-            toast.error(`A site with the P.O. number "${uppercaseValues.posNo}" already exists`);
+            toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
           } else {
             toast.error('A site with these details already exists');
           }
         } else {
           toast.error('Failed to create site: ' + error.message);
         }
-        return;
-      }
-      if (data) {
+      } else if (data) {
         console.log('Site created successfully:', data);
-        onClose();
-        form.reset();
-        onSubmit(uppercaseValues);
+        
+        // Close form and reset
+        const uppercaseValues = {
+          ...values,
+          name: values.name.toUpperCase(),
+          jobName: values.jobName.toUpperCase(),
+          posNo: values.posNo.toUpperCase(),
+          location: values.location.toUpperCase(),
+          supervisorId: currentSupervisorId
+        };
+        
         toast.success('Site created successfully');
+        onSubmit(uppercaseValues);
+        onClose();
+      } else {
+        // This should never happen, but just in case
+        console.warn('No data returned but no error either');
+        toast.error('Site creation returned no data. Please try again.');
       }
     } catch (error: any) {
       console.error('Exception in site creation:', error);
-      if (error.name === 'AbortError') {
-        toast.error('Site creation timed out. Please check your connection and try again.');
-      } else if (error.message?.includes('fetch')) {
+      
+      if (error.message?.includes('fetch')) {
         toast.error('Network error. Please check your connection and try again.');
       } else if (error.message?.includes('auth') || error.message?.includes('session')) {
         toast.error('Your session has expired. Please refresh the page to log in again.');
@@ -270,6 +278,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
       }
     } finally {
+      console.log('Form submission completed');
       setIsLoading(false);
       clearTimeout(timeoutId);
     }

@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { UserRole, AuthUser } from '@/lib/types';
 import { VisibilityContext } from '@/App';
+import { fetchWithRetry } from '@/utils/dataFetching';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -63,28 +64,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refreshSession = useCallback(async (): Promise<boolean> => {
     try {
       console.log('Manually refreshing auth session');
-      const { data, error } = await supabase.auth.refreshSession();
       
-      if (error) {
-        console.error('Error refreshing session:', error);
+      // Use fetchWithRetry to add resilience to the session refresh
+      const sessionData = await fetchWithRetry(
+        async () => {
+          const { data, error } = await supabase.auth.refreshSession();
+          if (error) throw error;
+          return data;
+        },
+        { 
+          maxRetries: 2, 
+          showToast: false,
+          context: 'authentication session'
+        }
+      );
+      
+      if (!sessionData || !sessionData.session) {
+        console.warn('No valid session after refresh attempt');
         return false;
       }
 
-      if (data?.session) {
-        // Fetch user profile with the refreshed token
-        if (data.session.user.id) {
-          const profile = await fetchUserProfile(data.session.user.id);
-          if (profile) {
-            setUser(profile);
-            console.log('Auth session refreshed successfully');
-            return true;
-          }
+      // Fetch user profile with the refreshed token
+      if (sessionData.session.user.id) {
+        // Use fetchWithRetry for profile fetch too
+        const profile = await fetchWithRetry(
+          () => fetchUserProfile(sessionData.session.user.id), 
+          { showToast: false, context: 'user profile' }
+        );
+        
+        if (profile) {
+          setUser(profile);
+          console.log('Auth session refreshed successfully');
+          return true;
+        } else {
+          console.warn('Profile fetch failed after session refresh');
         }
       }
       
       return false;
     } catch (err) {
       console.error('Error in refreshSession:', err);
+      // Don't show a toast here - this could be called silently in the background
       return false;
     }
   }, []);

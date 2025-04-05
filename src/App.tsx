@@ -47,15 +47,25 @@ export const VisibilityContext = createContext<{
   registerAuthContext: () => {}
 });
 
-// Visibility Provider component to make visibility state available app-wide
+// Visibility Refresh Provider component - enhanced with session keep-alive
 const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
-  const loadingStatesRef = useRef<Record<string, boolean>>({});
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [appStale, setAppStale] = useState(false);
-  const hiddenTimeRef = useRef<number | null>(null);
+  const loadingStatesRef = useRef<Record<string, boolean>>({});
   const authContextRef = useRef<any>(null);
-
+  const hiddenTimeRef = useRef<number | null>(null);
+  const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // This function will be called by components to register their loading state
+  const registerLoadingState = useCallback((id: string, isLoading: boolean) => {
+    loadingStatesRef.current[id] = isLoading;
+  }, []);
+  
+  // Register the auth context so we can refresh sessions
+  const registerAuthContext = useCallback((authContext: any) => {
+    authContextRef.current = authContext;
+  }, []);
+  
   // Clear all loading states and force a refresh only when explicitly called
   const forceRefresh = useCallback(async () => {
     console.log('Forcing application refresh...');
@@ -65,86 +75,107 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       loadingStatesRef.current[key] = false;
     });
     
-    // Force component refresh by updating the refresh time
-    setLastRefreshTime(Date.now());
-    
     // Reset stale state
     setAppStale(false);
     
-    // Reconnect Supabase channels
     try {
-      console.log('Reconnecting Supabase channels and connections...');
-      // First remove any existing channels
+      // 1. Check and refresh auth session first
+      if (authContextRef.current?.refreshSession) {
+        const sessionValid = await authContextRef.current.refreshSession();
+        if (!sessionValid) {
+          console.warn('Session invalid during refresh, redirecting to login');
+          // Redirect to login page - auth provider will handle this
+          return;
+        }
+      }
+      
+      // 2. Reset Supabase connections
       supabase.removeAllChannels();
       
-      // Execute a ping query to establish a new connection
-      await supabase.from('users').select('count').limit(1).single();
+      // 3. Test connection with simple query
+      const { error } = await supabase.from('users')
+        .select('count')
+        .limit(1)
+        .maybeSingle();
       
-      // Create a new channel
+      if (error) {
+        console.error('Error reconnecting to Supabase:', error);
+        if (error.message?.includes('JWT') || error.message?.includes('token')) {
+          // JWT error - session is expired
+          toast.error('Your session has expired. Redirecting to login...');
+          // Force logout through auth context
+          if (authContextRef.current?.logout) {
+            await authContextRef.current.logout();
+          }
+          return;
+        }
+        
+        // Other connection errors - show toast and continue trying
+        toast.error('Connection error. Retrying...');
+      }
+      
+      // 4. Recreate Supabase channel
       const channel = supabase.channel('system');
       channel.subscribe((status) => {
         console.log(`Supabase channel status: ${status}`);
       });
       
-      console.log('Supabase connections restored');
-    } catch (error) {
-      console.error('Error reconnecting Supabase:', error);
-    }
-    
-    try {
-      // Try to refresh the auth session too
-      if (authContextRef.current && authContextRef.current.refreshSession) {
-        console.log('Refreshing auth session through forceRefresh');
-        await authContextRef.current.refreshSession();
-      }
-    } catch (error) {
-      console.error('Error refreshing session in forceRefresh:', error);
-    }
-    
-    // Find the QueryClient instance - this addition will help refresh data
-    try {
-      // This will access the window object to find React Query's client
+      // 5. Refresh all React Query data
       // @ts-ignore
       const queryClient = window.__REACT_QUERY_GLOBALINSTANCE;
       if (queryClient) {
-        console.log('Found React Query client, invalidating all queries...');
-        queryClient.invalidateQueries();
+        // Invalidate all queries to trigger refetching
+        await queryClient.invalidateQueries();
         queryClient.refetchQueries();
       }
-    } catch (err) {
-      console.error('Error refreshing React Query cache:', err);
-    }
-    
-    console.log('Application refresh complete');
-  }, []);
-
-  // Register a loading state from a component
-  const registerLoadingState = useCallback((id: string, isLoading: boolean) => {
-    loadingStatesRef.current[id] = isLoading;
-    
-    // If anything is loading, set a timeout to clear all loading states
-    // This prevents infinite loading states
-    if (isLoading && !timeoutRef.current) {
-      timeoutRef.current = setTimeout(() => {
-        console.warn("Forcing loading states to clear after timeout");
-        Object.keys(loadingStatesRef.current).forEach(key => {
-          loadingStatesRef.current[key] = false;
-        });
-        timeoutRef.current = null;
-      }, 10000); // 10 second timeout
-    } else if (!isLoading && timeoutRef.current) {
-      // If nothing is loading anymore, clear the timeout
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+      
+      // 6. Update refresh timestamp to trigger re-renders
+      setLastRefreshTime(Date.now());
+      
+      console.log('Application refresh complete');
+    } catch (error) {
+      console.error('Error during application refresh:', error);
+      toast.error('Error refreshing data. Please reload the page.');
     }
   }, []);
 
-  // Register auth context for refreshing
-  const registerAuthContext = useCallback((authContext: any) => {
-    console.log('Auth context registered for visibility refresh');
-    authContextRef.current = authContext;
+  // Set up session keep-alive functionality
+  useEffect(() => {
+    // Keep the session alive by pinging every 10 minutes
+    // This prevents session timeout during active use even if the tab is inactive
+    const KEEP_ALIVE_INTERVAL = 600000; // 10 minutes
+    
+    const setupKeepAlive = async () => {
+      keepAliveIntervalRef.current = setInterval(async () => {
+        // Only ping if the user is authenticated
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          console.log('Executing session keep-alive ping');
+          try {
+            // Simple lightweight query to keep the connection active
+            await supabase.from('users').select('count').limit(1);
+          } catch (error) {
+            console.error('Keep-alive ping failed:', error);
+          }
+        } else {
+          // No active session, clear the interval
+          if (keepAliveIntervalRef.current) {
+            clearInterval(keepAliveIntervalRef.current);
+            keepAliveIntervalRef.current = null;
+          }
+        }
+      }, KEEP_ALIVE_INTERVAL);
+    };
+    
+    setupKeepAlive();
+    
+    return () => {
+      if (keepAliveIntervalRef.current) {
+        clearInterval(keepAliveIntervalRef.current);
+      }
+    };
   }, []);
-
+  
   // Handle document visibility changes - with improved reconnection
   useEffect(() => {
     const handleVisibilityChange = async () => {
@@ -158,67 +189,41 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           loadingStatesRef.current[key] = false;
         });
         
-        // Force data refresh after ANY tab switch to ensure data is always fresh
-        // This resolves issues where admin page data isn't loading after tab switches
-        if (timeHidden > 1000) { // Only do this for actual tab switches (more than 1 second)
-          console.log('Forcing data refresh after tab switch');
+        // Always refresh data on tab focus for admin pages
+        // Check the current path to see if we're on an admin page
+        const currentPath = window.location.pathname;
+        const isAdminPage = currentPath.includes('/admin');
+        
+        // For admin pages, always refresh data
+        // For non-admin pages, only refresh after a significant time away (5 seconds)
+        if (isAdminPage || timeHidden > 5000) {
+          console.log(`${isAdminPage ? 'Admin page' : 'Page'} detected, refreshing data after tab switch`);
           
-          // Try to reconnect Supabase and refresh data
-          try {
-            // Execute a simple query to wake up the connection
-            await supabase.from('users').select('count').limit(1).single();
-            
-            // Immediately force a refresh to reload all data
-            setTimeout(() => {
-              forceRefresh();
-            }, 100);
-            
-            // Try to refresh the auth session
-            if (authContextRef.current && authContextRef.current.refreshSession) {
-              console.log('Refreshing auth session after tab visibility change');
-              const refreshed = await authContextRef.current.refreshSession();
-              if (refreshed) {
-                console.log('Auth session refreshed successfully');
-              } else {
-                console.warn('Auth session refresh failed');
-              }
-            }
-          } catch (err) {
-            console.error('Error reconnecting after tab switch:', err);
-            // Still try to force refresh even if the initial reconnection failed
-            setTimeout(() => {
-              forceRefresh();
-            }, 500);
-          }
+          // Add short delay before refresh to ensure UI is responsive first
+          setTimeout(() => {
+            forceRefresh();
+          }, 100);
         }
         
-        // Show stale data banner only for very long absences (more than 30 seconds)
+        // Show stale banner only for very long absences
         if (timeHidden > 30000) {
-          console.log('App marked as stale after long inactivity');
           setAppStale(true);
-          toast.info('Tab was inactive for a while. Click buttons again or refresh the page if functionality is limited.');
-          
-          // Additional reconnection logic for long absences already exists below
+          toast.info('Tab was inactive for a while. Click refresh if functionality is limited.');
         }
         
         hiddenTimeRef.current = null;
       } else {
-        // Tab is being hidden, store the current time
+        // Tab is being hidden
         hiddenTimeRef.current = Date.now();
       }
     };
-
-    // Listen for visibility changes
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      // Clear any pending timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
     };
-  }, []);
+  }, [forceRefresh]);
 
   return (
     <VisibilityContext.Provider value={{ 

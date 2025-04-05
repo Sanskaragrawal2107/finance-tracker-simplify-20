@@ -92,7 +92,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Check active session and fetch user data on mount
   useEffect(() => {
     let mounted = true;
-    let timeoutId: NodeJS.Timeout;
+    // Remove the timeout that causes issues
+    // let timeoutId: NodeJS.Timeout;
     
     const checkSession = async () => {
       try {
@@ -140,12 +141,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     // Set a safety timeout to ensure loading state is reset even if checkSession hangs
-    timeoutId = setTimeout(() => {
-      if (mounted && loading) {
-        console.warn("Auth check timed out after 5 seconds, forcing loading state to false");
-        setLoading(false);
-      }
-    }, 5000);
+    // Comment out the timeout that's causing issues
+    // timeoutId = setTimeout(() => {
+    //   if (mounted && loading) {
+    //     console.warn("Auth check timed out after 5 seconds, forcing loading state to false");
+    //     setLoading(false);
+    //   }
+    // }, 5000);
 
     checkSession();
 
@@ -264,7 +266,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       mounted = false;
-      clearTimeout(timeoutId);
+      // if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };

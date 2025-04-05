@@ -45,16 +45,6 @@ const AdminDashboard: React.FC = () => {
       setLoadingSupervisors(true);
     }
     
-    const fetchTimeout = setTimeout(() => {
-      console.warn('Supervisor data fetch timeout after 10 seconds');
-      if (isInitialLoad) {
-        setInitialLoading(false);
-      } else {
-        setLoadingSupervisors(false);
-      }
-      toast.error('Network request timeout. Please try again.');
-    }, 10000);
-    
     try {
       const { data: supervisorsData, error: supervisorsError } = await supabase
         .from('users')
@@ -110,8 +100,6 @@ const AdminDashboard: React.FC = () => {
       setSupervisorsList([]);
       setSupervisorStats({});
     } finally {
-      clearTimeout(fetchTimeout);
-      
       if (isInitialLoad) {
         setTimeout(() => {
           setInitialLoading(false);

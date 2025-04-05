@@ -2,7 +2,7 @@ import React, { useEffect, useState, createContext, useContext, useRef, useCallb
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
@@ -228,6 +228,52 @@ const RoleBasedRedirect = () => {
 // Main App
 const AppContent = () => {
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+  const [lastVisibilityChange, setLastVisibilityChange] = useState(Date.now());
+  const queryClient = useQueryClient();
+
+  // Handle tab visibility changes to refresh data when returning to the app
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Tab has become visible again
+        const now = Date.now();
+        const timeHidden = now - lastVisibilityChange;
+        
+        // Only refresh data if the tab was hidden for more than 5 seconds
+        // This prevents unnecessary refreshes during quick tab switches or copy-paste operations
+        if (timeHidden > 5000) {
+          console.log('Tab visible after being hidden for', timeHidden, 'ms - refreshing data');
+          
+          // Refresh query cache to reload data
+          queryClient.invalidateQueries();
+          
+          // Ping Supabase to ensure connection is active
+          const pingPromise = supabase.from('users').select('id').limit(1);
+          
+          // Use a then() handler with two callbacks instead of catch
+          pingPromise
+            .then(
+              (response) => {
+                console.log('Supabase connection restored after tab change');
+              },
+              (error) => {
+                console.error('Error reconnecting to Supabase after tab change:', error);
+              }
+            );
+        }
+      } else if (document.visibilityState === 'hidden') {
+        // Record when the tab was hidden
+        setLastVisibilityChange(Date.now());
+      }
+    };
+    
+    // Add visibility change event listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [lastVisibilityChange, queryClient]);
 
   // Monitor connection to Supabase
   useEffect(() => {

@@ -85,13 +85,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         const currentTime = Date.now();
         const inactiveTime = currentTime - lastActiveTimestampRef.current;
         
-        // Reset loading state if a form submission was in progress
-        if (isLoading) {
-          console.log('Tab visible again while form was loading, resetting state');
-          setIsLoading(false);
-          toast.error('Form submission interrupted by tab switch. Please try again.');
-        }
-        
+        // Remove the loading state reset to allow form submission to continue
         // Check if we need to refresh the session (only if tab was hidden for >5 minutes)
         if (inactiveTime > 300000) { // 5 minutes
           console.log('Tab was hidden for over 5 minutes, checking session...');
@@ -120,7 +114,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isLoading]);
+  }, []);
   
   // Default form values
   const defaultValues: Partial<SiteFormValues> = {

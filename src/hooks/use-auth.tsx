@@ -216,23 +216,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const timeHidden = currentTime - lastVisibilityChangeRef.current;
         lastVisibilityChangeRef.current = currentTime;
         
-        // If tab was hidden for more than 1 minute, refresh auth
+        // Only attempt session refresh if tab was hidden for a substantial time AND user exists
         if (timeHidden > 60000 && user) {
-          console.log(`Tab was hidden for ${timeHidden}ms, refreshing auth session`);
-          const refreshed = await refreshSession();
-          if (!refreshed) {
-            console.warn('Failed to refresh session on tab visibility change');
+          console.log(`Tab was hidden for ${timeHidden}ms, checking connectivity first`);
+          
+          // First check if we can connect to Supabase with a simple, fast query
+          // before attempting a full session refresh
+          try {
+            // Use a controller with a short timeout for the connectivity check
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
             
-            // Check if we can still access the API
-            try {
-              const { error } = await supabase.from('users').select('count').limit(1);
-              if (error) {
-                console.error('API connection test failed after tab switch:', error);
-                toast.error('Connection issues detected. Try refreshing the page.');
+            const { error } = await supabase
+              .from('users')
+              .select('count')
+              .limit(1)
+              .abortSignal(controller.signal);
+              
+            clearTimeout(timeoutId);
+            
+            // Only attempt session refresh if the connection test was successful
+            if (!error) {
+              console.log('Connection test successful, refreshing session');
+              const refreshed = await refreshSession();
+              if (!refreshed) {
+                console.warn('Session refresh failed, but connection is working');
+                // No need to show an error toast here since connection is working
               }
-            } catch (err) {
-              console.error('Error testing API connection:', err);
+            } else {
+              console.warn('Connection test failed after tab visibility change:', error);
+              // Show a gentle message that doesn't mention timeout specifically
+              toast.error('Connection issues detected. Try refreshing the page if you experience problems.');
             }
+          } catch (err) {
+            console.error('Error during connection test after tab switch:', err);
+            // No toast here to avoid being too noisy - we'll only show an error if actions fail
           }
         }
       } else {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -67,6 +67,30 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const { user } = useAuth();
   
+  // Add a ref to capture the supervisorId to preserve it during tab switching
+  const supervisorIdRef = useRef<string | undefined>(supervisorId);
+  
+  // Update the ref whenever the prop changes
+  useEffect(() => {
+    supervisorIdRef.current = supervisorId;
+  }, [supervisorId]);
+  
+  // Add global visibility handler to reset loading state on tab switch
+  useEffect(() => {
+    const globalVisibilityHandler = () => {
+      if (document.visibilityState === 'visible' && isLoading) {
+        console.log('Tab visible again while form was loading, resetting state');
+        setIsLoading(false);
+        toast.error('Form submission interrupted by tab switch. Please try again.');
+      }
+    };
+    
+    document.addEventListener('visibilitychange', globalVisibilityHandler);
+    return () => {
+      document.removeEventListener('visibilitychange', globalVisibilityHandler);
+    };
+  }, [isLoading]);
+  
   // Default form values
   const defaultValues: Partial<SiteFormValues> = {
     startDate: new Date(),
@@ -118,6 +142,11 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     // Set loading state
     setIsLoading(true);
     
+    // Ensure we have the current supervisorId value by using both the ref and the form values
+    const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
+    
+    console.log('Creating site with supervisorId:', currentSupervisorId);
+    
     try {
       // Convert values to uppercase
       const uppercaseValues = {
@@ -126,22 +155,11 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         jobName: values.jobName.toUpperCase(),
         posNo: values.posNo.toUpperCase(),
         location: values.location.toUpperCase(),
+        // Ensure supervisorId is set correctly
+        supervisorId: currentSupervisorId
       };
       
-      // Add visibility change detection to reset loading state if tab is switched
-      const visibilityHandler = () => {
-        if (document.visibilityState === 'hidden') {
-          console.log('Tab hidden during site creation, will reset loading state when visible again');
-        } else if (document.visibilityState === 'visible' && isLoading) {
-          console.log('Tab visible again after being hidden during site creation, resetting loading state');
-          setIsLoading(false);
-          toast.error('Site creation interrupted. Please try again.');
-          document.removeEventListener('visibilitychange', visibilityHandler);
-        }
-      };
-      
-      // Add visibility change listener
-      document.addEventListener('visibilitychange', visibilityHandler);
+      // Remove individual visibility handler as we now have a global one
       
       // Extremely simplified site creation - no retries, just one attempt with a long timeout
       const { data, error } = await supabase
@@ -153,16 +171,13 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           location: uppercaseValues.location,
           start_date: uppercaseValues.startDate.toISOString(),
           completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
-          supervisor_id: uppercaseValues.supervisorId,
+          supervisor_id: currentSupervisorId,
           created_by: user?.id || null,
           is_completed: false,
           funds: 0,
           total_funds: 0
         }])
         .select();
-      
-      // Remove visibility change listener as operation has completed
-      document.removeEventListener('visibilitychange', visibilityHandler);
       
       // Handle errors
       if (error) {
@@ -204,8 +219,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     } finally {
       // Always turn off loading state
       setIsLoading(false);
-      // Cleanup any stray visibility listeners that might have been missed
-      document.removeEventListener('visibilitychange', (e) => console.log('Removed stray visibility listener'));
     }
   };
 

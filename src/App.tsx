@@ -333,6 +333,7 @@ const AppContent = () => {
 
 const App = () => {
   const [isInitialized, setIsInitialized] = useState(false);
+  const [initError, setInitError] = useState<Error | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -359,9 +360,10 @@ const App = () => {
         }
       } catch (error) {
         console.error("Error initializing application:", error);
-        // Don't block app initialization on schema refresh failure
+        // Store the error for display
         if (mounted) {
-          setIsInitialized(true);
+          setInitError(error instanceof Error ? error : new Error(String(error)));
+          setIsInitialized(true); // Still set initialized to true to prevent blank screen
         }
       }
     };
@@ -380,8 +382,14 @@ const App = () => {
       mounted = false;
       clearTimeout(maxTimeout);
     };
-  }, [isInitialized]);
+  }, []);
 
+  // Recovery function to reload the application
+  const handleReloadApp = () => {
+    console.log("Manually reloading application");
+    window.location.reload();
+  };
+  
   // Add event listeners to handle browser online/offline events
   useEffect(() => {
     const handleOnline = () => {
@@ -405,6 +413,26 @@ const App = () => {
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary mx-auto mb-4"></div>
           <h2 className="text-xl font-semibold mb-1">Loading application...</h2>
           <p className="text-muted-foreground">Please wait while we initialize the app</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show error screen if there was an initialization error
+  if (initError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center max-w-md p-6 border rounded-lg shadow-md bg-destructive/10">
+          <h2 className="text-xl font-semibold mb-3">Application Error</h2>
+          <p className="text-destructive mb-4">
+            There was an error loading the application. This might be due to connection issues or browser storage problems.
+          </p>
+          <Button onClick={handleReloadApp} className="mb-2">
+            Reload Application
+          </Button>
+          <p className="text-xs text-muted-foreground mt-4">
+            If the issue persists, try clearing your browser cache or using a different browser.
+          </p>
         </div>
       </div>
     );

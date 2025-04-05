@@ -92,13 +92,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Check active session and fetch user data on mount
   useEffect(() => {
     let mounted = true;
-    // Remove the timeout that causes issues
-    // let timeoutId: NodeJS.Timeout;
+    // Define a timeout that will prevent blocking the UI if auth check hangs
+    let timeoutId: NodeJS.Timeout;
     
     const checkSession = async () => {
       try {
         console.log("Checking for existing session...");
-        const { data: { session } } = await supabase.auth.getSession();
+        
+        // Use a timeout to prevent the auth check from hanging indefinitely
+        const checkPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error('Session check timed out'));
+          }, 3000); // 3 second timeout
+        });
+        
+        // Race the session check against the timeout
+        const sessionResult = await Promise.race([checkPromise, timeoutPromise]) as Awaited<typeof checkPromise>;
+        clearTimeout(timeoutId);
+        
+        const { data: { session } } = sessionResult;
         
         if (session && mounted) {
           console.log("Found existing session, fetching user profile");
@@ -125,6 +138,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // If we have a session but no profile, log this error
             if (mounted) {
               console.error("Session exists but no user profile found");
+              // Clear the potentially corrupted session
+              await supabase.auth.signOut({ scope: 'local' });
             }
           }
         } else {
@@ -132,6 +147,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error('Session check error:', error);
+        // Try to recover from auth errors by clearing local storage
+        if (error.message === 'Session check timed out' || 
+            (error.message && error.message.includes('JWT'))) {
+          console.warn('Auth error, attempting recovery by clearing local session');
+          try {
+            // Clear any local auth state that might be corrupted
+            localStorage.removeItem('supabase.auth.token');
+            await supabase.auth.signOut({ scope: 'local' });
+          } catch (clearError) {
+            console.error('Error clearing auth state:', clearError);
+          }
+        }
       } finally {
         if (mounted) {
           console.log("Initial auth check complete, setting loading to false");
@@ -141,13 +168,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     // Set a safety timeout to ensure loading state is reset even if checkSession hangs
-    // Comment out the timeout that's causing issues
-    // timeoutId = setTimeout(() => {
-    //   if (mounted && loading) {
-    //     console.warn("Auth check timed out after 5 seconds, forcing loading state to false");
-    //     setLoading(false);
-    //   }
-    // }, 5000);
+    timeoutId = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn("Auth check timed out after 5 seconds, forcing loading state to false");
+        setLoading(false);
+      }
+    }, 5000);
 
     checkSession();
 

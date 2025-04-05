@@ -51,6 +51,7 @@ interface SiteFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (values: SiteFormValues) => void;
+  supervisorId?: string; // Optional supervisor ID to pre-select
 }
 
 // Updated supervisor interface to match the actual database columns
@@ -62,7 +63,7 @@ interface Supervisor {
   name?: string; // Fallback if full_name doesn't exist
 }
 
-export default function SiteForm({ isOpen, onClose, onSubmit }: SiteFormProps) {
+export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: SiteFormProps) {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [startDateOpen, setStartDateOpen] = useState(false);
@@ -76,6 +77,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit }: SiteFormProps) {
   const defaultValues: Partial<SiteFormValues> = {
     startDate: new Date(),
     completionDate: null,
+    supervisorId: supervisorId || '',
   };
   
   // Handle visibility changes

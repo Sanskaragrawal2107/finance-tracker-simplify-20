@@ -91,6 +91,46 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     };
   }, [isLoading]);
   
+  // Add session refresh handler for tab visibility after inactivity
+  useEffect(() => {
+    const lastActiveTimestamp = useRef(Date.now());
+    
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        // Check how long the tab was hidden
+        const currentTime = Date.now();
+        const inactiveTime = currentTime - lastActiveTimestamp.current;
+        
+        // If tab was hidden for more than 5 minutes, check and refresh the session
+        if (inactiveTime > 300000) { // 5 minutes
+          console.log('Tab was hidden for over 5 minutes, checking session...');
+          try {
+            // Try to refresh the session
+            const { data, error } = await supabase.auth.refreshSession();
+            
+            if (error || !data.session) {
+              console.warn('Session expired during inactivity:', error);
+              toast.error('Your session expired during inactivity. Please refresh the page to continue.');
+            } else {
+              console.log('Session refreshed successfully after inactivity');
+            }
+          } catch (err) {
+            console.error('Error refreshing session after inactivity:', err);
+          }
+        }
+        
+        lastActiveTimestamp.current = currentTime;
+      } else if (document.visibilityState === 'hidden') {
+        lastActiveTimestamp.current = Date.now();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+  
   // Default form values
   const defaultValues: Partial<SiteFormValues> = {
     startDate: new Date(),
@@ -137,17 +177,33 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     fetchSupervisors();
   }, []);
   
-  // Simplified form submission
+  // Improved form submission with timeout handling and session verification
   const onFormSubmit = async (values: SiteFormValues) => {
-    // Set loading state
+    // Reset any previous errors
     setIsLoading(true);
     
-    // Ensure we have the current supervisorId value by using both the ref and the form values
+    // Ensure we have the current supervisorId value
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     
     console.log('Creating site with supervisorId:', currentSupervisorId);
     
+    // Create an AbortController to handle request timeout
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('Site creation request timed out after 15 seconds');
+      abortController.abort();
+    }, 15000); // 15 second timeout
+    
     try {
+      // Check if session is still valid before submitting
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        toast.error('Your session has expired. Please refresh the page to log in again.');
+        console.error('Session error:', sessionError);
+        return;
+      }
+      
       // Convert values to uppercase
       const uppercaseValues = {
         ...values,
@@ -155,13 +211,10 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         jobName: values.jobName.toUpperCase(),
         posNo: values.posNo.toUpperCase(),
         location: values.location.toUpperCase(),
-        // Ensure supervisorId is set correctly
         supervisorId: currentSupervisorId
       };
       
-      // Remove individual visibility handler as we now have a global one
-      
-      // Extremely simplified site creation - no retries, just one attempt with a long timeout
+      // Use the AbortController signal with the request
       const { data, error } = await supabase
         .from('sites')
         .insert([{
@@ -177,14 +230,19 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           funds: 0,
           total_funds: 0
         }])
-        .select();
+        .select()
+        .abortSignal(abortController.signal);
       
       // Handle errors
       if (error) {
         console.error('Error creating site:', error);
         
+        // Handle auth errors specifically
+        if (error.code === 'PGRST301' || error.code === '401' || error.message.includes('JWT')) {
+          toast.error('Your session has expired. Please refresh the page to log in again.');
+        }
         // Handle constraint violations
-        if (error.code === '23505') {
+        else if (error.code === '23505') {
           if (error.message.includes('name')) {
             toast.error(`A site with the name "${uppercaseValues.name}" already exists`);
           } else if (error.message.includes('pos_no')) {
@@ -215,10 +273,27 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
     } catch (error: any) {
       console.error('Exception in site creation:', error);
-      toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
+      
+      // Handle AbortError from timeout
+      if (error.name === 'AbortError') {
+        toast.error('Site creation timed out. Please check your connection and try again.');
+      } 
+      // Handle other fetch errors
+      else if (error.message?.includes('fetch')) {
+        toast.error('Network error. Please check your connection and try again.');
+      } 
+      // Handle session errors
+      else if (error.message?.includes('auth') || error.message?.includes('session')) {
+        toast.error('Your session has expired. Please refresh the page to log in again.');
+      } 
+      // Generic error
+      else {
+        toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
+      }
     } finally {
-      // Always turn off loading state
+      // Always turn off loading state and clean up
       setIsLoading(false);
+      clearTimeout(timeoutId);
     }
   };
 

@@ -129,6 +129,14 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     defaultValues,
   });
   
+  // Update form when supervisorId prop changes
+  useEffect(() => {
+    if (supervisorId) {
+      console.log('Updating form with supervisorId:', supervisorId);
+      form.setValue('supervisorId', supervisorId);
+    }
+  }, [supervisorId, form]);
+  
   // Simple fetch supervisors function - no connection checks
   const fetchSupervisors = async () => {
     try {

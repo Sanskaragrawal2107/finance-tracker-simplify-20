@@ -69,46 +69,37 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Add a ref to capture the supervisorId to preserve it during tab switching
   const supervisorIdRef = useRef<string | undefined>(supervisorId);
+  // Create lastActiveTimestamp ref at component level, not inside useEffect
+  const lastActiveTimestampRef = useRef(Date.now());
   
   // Update the ref whenever the prop changes
   useEffect(() => {
     supervisorIdRef.current = supervisorId;
   }, [supervisorId]);
   
-  // Add global visibility handler to reset loading state on tab switch
+  // Single combined visibility change handler to avoid multiple listeners
   useEffect(() => {
-    const globalVisibilityHandler = () => {
-      if (document.visibilityState === 'visible' && isLoading) {
-        console.log('Tab visible again while form was loading, resetting state');
-        setIsLoading(false);
-        toast.error('Form submission interrupted by tab switch. Please try again.');
-      }
-    };
-    
-    document.addEventListener('visibilitychange', globalVisibilityHandler);
-    return () => {
-      document.removeEventListener('visibilitychange', globalVisibilityHandler);
-    };
-  }, [isLoading]);
-  
-  // Add session refresh handler for tab visibility after inactivity
-  useEffect(() => {
-    const lastActiveTimestamp = useRef(Date.now());
-    
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         // Check how long the tab was hidden
         const currentTime = Date.now();
-        const inactiveTime = currentTime - lastActiveTimestamp.current;
+        const inactiveTime = currentTime - lastActiveTimestampRef.current;
         
-        // If tab was hidden for more than 5 minutes, check and refresh the session
+        // Reset loading state if a form submission was in progress
+        if (isLoading) {
+          console.log('Tab visible again while form was loading, resetting state');
+          setIsLoading(false);
+          toast.error('Form submission interrupted by tab switch. Please try again.');
+        }
+        
+        // Check if we need to refresh the session (only if tab was hidden for >5 minutes)
         if (inactiveTime > 300000) { // 5 minutes
           console.log('Tab was hidden for over 5 minutes, checking session...');
           try {
             // Try to refresh the session
             const { data, error } = await supabase.auth.refreshSession();
             
-            if (error || !data.session) {
+            if (error || !data?.session) {
               console.warn('Session expired during inactivity:', error);
               toast.error('Your session expired during inactivity. Please refresh the page to continue.');
             } else {
@@ -119,9 +110,9 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           }
         }
         
-        lastActiveTimestamp.current = currentTime;
+        lastActiveTimestampRef.current = currentTime;
       } else if (document.visibilityState === 'hidden') {
-        lastActiveTimestamp.current = Date.now();
+        lastActiveTimestampRef.current = Date.now();
       }
     };
     
@@ -129,7 +120,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [isLoading]);
   
   // Default form values
   const defaultValues: Partial<SiteFormValues> = {
@@ -215,37 +206,63 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       };
       
       // Use the AbortController signal with the request
-      const { data, error } = await supabase
-        .from('sites')
-        .insert([{
-          name: uppercaseValues.name,
-          job_name: uppercaseValues.jobName,
-          pos_no: uppercaseValues.posNo,
-          location: uppercaseValues.location,
-          start_date: uppercaseValues.startDate.toISOString(),
-          completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
-          supervisor_id: currentSupervisorId,
-          created_by: user?.id || null,
-          is_completed: false,
-          funds: 0,
-          total_funds: 0
-        }])
-        .select()
-        .abortSignal(abortController.signal);
+      // Check if abortSignal is supported, otherwise fall back to regular request
+      let response;
+      try {
+        // First try with abort signal
+        response = await supabase
+          .from('sites')
+          .insert([{
+            name: uppercaseValues.name,
+            job_name: uppercaseValues.jobName,
+            pos_no: uppercaseValues.posNo,
+            location: uppercaseValues.location,
+            start_date: uppercaseValues.startDate.toISOString(),
+            completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
+            supervisor_id: currentSupervisorId,
+            created_by: user?.id || null,
+            is_completed: false,
+            funds: 0,
+            total_funds: 0
+          }])
+          .select()
+          .abortSignal(abortController.signal);
+      } catch (signalError) {
+        console.warn('AbortSignal not supported, falling back to standard request', signalError);
+        // Fall back to standard request without abort signal
+        response = await supabase
+          .from('sites')
+          .insert([{
+            name: uppercaseValues.name,
+            job_name: uppercaseValues.jobName,
+            pos_no: uppercaseValues.posNo,
+            location: uppercaseValues.location,
+            start_date: uppercaseValues.startDate.toISOString(),
+            completion_date: uppercaseValues.completionDate ? uppercaseValues.completionDate.toISOString() : null,
+            supervisor_id: currentSupervisorId,
+            created_by: user?.id || null,
+            is_completed: false,
+            funds: 0,
+            total_funds: 0
+          }])
+          .select();
+      }
+      
+      const { data, error } = response;
       
       // Handle errors
       if (error) {
         console.error('Error creating site:', error);
         
         // Handle auth errors specifically
-        if (error.code === 'PGRST301' || error.code === '401' || error.message.includes('JWT')) {
+        if (error.code === 'PGRST301' || error.code === '401' || error.message?.includes('JWT')) {
           toast.error('Your session has expired. Please refresh the page to log in again.');
         }
         // Handle constraint violations
         else if (error.code === '23505') {
-          if (error.message.includes('name')) {
+          if (error.message?.includes('name')) {
             toast.error(`A site with the name "${uppercaseValues.name}" already exists`);
-          } else if (error.message.includes('pos_no')) {
+          } else if (error.message?.includes('pos_no')) {
             toast.error(`A site with the P.O. number "${uppercaseValues.posNo}" already exists`);
           } else {
             toast.error('A site with these details already exists');

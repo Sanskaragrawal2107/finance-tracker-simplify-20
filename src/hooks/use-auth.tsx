@@ -347,30 +347,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       setLoading(true);
+      setUser(null); // Clear user immediately to ensure UI updates
+
+      // First, try a local state clear no matter what
+      localStorage.removeItem('supabase.auth.token'); // Clear any stored tokens
       
-      // We don't have direct access to the event listener function reference
-      // so we'll use a different approach to ensure reliable logout
+      // Very short timeout to prevent hanging - 2 seconds should be more than enough
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
       
-      // Use a timeout to prevent hanging logout
-      const logoutPromise = supabase.auth.signOut();
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Logout timed out')), 5000);
-      });
-      
-      const { error } = await Promise.race([logoutPromise, timeoutPromise]) as any;
-      
-      if (error) {
-        throw error;
+      try {
+        // Try to sign out from Supabase, but don't wait too long
+        await supabase.auth.signOut({ 
+          scope: 'local' // Use local scope to avoid session storage issues
+        });
+        clearTimeout(timeoutId);
+      } catch (signOutError) {
+        console.error('Error during signOut API call:', signOutError);
+        // Continue with navigation even if API call fails
       }
       
-      // Clear user state and navigate regardless of any errors
-      setUser(null);
+      // Always navigate to home page regardless of API call success
       navigate('/');
     } catch (error: any) {
       console.error('Logout error:', error);
-      
-      // Clear user data anyway to ensure logout even if API call fails
-      setUser(null);
       
       // Show error toast but still navigate to login
       toast.error('Logout encountered an error, but you have been signed out locally');

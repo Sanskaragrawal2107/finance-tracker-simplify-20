@@ -33,25 +33,29 @@ const AdminDashboard: React.FC = () => {
   const [supervisorsList, setSupervisorsList] = useState<SupervisorWithId[]>([]);
   const [isRegisterFormOpen, setIsRegisterFormOpen] = useState(false);
   const [isSiteFormOpen, setIsSiteFormOpen] = useState(false);
-  const [loadingSupervisors, setLoadingSupervisors] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingSupervisors, setLoadingSupervisors] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user } = useAuth();
   
   const fetchSupervisorsAndSites = async () => {
-    setLoadingSupervisors(true);
+    const isInitialLoad = initialLoading;
+    if (!isInitialLoad) {
+      setLoadingSupervisors(true);
+    }
     
-    // Add fetch timeout safety
     const fetchTimeout = setTimeout(() => {
       console.warn('Supervisor data fetch timeout after 10 seconds');
-      setLoadingSupervisors(false);
+      if (isInitialLoad) {
+        setInitialLoading(false);
+      } else {
+        setLoadingSupervisors(false);
+      }
       toast.error('Network request timeout. Please try again.');
-      setSupervisorsList([]);
-      setSupervisorStats({});
     }, 10000);
     
     try {
-      // Step 1: Get all supervisors
       const { data: supervisorsData, error: supervisorsError } = await supabase
         .from('users')
         .select('id, name')
@@ -68,13 +72,11 @@ const AdminDashboard: React.FC = () => {
       if (!supervisorsData || supervisorsData.length === 0) {
         setSupervisorsList([]);
         setSupervisorStats({});
-        setLoadingSupervisors(false);
         return;
       }
       
       setSupervisorsList(supervisorsData);
       
-      // Step 2: Get all sites in a single query
       const { data: sitesData, error: sitesError } = await supabase
         .from('sites')
         .select('id, supervisor_id, is_completed');
@@ -82,17 +84,13 @@ const AdminDashboard: React.FC = () => {
       if (sitesError) {
         console.error('Error fetching sites:', sitesError);
         toast.error('Error loading sites data. Please refresh the page.');
-        // Don't reset supervisorsList but set empty stats
         setSupervisorStats({});
-        setLoadingSupervisors(false);
         return;
       }
       
-      // Process sites data for each supervisor
       const stats: Record<string, SupervisorStats> = {};
       
       supervisorsData.forEach(supervisor => {
-        // Filter sites for this supervisor
         const supervisorSites = sitesData ? sitesData.filter(site => site.supervisor_id === supervisor.id) : [];
         const total = supervisorSites.length;
         const active = supervisorSites.filter(site => !site.is_completed).length;
@@ -113,10 +111,16 @@ const AdminDashboard: React.FC = () => {
       setSupervisorStats({});
     } finally {
       clearTimeout(fetchTimeout);
-      // Add a small delay before turning off loading to prevent flickering
-      setTimeout(() => {
-        setLoadingSupervisors(false);
-      }, 300);
+      
+      if (isInitialLoad) {
+        setTimeout(() => {
+          setInitialLoading(false);
+        }, 500);
+      } else {
+        setTimeout(() => {
+          setLoadingSupervisors(false);
+        }, 200);
+      }
     }
   };
   
@@ -127,7 +131,6 @@ const AdminDashboard: React.FC = () => {
       if (user) {
         fetchSupervisorsAndSites();
       } else {
-        // If user isn't available yet, don't try to fetch data
         setLoadingSupervisors(false);
       }
     }
@@ -135,7 +138,7 @@ const AdminDashboard: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [user]); // Add user as a dependency to re-fetch when user changes
+  }, [user]);
 
   const handleViewSites = (supervisorId: string) => {
     console.log("Viewing sites for supervisor:", supervisorId);
@@ -159,8 +162,6 @@ const AdminDashboard: React.FC = () => {
 
   const handleCreateSite = async (site: any) => {
     try {
-      // Remove duplicate site creation since the SiteForm already creates the site
-      // Just update the UI stats instead
       setSupervisorStats(prev => {
         const updatedStats = { ...prev };
         const supervisorId = site.supervisorId || selectedSupervisorId;
@@ -175,7 +176,6 @@ const AdminDashboard: React.FC = () => {
         return updatedStats;
       });
       
-      // The site was already created in SiteForm, no need for duplicating the success message
       setIsSiteFormOpen(false);
     } catch (error: any) {
       console.error('Error in handleCreateSite:', error);
@@ -189,7 +189,6 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Show loading indicator if auth is still being determined */}
       {!user ? (
         <div className="text-center py-6">
           <div className="animate-pulse">
@@ -320,10 +319,10 @@ const AdminDashboard: React.FC = () => {
               <div className="text-center py-6">
                 <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                 <h3 className="text-lg font-medium mb-2">
-                  {loadingSupervisors ? 'Loading Supervisors...' : 'Select a Supervisor'}
+                  {initialLoading ? 'Loading Supervisors...' : 'Select a Supervisor'}
                 </h3>
                 <p className="text-muted-foreground max-w-md mx-auto">
-                  {loadingSupervisors 
+                  {initialLoading 
                     ? 'Please wait while we fetch the supervisor data.'
                     : supervisorsList.length > 0 
                       ? 'Choose a supervisor from the dropdown to view their sites and performance statistics.'

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -100,31 +100,7 @@ export function useConnection() {
     return tryOperation();
   }, [checkConnection]);
   
-  // Check connection when tab becomes visible after being hidden
-  useEffect(() => {
-    let lastHiddenTime: number | null = null;
-    
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        lastHiddenTime = Date.now();
-      } else if (document.visibilityState === 'visible' && lastHiddenTime) {
-        const hiddenDuration = Date.now() - lastHiddenTime;
-        
-        // If tab was hidden for more than 30 seconds, check connection
-        if (hiddenDuration > 30000) {
-          checkConnection(false);
-        }
-        
-        lastHiddenTime = null;
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [checkConnection]);
+  // We've removed the automatic visibility change effect that was causing flickering
   
   return {
     isConnected,

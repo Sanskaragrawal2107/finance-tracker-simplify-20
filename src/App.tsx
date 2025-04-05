@@ -19,7 +19,6 @@ import AppLayout from "./components/layout/AppLayout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { refreshSchemaCache, supabase } from "./integrations/supabase/client";
 import { toast } from "sonner";
-import { useVisibilityRefresh } from "./hooks/use-visibility-refresh";
 import { Button } from "@/components/ui/button";
 
 const queryClient = new QueryClient({

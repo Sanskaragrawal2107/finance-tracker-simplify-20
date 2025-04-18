@@ -459,14 +459,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
 
   return isOpen ? (
     <Dialog open={isOpen} onOpenChange={onClose ? () => onClose() : undefined}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-4 md:p-6">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-3 sm:p-4 md:p-6 w-[calc(100%-24px)] sm:w-auto">
         <DialogHeader>
           <DialogTitle>
             {siteId ? "Add Site Invoice" : "Add Invoice"}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="date">Invoice Date</Label>
               <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
@@ -517,10 +517,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               <h3 className="text-lg font-medium">Materials</h3>
             </div>
             
-            <div className="p-3 sm:p-4 border rounded-md mb-4 bg-muted/30">
+            <div className="p-3 sm:p-4 border rounded-md mb-4 bg-muted/30 overflow-x-hidden">
               <h4 className="font-medium mb-3">Add New Material</h4>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
                 <div className="space-y-2">
                   <Label htmlFor="material-input">Material Name</Label>
                   <Input id="material-input" value={materialInput} onChange={e => setMaterialInput(e.target.value)} placeholder="e.g., TMT Steel Bars" />
@@ -559,8 +559,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             
             {materialItems.length > 0 && <div className="mb-4">
                 <h4 className="font-medium mb-2">Material Items List</h4>
-                <div className="overflow-x-auto rounded-md border">
-                  <table className="w-full">
+                <div className="overflow-x-auto -mx-3 sm:mx-0 rounded-md border">
+                  <table className="w-full min-w-[600px]">
                     <thead className="bg-muted text-left">
                       <tr>
                         <th className="py-2 px-2 sm:px-4 font-medium">#</th>
@@ -575,7 +575,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                     <tbody>
                       {materialItems.map((item, index) => <tr key={item.id} className="border-t">
                           <td className="py-3 px-2 sm:px-4">{index + 1}</td>
-                          <td className="py-3 px-2 sm:px-4 max-w-[120px] sm:max-w-none truncate">{item.material}</td>
+                          <td className="py-3 px-2 sm:px-4"><div className="max-w-[120px] sm:max-w-none truncate">{item.material}</div></td>
                           <td className="py-3 px-2 sm:px-4 text-right">{item.quantity}</td>
                           <td className="py-3 px-2 sm:px-4 text-right">{item.rate?.toLocaleString()}</td>
                           <td className="py-3 px-2 sm:px-4 text-right">{item.gstPercentage}%</td>
@@ -592,13 +592,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
               </div>}
             
             <div className="bg-muted p-3 sm:p-4 rounded-md mt-4">
-              <div className="flex flex-col md:flex-row md:justify-end md:items-center gap-4">
-                <div className="space-y-2 md:w-1/4">
+              <div className="flex flex-col md:flex-row md:justify-end md:items-center gap-4 overflow-x-auto">
+                <div className="space-y-2 w-full md:w-1/4">
                   <Label htmlFor="grandGross">Net Taxable Amount (₹)</Label>
                   <Input id="grandGross" value={grandGrossAmount.toLocaleString()} readOnly className="bg-muted font-medium" />
                 </div>
                 
-                <div className="space-y-2 md:w-1/4">
+                <div className="space-y-2 w-full md:w-1/4">
                   <Label htmlFor="grandNet" className="font-medium">Grand Net Total (₹)</Label>
                   <Input id="grandNet" value={grandNetAmount.toLocaleString()} readOnly className="bg-muted font-bold text-primary" />
                 </div>
@@ -611,7 +611,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           <div>
             <h3 className="text-lg font-medium mb-4">Payment made by</h3>
             <div className="bg-muted/30 p-3 sm:p-4 rounded-md">
-              <RadioGroup value={approverType} onValueChange={value => setApproverType(value as "ho" | "supervisor")} className="flex flex-col md:flex-row gap-4">
+              <RadioGroup value={approverType} onValueChange={value => setApproverType(value as "ho" | "supervisor")} className="flex flex-col sm:flex-row gap-4">
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="ho" id="ho" />
                   <Label htmlFor="ho">Head Office</Label>
@@ -636,7 +636,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           {approverType === "ho" && (
             <div>
               <h3 className="text-lg font-medium mb-4">Bank Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="accountNumber">Account Number (max 16 digits)</Label>
                   <Input id="accountNumber" value={accountNumber} onChange={handleAccountNumberChange} placeholder="Enter Account Number (max 16 digits)" required maxLength={16} />
@@ -708,7 +708,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t">
             {onClose && (
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel

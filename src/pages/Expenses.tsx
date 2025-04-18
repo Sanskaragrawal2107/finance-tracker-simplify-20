@@ -902,32 +902,6 @@ const Expenses: React.FC = () => {
     
     return (
       <div className="space-y-6">
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setIsExpenseFormOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Expense
-          </Button>
-          
-          <Button onClick={() => setIsAdvanceFormOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Advance
-          </Button>
-          
-          <Button onClick={() => setShowSupervisorAdvanceForm(true)}>
-            <SendHorizontal className="h-4 w-4 mr-2" />
-            Advance to Supervisor
-          </Button>
-          
-          <Button onClick={() => setIsFundsFormOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Funds
-          </Button>
-          
-          <Button onClick={() => setIsInvoiceFormOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Invoice
-          </Button>
-        </div>
         
         <SupervisorTransactionHistory 
           siteId={selectedSiteId}

@@ -850,37 +850,56 @@ const Expenses: React.FC = () => {
     if (!siteId) return;
     
     console.log('Refreshing all data for site:', siteId);
+    setIsLoading(true);
+    
+    // Track if we successfully loaded any data
+    let hasLoadedAnyData = false;
     
     // Use individual try-catch blocks to ensure partial failure doesn't block everything
     try {
       await fetchSiteExpenses(siteId);
+      hasLoadedAnyData = true;
     } catch (error) {
       console.error('Error refreshing expenses:', error);
-      setExpenses([]);
+      // Don't reset state to empty array on error, keep previous data
+      toast.error('Failed to refresh expense data');
     }
     
     try {
       await fetchSiteAdvances(siteId);
+      hasLoadedAnyData = true;
     } catch (error) {
       console.error('Error refreshing advances:', error);
-      setAdvances([]);
+      // Don't reset state to empty array on error, keep previous data
+      toast.error('Failed to refresh advance data');
     }
     
     try {
       await fetchSiteFundsReceived(siteId);
+      hasLoadedAnyData = true;
     } catch (error) {
       console.error('Error refreshing funds received:', error);
-      setFundsReceived([]);
+      // Don't reset state to empty array on error, keep previous data
+      toast.error('Failed to refresh funds data');
     }
     
     try {
       await fetchSiteInvoices(siteId);
+      hasLoadedAnyData = true;
     } catch (error) {
       console.error('Error refreshing invoices:', error);
-      setInvoices([]);
+      // Don't reset state to empty array on error, keep previous data
+      toast.error('Failed to refresh invoice data');
     }
     
+    setIsLoading(false);
     console.log('All site data refresh attempts completed');
+    
+    if (hasLoadedAnyData) {
+      toast.success('Financial data refreshed');
+    } else {
+      toast.error('Failed to refresh data. Please try again later.');
+    }
   };
 
   const handleEntrySuccess = (entryType) => {

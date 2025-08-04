@@ -47,24 +47,8 @@ export function useLoadingState(initialState = false, timeout = 15000) {
     }
   }, [visibilityContext, clearLoadingTimeout, timeout]);
   
-  // Listen for visibility changes to reset loading state
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isLoading) {
-        // When tab becomes visible again, clear loading state if it was active
-        setIsLoadingState(false);
-        if (visibilityContext) {
-          visibilityContext.registerLoadingState(componentIdRef.current, false);
-        }
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isLoading, visibilityContext]);
+  // Note: Removed visibility change handler that was interfering with form submissions
+  // The app-wide visibility system in App.tsx handles stuck loading states with proper timeouts
   
   // Clean up when component unmounts
   useEffect(() => {

@@ -26,7 +26,7 @@ import {
   SelectTrigger, SelectValue 
 } from '@/components/ui/select';
 import { format } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -456,7 +456,14 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                 type="submit" 
                 disabled={isLoading}
               >
-                {isLoading ? "Creating..." : "Create Site"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create Site"
+                )}
               </Button>
             </div>
           </form>

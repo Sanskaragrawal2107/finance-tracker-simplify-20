@@ -122,18 +122,20 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         
         console.log(`Tab became visible after ${timeHidden}ms`);
         
-        // Only clear loading states if tab was hidden for more than 5 seconds
-        // This prevents interrupting legitimate form submissions
-        if (timeHidden > 5000) {
-          console.log('Clearing loading states after substantial inactivity');
+        // Only clear loading states if tab was hidden for more than 30 seconds
+        // This prevents interrupting legitimate form submissions which can take time
+        if (timeHidden > 30000) {
+          console.log('Clearing loading states after extended inactivity (30+ seconds)');
           Object.keys(loadingStatesRef.current).forEach(key => {
-            // Only clear if the loading state has been active for more than 30 seconds
+            // Only clear if the loading state has been active for more than 60 seconds
             // This prevents clearing legitimate ongoing operations
             if (loadingStatesRef.current[key]) {
-              console.log(`Clearing potentially stuck loading state: ${key}`);
+              console.log(`Clearing potentially stuck loading state after extended time: ${key}`);
               loadingStatesRef.current[key] = false;
             }
           });
+        } else if (timeHidden > 5000) {
+          console.log(`Tab was hidden for ${timeHidden}ms - not clearing loading states to avoid interrupting form submissions`);
         }
         
         // Only mark app as stale after substantial inactivity (>60 seconds)

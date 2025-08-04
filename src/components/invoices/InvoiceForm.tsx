@@ -17,6 +17,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from "@/hooks/use-auth";
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 type InvoiceFormProps = {
   isOpen?: boolean;
@@ -42,7 +43,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [partyName, setPartyName] = useState<string>(initialData?.partyName || '');
   const [partyNameFixed, setPartyNameFixed] = useState<boolean>(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploading, setIsUploading] = useLoadingState(false, 30000); // 30 second timeout
 
   const [materialInput, setMaterialInput] = useState<string>('');
   const [quantityInput, setQuantityInput] = useState<number>(0);
@@ -62,7 +63,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [email, setEmail] = useState<string>(initialData?.bankDetails?.email || '');
   const [mobile, setMobile] = useState<string>(initialData?.bankDetails?.mobile || '');
   const [ifscValidationMessage, setIfscValidationMessage] = useState<string>('');
-  const [isFetchingBankDetails, setIsFetchingBankDetails] = useState<boolean>(false);
+  const [isFetchingBankDetails, setIsFetchingBankDetails] = useLoadingState(false, 30000); // 30 second timeout
 
   const [approverType, setApproverType] = useState<"ho" | "supervisor">("ho");
 

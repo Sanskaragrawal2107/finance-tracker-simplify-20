@@ -23,6 +23,7 @@ import { InvoiceList } from '@/components/invoices/InvoiceList';
 import SiteDetailTransactions from '@/components/sites/SiteDetailTransactions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import VisibilityHandler from '@/components/common/VisibilityHandler';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 const AdminSupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ const AdminSupervisorSites: React.FC = () => {
   const { user } = useAuth();
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useLoadingState(true, 45000); // 45 second timeout for operations
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewSiteForm, setShowNewSiteForm] = useState(false);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
@@ -40,7 +41,7 @@ const AdminSupervisorSites: React.FC = () => {
   const [showSupervisorAdvanceForm, setShowSupervisorAdvanceForm] = useState(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [financialSummary, setFinancialSummary] = useState<BalanceSummary | null>(null);
-  const [loadingFinancials, setLoadingFinancials] = useState(false);
+  const [loadingFinancials, setLoadingFinancials] = useLoadingState(false, 30000); // 30 second timeout for financials
   
   const lastVisibleTimeRef = useRef(Date.now());
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { useAuth } from '@/hooks/use-auth';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supervisors } from '@/data/supervisors';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 const supervisorTransactionSchema = z.object({
   receiverSupervisorId: z.string({
@@ -59,7 +60,7 @@ interface Site {
 
 export function SupervisorTransactionForm({ onSuccess, payerSiteId }: SupervisorTransactionFormProps) {
   const { user } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 30000); // 30 second timeout
   const [receiverSites, setReceiverSites] = useState<Site[]>([]);
   const [availableSupervisors, setAvailableSupervisors] = useState(supervisors.filter(s => s.id !== user?.id));
 
@@ -261,7 +262,14 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
           type="submit" 
           className="w-full" 
           disabled={isSubmitting || !form.formState.isValid}>
-          {isSubmitting ? "Processing..." : "Submit Transaction"}
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            "Submit Transaction"
+          )}
         </Button>
       </form>
     </Form>

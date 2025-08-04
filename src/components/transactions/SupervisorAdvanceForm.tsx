@@ -3,7 +3,7 @@ import * as z from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 // Define the form schema
 const supervisorAdvanceSchema = z.object({
@@ -62,7 +63,7 @@ interface Supervisor {
 
 export function SupervisorAdvanceForm({ onSuccess, payerSiteId }: SupervisorAdvanceFormProps) {
   const { user } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 30000); // 30 second timeout
   const [receiverSites, setReceiverSites] = useState<Site[]>([]);
   const [availableSupervisors, setAvailableSupervisors] = useState<Supervisor[]>([]);
 
@@ -288,9 +289,16 @@ export function SupervisorAdvanceForm({ onSuccess, payerSiteId }: SupervisorAdva
         />
 
         <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? "Processing..." : "Submit"}
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            'Submit'
+          )}
         </Button>
       </form>
     </Form>
   );
-} 
+}

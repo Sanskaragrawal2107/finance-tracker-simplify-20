@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -48,6 +48,8 @@ interface TransactionFormProps {
 
 export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
   const { user } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 30000); // 30 second timeout
+  
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
@@ -59,6 +61,9 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
   });
 
   const onSubmit = async (data: TransactionFormValues) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
     try {
       const { error } = await supabase.from('transactions').insert({
         site_id: siteId,
@@ -77,6 +82,8 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
     } catch (error) {
       console.error('Error adding transaction:', error);
       toast.error('Failed to add transaction');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -184,8 +191,15 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
           )}
         />
 
-        <Button type="submit" className="w-full">
-          Add Transaction
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Adding...
+            </>
+          ) : (
+            'Add Transaction'
+          )}
         </Button>
       </form>
     </Form>

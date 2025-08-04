@@ -15,6 +15,7 @@ import { useToast } from '@/components/ui/use-toast';
 import SiteDetail from '@/components/sites/SiteDetail';
 import { useVisibilityRefresh } from '@/hooks/use-visibility-refresh';
 import { createVisibilityAwareTimeout } from '@/lib/connectivity';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 const SupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const SupervisorSites: React.FC = () => {
   const { user } = useAuth();
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useLoadingState(true, 45000); // 45 second timeout for operations
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewSiteForm, setShowNewSiteForm] = useState(false);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);

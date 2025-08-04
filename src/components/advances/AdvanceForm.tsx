@@ -45,6 +45,7 @@ import { Advance, AdvancePurpose, RecipientType, ApprovalStatus } from "@/lib/ty
 import SearchableDropdown from '../expenses/SearchableDropdown';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 interface AdvanceFormProps {
   isOpen: boolean;
@@ -84,7 +85,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 30000); // 30 second timeout
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [recipientOptions, setRecipientOptions] = useState<ContractorOption[]>([]);
   const [showRemarks, setShowRemarks] = useState(false);

@@ -7,6 +7,7 @@ import { CalendarIcon, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 import { Button } from "@/components/ui/button";
 import {
@@ -60,7 +61,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 30000); // 30 second timeout
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const { user } = useAuth();
   

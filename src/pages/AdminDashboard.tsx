@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
-import { User, Users, Building2, PieChart, BarChart, UserPlus } from 'lucide-react';
+import { User, Users, Building2, PieChart, BarChart, UserPlus, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import RegisterForm from '@/components/auth/RegisterForm';
 import { supabase } from '@/integrations/supabase/client';
 import SiteForm from '@/components/sites/SiteForm';
 import SitesList from '@/components/sites/SitesList';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 interface SupervisorStats {
   totalSites: number;
@@ -33,8 +34,9 @@ const AdminDashboard: React.FC = () => {
   const [supervisorsList, setSupervisorsList] = useState<SupervisorWithId[]>([]);
   const [isRegisterFormOpen, setIsRegisterFormOpen] = useState(false);
   const [isSiteFormOpen, setIsSiteFormOpen] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [loadingSupervisors, setLoadingSupervisors] = useState(false);
+  const [initialLoadingState, setInitialLoading] = useLoadingState(true, 30000); // 30 second timeout
+  const [loadingSupervisorsState, setLoadingSupervisors] = useLoadingState(false, 30000); // 30 second timeout
+  const [initialLoading, loadingSupervisors] = [initialLoadingState[0], loadingSupervisorsState[0]];
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -43,6 +45,8 @@ const AdminDashboard: React.FC = () => {
     const isInitialLoad = initialLoading;
     if (!isInitialLoad) {
       setLoadingSupervisors(true);
+    } else {
+      setInitialLoading(true);
     }
     
     try {

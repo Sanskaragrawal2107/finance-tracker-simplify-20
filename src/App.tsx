@@ -92,17 +92,16 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     loadingStatesRef.current[id] = isLoading;
     
     // If anything is loading, set a timeout to clear all loading states
-    // This prevents infinite loading states
+    // This prevents infinite loading states but with longer timeout
     if (isLoading && !timeoutRef.current) {
       timeoutRef.current = setTimeout(() => {
-        console.warn("Forcing loading states to clear after timeout");
-        Object.keys(loadingStatesRef.current).forEach(key => {
-          loadingStatesRef.current[key] = false;
-        });
+        console.warn(`Forcing loading state to clear after timeout for: ${id}`);
+        // Only clear the specific loading state that timed out
+        loadingStatesRef.current[id] = false;
         timeoutRef.current = null;
-      }, 10000); // 10 second timeout
+      }, 30000); // 30 second timeout - more reasonable for form submissions
     } else if (!isLoading && timeoutRef.current) {
-      // If nothing is loading anymore, clear the timeout
+      // If this specific loading state is done, clear the timeout
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
@@ -121,23 +120,24 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const currentTime = Date.now();
         const timeHidden = hiddenTimeRef.current ? currentTime - hiddenTimeRef.current : 0;
         
-        // If the tab was hidden for less than 1 second, ignore it completely
-        // This helps with copy-paste operations that briefly change tab focus
-        if (timeHidden < 1000) {
-          console.log(`Tab was only hidden for ${timeHidden}ms - ignoring visibility change`);
-          hiddenTimeRef.current = null;
-          return;
-        }
-        
         console.log(`Tab became visible after ${timeHidden}ms`);
         
-        // Only clear loading states without refreshing data
-        Object.keys(loadingStatesRef.current).forEach(key => {
-          loadingStatesRef.current[key] = false;
-        });
+        // Only clear loading states if tab was hidden for more than 5 seconds
+        // This prevents interrupting legitimate form submissions
+        if (timeHidden > 5000) {
+          console.log('Clearing loading states after substantial inactivity');
+          Object.keys(loadingStatesRef.current).forEach(key => {
+            // Only clear if the loading state has been active for more than 30 seconds
+            // This prevents clearing legitimate ongoing operations
+            if (loadingStatesRef.current[key]) {
+              console.log(`Clearing potentially stuck loading state: ${key}`);
+              loadingStatesRef.current[key] = false;
+            }
+          });
+        }
         
-        // Only mark app as stale after substantial inactivity (>30 seconds)
-        if (timeHidden > 30000) {
+        // Only mark app as stale after substantial inactivity (>60 seconds)
+        if (timeHidden > 60000) {
           console.log('App marked as stale after long inactivity');
           setAppStale(true);
           toast.info('Tab was inactive for a while. Click buttons again or refresh the page if functionality is limited.');
@@ -197,7 +197,7 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={forceRefresh} 
+              onClick={forceRefresh}
               className="bg-yellow-200 border-yellow-300 hover:bg-yellow-300"
             >
               Refresh Data

@@ -43,6 +43,7 @@ import { Expense, ExpenseCategory } from "@/lib/types";
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useLoadingState } from "@/hooks/use-loading-state";
 
 interface ExpenseFormProps {
   isOpen: boolean;
@@ -84,7 +85,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, si
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 45000); // 45 second timeout for form submissions
   const { user } = useAuth();
   
   const form = useForm<FormValues>({

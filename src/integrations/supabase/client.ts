@@ -18,16 +18,39 @@ export const supabase = createClient<Database>(
       storageKey: 'finance-tracker-auth',
       storage: localStorage,
       autoRefreshToken: true,
+      detectSessionInUrl: false, // Prevent issues with URL-based auth
     },
     global: {
-      fetch: customFetch
+      fetch: customFetch,
+      headers: {
+        'x-client-info': 'finance-tracker/1.0.0'
+      }
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
     }
   }
 );
 
 // Custom fetch function with retry mechanism for network errors
 function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return withRetry(() => fetch(input, init), 3, 1000);
+  // Add timeout to prevent hanging requests during tab switches
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+  
+  const fetchWithTimeout = () => fetch(input, {
+    ...init,
+    signal: controller.signal
+  }).finally(() => clearTimeout(timeoutId));
+  
+  return withRetry(fetchWithTimeout, 3, 1000, (error) => {
+    // Retry on network errors but not on auth errors
+    return error.name === 'AbortError' || 
+           error.message?.includes('fetch') || 
+           error.message?.includes('network');
+  });
 }
 
 // Helper function to retry failed operations

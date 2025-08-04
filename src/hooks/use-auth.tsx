@@ -104,7 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => {
             reject(new Error('Session check timed out'));
-          }, 3000); // 3 second timeout
+          }, 8000); // 8 second timeout - more reasonable for network requests
         });
         
         // Race the session check against the timeout
@@ -170,10 +170,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set a safety timeout to ensure loading state is reset even if checkSession hangs
     timeoutId = setTimeout(() => {
       if (mounted && loading) {
-        console.warn("Auth check timed out after 5 seconds, forcing loading state to false");
+        console.warn("Auth check timed out after 10 seconds, forcing loading state to false");
         setLoading(false);
       }
-    }, 5000);
+    }, 10000);
 
     checkSession();
 

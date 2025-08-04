@@ -30,6 +30,7 @@ import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 // Schema definition with uppercase transformation
 const siteFormSchema = z.object({
@@ -61,7 +62,7 @@ interface Supervisor {
 
 export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: SiteFormProps) {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useLoadingState(false, 45000); // 45 second timeout for form submissions
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [completionDateOpen, setCompletionDateOpen] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
@@ -77,27 +78,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     supervisorIdRef.current = supervisorId;
   }, [supervisorId]);
   
-  // Add a safety timeout to prevent form getting stuck in loading state
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    // If form is in loading state, set a safety timeout to reset it
-    if (isLoading) {
-      console.log('Form loading state active, setting safety timeout');
-      timeoutId = setTimeout(() => {
-        console.warn('Form has been loading for too long, auto-resetting loading state');
-        setIsLoading(false);
-        toast.error('The form submission is taking longer than expected. The site may have been created but we lost connection. Please check before trying again.');
-      }, 20000); // 20 seconds is more than enough for any normal form submission
-    }
-    
-    // Clear timeout when component unmounts or loading state changes
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [isLoading]);
+  // The useLoadingState hook now handles timeout logic automatically
+  // No need for manual timeout management
   
   // Default form values
   const defaultValues: Partial<SiteFormValues> = {

@@ -99,17 +99,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         console.log("Checking for existing session...");
         
-        // Use a timeout to prevent the auth check from hanging indefinitely
-        const checkPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new Error('Session check timed out'));
-          }, 8000); // 8 second timeout - more reasonable for network requests
-        });
+        // Use a longer timeout for background tabs and add retry logic
+        const checkSessionWithRetry = async (retryCount = 0): Promise<any> => {
+          const maxRetries = 2;
+          const timeoutDuration = document.hidden ? 20000 : 12000; // Longer timeout for background tabs
+          
+          const checkPromise = supabase.auth.getSession();
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(new Error('Session check timed out'));
+            }, timeoutDuration);
+          });
+          
+          try {
+            const sessionResult = await Promise.race([checkPromise, timeoutPromise]);
+            clearTimeout(timeoutId);
+            return sessionResult;
+          } catch (error) {
+            clearTimeout(timeoutId);
+            
+            // Retry logic for background tab scenarios
+            if (retryCount < maxRetries && (document.hidden || error.message?.includes('timeout'))) {
+              console.log(`Session check failed (attempt ${retryCount + 1}/${maxRetries + 1}), retrying...`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Progressive delay
+              return checkSessionWithRetry(retryCount + 1);
+            }
+            throw error;
+          }
+        };
         
-        // Race the session check against the timeout
-        const sessionResult = await Promise.race([checkPromise, timeoutPromise]) as Awaited<typeof checkPromise>;
-        clearTimeout(timeoutId);
+        const sessionResult = await checkSessionWithRetry();
         
         const { data: { session } } = sessionResult;
         
@@ -147,16 +166,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error('Session check error:', error);
-        // Try to recover from auth errors by clearing local storage
-        if (error.message === 'Session check timed out' || 
-            (error.message && error.message.includes('JWT'))) {
-          console.warn('Auth error, attempting recovery by clearing local session');
+        
+        // Only clear session if it's not a timeout error during background tab
+        if (!document.hidden || !error.message?.includes('timeout')) {
+          console.log('Auth error, attempting recovery by clearing local session');
           try {
-            // Clear any local auth state that might be corrupted
-            localStorage.removeItem('supabase.auth.token');
             await supabase.auth.signOut({ scope: 'local' });
-          } catch (clearError) {
-            console.error('Error clearing auth state:', clearError);
+          } catch (signOutError) {
+            console.error('Error during auth recovery:', signOutError);
+          }
+        } else {
+          console.log('Session check failed due to background tab throttling, will retry when tab becomes active');
+        }
+        
+        if (mounted) {
+          // Don't set error for timeout issues in background tabs
+          if (!document.hidden || !error.message?.includes('timeout')) {
+            setError('Authentication error occurred');
           }
         }
       } finally {

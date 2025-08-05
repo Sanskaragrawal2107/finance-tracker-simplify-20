@@ -34,22 +34,48 @@ export const supabase = createClient<Database>(
   }
 );
 
-// Custom fetch function with retry mechanism for network errors
+// Custom fetch function with retry mechanism for network errors and background tab handling
 function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  // Add timeout to prevent hanging requests during tab switches
+  // Detect if tab is hidden and adjust timeout accordingly
+  const isBackgroundTab = document.hidden;
+  const timeoutDuration = isBackgroundTab ? 60000 : 45000; // Longer timeout for background tabs
+  
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
   
-  const fetchWithTimeout = () => fetch(input, {
-    ...init,
-    signal: controller.signal
-  }).finally(() => clearTimeout(timeoutId));
+  const fetchWithTimeout = () => {
+    // Use requestIdleCallback for background tabs if available
+    if (isBackgroundTab && typeof requestIdleCallback !== 'undefined') {
+      return new Promise<Response>((resolve, reject) => {
+        requestIdleCallback(() => {
+          fetch(input, {
+            ...init,
+            signal: controller.signal
+          }).then(resolve).catch(reject);
+        }, { timeout: timeoutDuration - 5000 }); // Leave 5s buffer
+      }).finally(() => clearTimeout(timeoutId));
+    } else {
+      return fetch(input, {
+        ...init,
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeoutId));
+    }
+  };
   
-  return withRetry(fetchWithTimeout, 3, 1000, (error) => {
-    // Retry on network errors but not on auth errors
+  // Increase retry count for background tabs
+  const maxRetries = isBackgroundTab ? 5 : 3;
+  const retryDelay = isBackgroundTab ? 2000 : 1000;
+  
+  return withRetry(fetchWithTimeout, maxRetries, retryDelay, (error) => {
+    // Retry on network errors, timeouts, and background tab throttling
     return error.name === 'AbortError' || 
-           error.message?.includes('fetch') || 
-           error.message?.includes('network');
+           error.name === 'TypeError' ||
+           error.name === 'NetworkError' ||
+           (error.message && (
+             error.message.includes('network') ||
+             error.message.includes('timeout') ||
+             error.message.includes('fetch')
+           ));
   });
 }
 

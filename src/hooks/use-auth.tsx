@@ -209,12 +209,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     // Set a safety timeout to ensure loading state is reset even if checkSession hangs
-    timeoutId = setTimeout(() => {
-      if (mounted && loading) {
-        console.warn("Auth check timed out after 10 seconds, forcing loading state to false");
+    const failsafeTimeout = setTimeout(() => {
+      if (loading) {
+        console.log('Auth check timed out after 30 seconds, forcing loading state to false');
         setLoading(false);
       }
-    }, 10000);
+    }, 30000);
 
     checkSession();
 

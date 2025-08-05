@@ -30,7 +30,7 @@ import { CalendarIcon, Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-import { useLoadingState } from '@/hooks/use-loading-state';
+// Removed useLoadingState import as we're using regular useState for better control
 
 // Schema definition with uppercase transformation
 const siteFormSchema = z.object({
@@ -62,57 +62,24 @@ interface Supervisor {
 
 export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: SiteFormProps) {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
-  const [isLoading, setIsLoading] = useLoadingState(false, 45000); // 45 second timeout for form submissions
+  const [isLoading, setIsLoading] = useState(false); // Use regular state instead of useLoadingState to avoid interference
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [completionDateOpen, setCompletionDateOpen] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [tabSwitchDetected, setTabSwitchDetected] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const { user } = useAuth();
   
   // Add a ref to capture the supervisorId to preserve it during tab switching
   const supervisorIdRef = useRef<string | undefined>(supervisorId);
-  // Create lastActiveTimestamp ref at component level, not inside useEffect
-  const lastActiveTimestampRef = useRef(Date.now());
   // Track if submission is in progress
   const submissionInProgressRef = useRef(false);
-  // Store pending submission data for retry
-  const pendingSubmissionRef = useRef<SiteFormValues | null>(null);
+  // Store abort controller for cancelling requests
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Update the ref whenever the prop changes
   useEffect(() => {
     supervisorIdRef.current = supervisorId;
   }, [supervisorId]);
-
-  // Page Visibility API to detect tab switching during form submission
-  const handleVisibilityChange = useCallback(() => {
-    const isHidden = document.hidden;
-    const now = Date.now();
-    
-    if (isHidden && submissionInProgressRef.current) {
-      console.log('Tab became hidden during form submission');
-      setTabSwitchDetected(true);
-      lastActiveTimestampRef.current = now;
-    } else if (!isHidden && submissionInProgressRef.current && tabSwitchDetected) {
-      console.log('Tab became visible again during form submission');
-      const timeHidden = now - lastActiveTimestampRef.current;
-      
-      // If tab was hidden for more than 5 seconds during submission, show warning
-      if (timeHidden > 5000) {
-        toast.warning('Tab switching detected during submission. Please wait...', {
-          duration: 3000
-        });
-      }
-    }
-  }, [tabSwitchDetected]);
-
-  // Set up Page Visibility API listener
-  useEffect(() => {
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [handleVisibilityChange]);
   
   // The useLoadingState hook now handles timeout logic automatically
   // No need for manual timeout management
@@ -171,129 +138,107 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     fetchSupervisors();
   }, []);
   
-  // Robust form submission with tab switching and retry handling
-  const submitSiteData = async (values: SiteFormValues, isRetry: boolean = false): Promise<boolean> => {
+  // Robust form submission that works regardless of tab switching
+  const submitSiteData = async (values: SiteFormValues): Promise<boolean> => {
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     
-    // First check if session is valid
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
-      console.error('Session error or no session:', sessionError);
-      toast.error('Your session has expired. Please refresh the page and try again.');
-      return false;
-    }
-    
-    // Prepare site data
-    const siteData = {
-      name: values.name.toUpperCase(),
-      job_name: values.jobName.toUpperCase(),
-      pos_no: values.posNo.toUpperCase(),
-      location: values.location.toUpperCase(),
-      start_date: values.startDate.toISOString(),
-      completion_date: values.completionDate ? values.completionDate.toISOString() : null,
-      supervisor_id: currentSupervisorId,
-      created_by: user?.id || null,
-      is_completed: false,
-      funds: 0,
-      total_funds: 0
-    };
-    
-    console.log(`${isRetry ? 'Retrying' : 'Submitting'} site data to Supabase:`, siteData);
-    
-    // Use a more robust approach for background tab scenarios
-    const submitPromise = new Promise<{data: any, error: any}>((resolve) => {
-      const performSubmit = async () => {
-        try {
-          const result = await supabase
-            .from('sites')
-            .insert([siteData])
-            .select();
-          resolve(result);
-        } catch (err) {
-          resolve({ data: null, error: err });
-        }
+    try {
+      // Create abort controller for this request
+      abortControllerRef.current = new AbortController();
+      
+      // Prepare site data
+      const siteData = {
+        name: values.name.toUpperCase(),
+        job_name: values.jobName.toUpperCase(),
+        pos_no: values.posNo.toUpperCase(),
+        location: values.location.toUpperCase(),
+        start_date: values.startDate.toISOString(),
+        completion_date: values.completionDate ? values.completionDate.toISOString() : null,
+        supervisor_id: currentSupervisorId,
+        created_by: user?.id || null,
+        is_completed: false,
+        funds: 0,
+        total_funds: 0
       };
       
-      // Use requestIdleCallback for better background processing if available
-      if (typeof requestIdleCallback !== 'undefined' && document.hidden) {
-        requestIdleCallback(performSubmit, { timeout: 30000 });
-      } else {
-        performSubmit();
-      }
-    });
-    
-    const { data, error } = await submitPromise;
-    
-    if (error) {
-      console.error('Error creating site:', error);
+      console.log('Submitting site data to Supabase:', siteData);
       
-      // Handle specific error types
-      if (error.code === '23505') { // Unique constraint violation
-        if (error.message?.includes('name')) {
-          toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
-        } else if (error.message?.includes('pos_no')) {
-          toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
-        } else {
-          toast.error('A site with these details already exists');
+      // Use a direct approach without complex background handling
+      const { data, error } = await supabase
+        .from('sites')
+        .insert([siteData])
+        .select()
+        .abortSignal(abortControllerRef.current.signal);
+      
+      if (error) {
+        console.error('Error creating site:', error);
+        
+        // Handle abort signal
+        if (error.name === 'AbortError') {
+          console.log('Site creation was cancelled');
+          return false;
         }
+        
+        // Handle specific error types
+        if (error.code === '23505') { // Unique constraint violation
+          if (error.message?.includes('name')) {
+            toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
+          } else if (error.message?.includes('pos_no')) {
+            toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
+          } else {
+            toast.error('A site with these details already exists');
+          }
+          return false;
+        }
+        
+        toast.error('Failed to create site: ' + error.message);
         return false;
       }
       
-      // Check if this might be a network/timeout issue that could benefit from retry
-      const isRetryableError = error.message?.includes('timeout') || 
-                              error.message?.includes('network') ||
-                              error.message?.includes('fetch') ||
-                              error.code === 'PGRST301'; // PostgREST timeout
-      
-      if (isRetryableError && !isRetry && retryCount < 2) {
-        console.log('Retryable error detected, will retry submission');
-        return false; // Signal that retry is needed
+      if (!data || data.length === 0) {
+        console.warn('No data returned from site creation');
+        toast.error('No data returned from site creation. Please try again.');
+        return false;
       }
       
-      toast.error('Failed to create site: ' + error.message);
-      return false;
-    }
-    
-    if (!data || data.length === 0) {
-      console.warn('No data returned from site creation');
-      if (!isRetry && retryCount < 2) {
-        return false; // Signal that retry is needed
+      console.log('Site created successfully:', data);
+      return true;
+      
+    } catch (error: any) {
+      console.error('Exception in submitSiteData:', error);
+      
+      if (error.name === 'AbortError') {
+        console.log('Site creation was cancelled');
+        return false;
       }
-      toast.error('No data returned from site creation. Please try again.');
+      
+      toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
       return false;
     }
-    
-    console.log('Site created successfully:', data);
-    return true;
   };
 
-  // Main form submission handler with retry logic
+  // Main form submission handler - simplified and robust
   const onFormSubmit = async (values: SiteFormValues) => {
+    // Prevent double submission
+    if (submissionInProgressRef.current) {
+      console.log('Submission already in progress, ignoring duplicate request');
+      return;
+    }
+    
     try {
       setIsLoading(true);
       submissionInProgressRef.current = true;
-      setTabSwitchDetected(false);
-      pendingSubmissionRef.current = values;
       
       console.log('Form submission started with values:', values);
       
-      // Attempt submission
-      let success = await submitSiteData(values, false);
-      
-      // If submission failed and it's retryable, attempt retry
-      if (!success && retryCount < 2) {
-        console.log(`Submission failed, attempting retry ${retryCount + 1}/2`);
-        setRetryCount(prev => prev + 1);
-        
-        // Show user that we're retrying
-        toast.info('Retrying submission...', { duration: 2000 });
-        
-        // Wait a bit before retry (especially important for background tabs)
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        success = await submitSiteData(values, true);
+      // Show immediate feedback for tab switching scenarios
+      const isTabHidden = document.hidden;
+      if (isTabHidden) {
+        toast.info('Submission started in background tab. Please wait...', { duration: 4000 });
       }
+      
+      // Attempt submission
+      const success = await submitSiteData(values);
       
       if (success) {
         // Create uppercase version of values for parent component
@@ -310,35 +255,42 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         onSubmit(uppercaseValues);
         
         // Show success message
-        if (tabSwitchDetected) {
-          toast.success('Site created successfully (despite tab switching!)');
-        } else {
-          toast.success('Site created successfully');
-        }
+        toast.success('Site created successfully');
         
         // Reset retry count on success
         setRetryCount(0);
         
         // Close the dialog and reset form
         onClose();
+        form.reset();
       }
     } catch (error: any) {
       console.error('Exception in site creation:', error);
       
-      // Show appropriate error message
-      if (error.message?.includes('timeout') || error.message?.includes('network')) {
-        toast.error('Network error or timeout. Please check your connection and try again.');
-      } else {
+      // Don't show error for aborted requests
+      if (error.name !== 'AbortError') {
         toast.error('Error creating site: ' + (error.message || 'Unknown error'));
       }
     } finally {
       // Always reset states
       setIsLoading(false);
       submissionInProgressRef.current = false;
-      pendingSubmissionRef.current = null;
-      setTabSwitchDetected(false);
+      
+      // Clear abort controller
+      if (abortControllerRef.current) {
+        abortControllerRef.current = null;
+      }
     }
   };
+  
+  // Clean up abort controller when component unmounts
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -563,12 +515,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {tabSwitchDetected ? (
-                      <span className="flex items-center">
-                        Creating... 
-                        <AlertTriangle className="ml-1 h-3 w-3 text-amber-500" />
-                      </span>
-                    ) : retryCount > 0 ? (
+                    {retryCount > 0 ? (
                       `Retrying... (${retryCount}/2)`
                     ) : (
                       'Creating...'
@@ -578,12 +525,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                   'Create Site'
                 )}
               </Button>
-              {tabSwitchDetected && isLoading && (
-                <p className="text-xs text-amber-600 mt-2 flex items-center">
-                  <AlertTriangle className="mr-1 h-3 w-3" />
-                  Tab switching detected. Submission continues in background.
-                </p>
-              )}
             </div>
           </form>
         </Form>

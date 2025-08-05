@@ -114,29 +114,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         console.log("Checking for existing session...");
         
-        // Use a longer timeout for background tabs and add retry logic
+        // Use a much shorter timeout to prevent hanging and implement better error handling
         const checkSessionWithRetry = async (retryCount = 0): Promise<any> => {
-          const maxRetries = 1; // Reduce retries to prevent loops
-          const timeoutDuration = document.hidden ? 25000 : 20000; // Longer timeouts
+          const maxRetries = 1;
+          const timeoutDuration = 5000; // Much shorter timeout - 5 seconds
 
           try {
-            const timeoutPromise = new Promise<never>((_, reject) => {
-              setTimeout(() => reject(new Error('Session check timed out')), timeoutDuration);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+              controller.abort();
+            }, timeoutDuration);
+
+            const sessionPromise = supabase.auth.getSession().finally(() => {
+              clearTimeout(timeoutId);
             });
 
-            const sessionPromise = supabase.auth.getSession();
-
-            return await Promise.race([
-              sessionPromise,
-              timeoutPromise
-            ]);
+            const result = await sessionPromise;
+            return result;
           } catch (error) {
-            if (retryCount < maxRetries) {
+            console.log(`Session check error:`, error);
+            if (retryCount < maxRetries && !error.message?.includes('aborted')) {
               console.log(`Session check failed, retrying... (${retryCount + 1}/${maxRetries})`);
-              await new Promise(res => setTimeout(res, 1000)); // wait 1s before retry
+              await new Promise(res => setTimeout(res, 500)); // shorter wait
               return checkSessionWithRetry(retryCount + 1);
             }
-            throw error; // re-throw error after max retries
+            throw error;
           }
         };
         
@@ -211,10 +213,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set a safety timeout to ensure loading state is reset even if checkSession hangs
     const failsafeTimeout = setTimeout(() => {
       if (loading) {
-        console.log('Auth check timed out after 30 seconds, forcing loading state to false');
+        console.log('Auth check timed out after 10 seconds, forcing loading state to false');
         setLoading(false);
       }
-    }, 30000);
+    }, 10000);
 
     checkSession();
 

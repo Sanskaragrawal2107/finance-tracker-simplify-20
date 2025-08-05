@@ -38,7 +38,7 @@ export const supabase = createClient<Database>(
 function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   // Add timeout to prevent hanging requests during tab switches
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
   
   const fetchWithTimeout = () => fetch(input, {
     ...init,

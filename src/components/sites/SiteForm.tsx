@@ -217,7 +217,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     }
   };
 
-  // Main form submission handler - simplified and robust
+  // Main form submission handler - with proper tab switching support
   const onFormSubmit = async (values: SiteFormValues) => {
     // Prevent double submission
     if (submissionInProgressRef.current) {
@@ -226,19 +226,29 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     }
     
     try {
+      console.log('=== FORM SUBMISSION START ===');
+      console.log('Tab hidden:', document.hidden);
+      console.log('Values:', values);
+      
       setIsLoading(true);
       submissionInProgressRef.current = true;
       
-      console.log('Form submission started with values:', values);
+      // Create a promise that resolves regardless of tab visibility
+      const submissionPromise = new Promise<boolean>(async (resolve) => {
+        try {
+          const success = await submitSiteData(values);
+          console.log('Submission result:', success);
+          resolve(success);
+        } catch (error) {
+          console.error('Submission error:', error);
+          resolve(false);
+        }
+      });
       
-      // Show immediate feedback for tab switching scenarios
-      const isTabHidden = document.hidden;
-      if (isTabHidden) {
-        toast.info('Submission started in background tab. Please wait...', { duration: 4000 });
-      }
+      // Wait for submission to complete
+      const success = await submissionPromise;
       
-      // Attempt submission
-      const success = await submitSiteData(values);
+      console.log('=== FORM SUBMISSION RESULT ===', success);
       
       if (success) {
         // Create uppercase version of values for parent component
@@ -250,6 +260,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           location: values.location.toUpperCase(),
           supervisorId: values.supervisorId || supervisorIdRef.current || ''
         };
+        
+        console.log('Calling onSubmit with:', uppercaseValues);
         
         // First call onSubmit to notify parent component
         onSubmit(uppercaseValues);
@@ -263,6 +275,10 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         // Close the dialog and reset form
         onClose();
         form.reset();
+        
+        console.log('=== FORM SUBMISSION COMPLETE ===');
+      } else {
+        console.log('Submission failed, staying in form');
       }
     } catch (error: any) {
       console.error('Exception in site creation:', error);
@@ -273,6 +289,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
     } finally {
       // Always reset states
+      console.log('Resetting loading state');
       setIsLoading(false);
       submissionInProgressRef.current = false;
       

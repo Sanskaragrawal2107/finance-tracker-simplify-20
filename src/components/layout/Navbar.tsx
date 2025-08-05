@@ -8,7 +8,7 @@ import { UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { VisibilityContext } from '@/App';
 import { toast } from 'sonner';
-import { pingSupabase } from '@/integrations/supabase/client';
+
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -83,11 +83,6 @@ const Navbar: React.FC<NavbarProps> = ({
       console.error('Error logging out:', error);
       toast.error('Logout failed. Please try refreshing the page.');
       
-      // Try to ping Supabase to check connection
-      const connected = await pingSupabase();
-      if (!connected) {
-        toast.error('Connection issues detected. Try refreshing the page.');
-      }
     }
   };
   
@@ -108,12 +103,6 @@ const Navbar: React.FC<NavbarProps> = ({
     forceRefresh();
     toast.success('App state refreshed');
     
-    // Also ping Supabase to ensure connection
-    pingSupabase().then(connected => {
-      if (!connected) {
-        toast.error('Connection issues detected. Try refreshing the page.');
-      }
-    });
   };
   
   return (

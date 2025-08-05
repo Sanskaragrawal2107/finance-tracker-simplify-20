@@ -108,6 +108,3 @@ export function useConnection() {
     withConnectionCheck
   };
 }
-
-// Export the existing pingSupabase function from client.ts
-export { pingSupabase } from '@/integrations/supabase/client'; 

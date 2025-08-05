@@ -226,61 +226,8 @@ const RoleBasedRedirect = () => {
 
 // Main App
 const AppContent = () => {
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>('checking');
-
-  // Monitor connection to Supabase
-  useEffect(() => {
-    let pingInterval: NodeJS.Timeout;
-    let mounted = true;
-
-    // Function to check connection
-    const checkConnection = async () => {
-      try {
-        // Use a simple query to check if Supabase is reachable
-        const { error } = await supabase.from('users').select('id').limit(1);
-        
-        if (error && error.message.includes('network')) {
-          if (mounted && connectionStatus !== 'offline') {
-            console.warn('Supabase connection lost:', error.message);
-            setConnectionStatus('offline');
-            toast.error('Connection to server lost. Retrying...');
-          }
-        } else {
-          if (mounted && connectionStatus !== 'online') {
-            if (connectionStatus === 'offline') {
-              toast.success('Connection to server restored');
-            }
-            setConnectionStatus('online');
-          }
-        }
-      } catch (error) {
-        if (mounted && connectionStatus !== 'offline') {
-          console.error('Error checking connection:', error);
-          setConnectionStatus('offline');
-          toast.error('Connection to server lost. Retrying...');
-        }
-      }
-    };
-
-    // Initial check
-    checkConnection();
-
-    // Set up interval to periodically check connection
-    pingInterval = setInterval(checkConnection, 30000); // Check every 30 seconds
-
-    return () => {
-      mounted = false;
-      clearInterval(pingInterval);
-    };
-  }, [connectionStatus]);
-
   return (
     <>
-      {connectionStatus === 'offline' && (
-        <div className="fixed top-0 left-0 w-full bg-red-500 text-white py-1 px-4 text-center z-50">
-          Connection to server lost. Trying to reconnect...
-        </div>
-      )}
       <Routes>
         <Route path="/" element={<Index />} />
         <Route 

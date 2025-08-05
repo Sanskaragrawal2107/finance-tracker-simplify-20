@@ -7,7 +7,7 @@ import CustomCard from '@/components/ui/CustomCard';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Site, UserRole } from '@/lib/types';
-import { supabase, pingSupabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -53,40 +53,6 @@ const SupervisorSites: React.FC = () => {
     }
   }, [searchQuery, sites, activeTab]);
 
-  // Handle page visibility changes
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // When tab becomes visible, check connection
-        const checkConnection = async () => {
-          setConnectionChecking(true);
-          try {
-            const isConnected = await pingSupabase();
-            if (!isConnected) {
-              console.log('Connection issues detected after tab switch');
-              toast({
-                title: 'Connection issues detected',
-                description: 'Try refreshing the page if functionality is limited',
-                variant: 'destructive',
-              });
-            }
-          } catch (error) {
-            console.error('Error checking connection:', error);
-          } finally {
-            setConnectionChecking(false);
-          }
-        };
-        
-        checkConnection();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
 
   const fetchSites = async () => {
     if (!user) {
@@ -234,12 +200,6 @@ const SupervisorSites: React.FC = () => {
           console.error('API test error:', apiError);
           throw new Error('Connection issues detected. Please refresh the page.');
         }
-      }
-      
-      // Double-check connection with ping
-      const isConnected = await pingSupabase();
-      if (!isConnected) {
-        throw new Error('Connection to the server is unstable. Please refresh the page.');
       }
       
       // Create the site with retries

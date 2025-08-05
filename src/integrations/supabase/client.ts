@@ -33,51 +33,6 @@ export const supabase = createClient<Database>(
   }
 );
 
-// Function to ping Supabase and reconnect if needed
-export const pingSupabase = async (): Promise<boolean> => {
-  try {
-    // Create abort controller with a short timeout to prevent hanging
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    
-    const start = Date.now();
-    const { data, error } = await supabase
-      .from('users')
-      .select('count')
-      .limit(1)
-      .abortSignal(controller.signal);
-    
-    // Clear the timeout since the request completed
-    clearTimeout(timeoutId);
-    
-    const duration = Date.now() - start;
-    console.log(`Supabase ping response time: ${duration}ms`);
-    
-    if (error) {
-      console.error('Supabase ping failed:', error);
-      return false;
-    }
-    
-    // Reconnect Supabase realtime channels
-    try {
-      supabase.removeAllChannels();
-      supabase.channel('system').subscribe();
-      console.log('Reconnected Supabase channels');
-    } catch (err) {
-      console.error('Error reconnecting Supabase channels:', err);
-    }
-    
-    return true;
-  } catch (error) {
-    // Special handling for AbortError (timeout)
-    if (error.name === 'AbortError') {
-      console.error('Supabase ping timed out');
-    } else {
-      console.error('Error pinging Supabase:', error);
-    }
-    return false;
-  }
-};
 
 // Function to refresh schema cache - this was missing and causing errors
 export const refreshSchemaCache = async () => {

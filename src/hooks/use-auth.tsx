@@ -41,27 +41,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     registerAuthContext(authInterface);
   }, [registerAuthContext, user]);
 
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      console.log("Fetching user profile for ID:", userId);
-      // Use type assertion to bypass TypeScript errors with Supabase
-      const { data, error } = await (supabase
-        .from('users') as any)
-        .select('*')
-        .eq('id', userId)
-        .single();
+  const fetchUserProfile = async (userId: string, retries = 3, delay = 500) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        console.log(`Fetching user profile for ID: ${userId} (Attempt ${i + 1})`);
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single();
 
-      if (error) {
-        console.error('Error fetching user profile:', error);
-        return null;
+        if (error && error.code !== 'PGRST116') { // PGRST116 = 'Not a single row was returned'
+          console.error('Error fetching user profile:', error);
+          throw error;
+        }
+
+        if (data) {
+          console.log("Found user profile:", data);
+          return { ...data, created_at: new Date(data.created_at) } as AuthUser;
+        }
+
+        console.log('User profile not found, retrying...');
+        await new Promise(res => setTimeout(res, delay * (i + 1))); // Exponential backoff
+
+      } catch (error) {
+        console.error('Error in fetchUserProfile attempt:', error);
+        if (i === retries - 1) {
+          toast.error('Failed to fetch user profile after multiple attempts.');
+          return null;
+        }
       }
-
-      console.log("Found user profile:", data);
-      return data as AuthUser;
-    } catch (error) {
-      console.error('Error in fetchUserProfile:', error);
-      return null;
     }
+    return null;
   };
 
   // Function to refresh the session token

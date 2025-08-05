@@ -140,7 +140,7 @@ const HeadOffice: React.FC = () => {
         toast.success('Transaction deleted successfully');
       } else {
         // If we get here, it means the API call was successful but returned success: false
-        throw new Error('Failed to delete transaction: ' + (result.message || 'Unknown error'));
+        throw new Error('Failed to delete transaction: ' + (result.error?.message || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error deleting transaction:', error);

@@ -4,7 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Option {
-  id: number;
+  id: string | number; // Support both string and number IDs
   name: string;
   [key: string]: any;
 }

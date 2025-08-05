@@ -65,12 +65,12 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
     setIsSubmitting(true);
     
     try {
-      const { error } = await supabase.from('transactions').insert({
+      const { error } = await supabase.from('expenses').insert({
         site_id: siteId,
         date: data.date.toISOString(),
         amount: Number(data.amount),
-        type: data.type,
-        description: data.description,
+        category: data.type, // Map type to category since expenses table uses category
+        description: data.description || '',
         created_by: user?.id,
       });
 

@@ -399,7 +399,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                   variant: "default"
                 });
                 
-                onSubmit(invoiceData);
+                onSubmit(invoiceData as Invoice);
                 
                 // Reset form after submission
                 setDate(new Date());

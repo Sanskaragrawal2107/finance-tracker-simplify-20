@@ -102,8 +102,11 @@ export interface Expense {
   amount: number;
   status: ApprovalStatus;
   createdBy: string;
+  created_by?: string; // Support both camelCase and snake_case for compatibility
   createdAt: Date;
+  created_at?: Date; // Support both formats
   siteId?: string; // Reference to the site
+  site_id?: string; // Support snake_case
   supervisorId: string;
 }
 
@@ -127,9 +130,12 @@ export interface FundsReceived {
   date: Date;
   amount: number;
   siteId: string;
+  site_id?: string; // Support snake_case for database compatibility
   createdAt: Date;
+  created_at?: Date; // Support snake_case for database compatibility
   reference?: string;
   method?: string; // Changed from PaymentMethod to string to be more flexible
+  source?: string; // Added for compatibility with pages that expect this field
 }
 
 export interface BankDetails {
@@ -172,7 +178,8 @@ export interface Invoice {
   vendorName?: string;  // Added for compatibility
   invoiceNumber?: string; // Added for compatibility
   amount?: number;       // Added for compatibility
-  status: PaymentStatus;
+  status: PaymentStatus; // This is the same as paymentStatus for compatibility
+  payerType?: string; // Added for compatibility with Expenses.tsx
 }
 
 // Balance Summary interface

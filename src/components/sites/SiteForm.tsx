@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -85,7 +85,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   // No need for manual timeout management
   
   // Default form values - ensure all fields have defined values to prevent controlled/uncontrolled warnings
-  const defaultValues: SiteFormValues = {
+  const defaultValues = useMemo(() => ({
     name: '',
     jobName: '',
     posNo: '',
@@ -93,7 +93,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     startDate: new Date(),
     completionDate: null,
     supervisorId: supervisorId || '',
-  };
+  }), [supervisorId]);
   
   // Define form
   const form = useForm<SiteFormValues>({
@@ -114,7 +114,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     if (!isOpen) {
       form.reset(defaultValues);
     }
-  }, [isOpen, form, defaultValues]);
+  }, [isOpen, form, supervisorId]);
   
   // Simple fetch supervisors function - no connection checks
   const fetchSupervisors = async () => {

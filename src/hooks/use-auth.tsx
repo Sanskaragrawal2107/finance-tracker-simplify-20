@@ -24,6 +24,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
   const lastVisibilityChangeRef = useRef(Date.now());
   const { registerAuthContext } = useContext(VisibilityContext);
+  
+  // Add refs to prevent excessive auth checks
+  const lastSessionCheckRef = useRef(0);
+  const sessionCheckInProgressRef = useRef(false);
+  const authStateChangeCountRef = useRef(0);
 
   // Register this auth context with the visibility system when it's available
   useEffect(() => {
@@ -96,13 +101,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let timeoutId: NodeJS.Timeout;
     
     const checkSession = async () => {
+      // Prevent excessive session checks
+      const now = Date.now();
+      if (sessionCheckInProgressRef.current || (now - lastSessionCheckRef.current < 2000)) {
+        console.log('Session check skipped - too recent or in progress');
+        return;
+      }
+      
+      sessionCheckInProgressRef.current = true;
+      lastSessionCheckRef.current = now;
+      
       try {
         console.log("Checking for existing session...");
         
         // Use a longer timeout for background tabs and add retry logic
         const checkSessionWithRetry = async (retryCount = 0): Promise<any> => {
-          const maxRetries = 2;
-          const timeoutDuration = document.hidden ? 20000 : 12000; // Longer timeout for background tabs
+          const maxRetries = 1; // Reduce retries to prevent loops
+          const timeoutDuration = document.hidden ? 15000 : 10000; // Shorter timeouts
           
           const checkPromise = supabase.auth.getSession();
           const timeoutPromise = new Promise<never>((_, reject) => {
@@ -118,10 +133,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } catch (error) {
             clearTimeout(timeoutId);
             
-            // Retry logic for background tab scenarios
-            if (retryCount < maxRetries && (document.hidden || error.message?.includes('timeout'))) {
+            // Only retry for genuine network issues, not auth errors
+            if (retryCount < maxRetries && document.hidden && error.message?.includes('timeout')) {
               console.log(`Session check failed (attempt ${retryCount + 1}/${maxRetries + 1}), retrying...`);
-              await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Progressive delay
+              await new Promise(resolve => setTimeout(resolve, 2000));
               return checkSessionWithRetry(retryCount + 1);
             }
             throw error;
@@ -167,25 +182,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         console.error('Session check error:', error);
         
-        // Only clear session if it's not a timeout error during background tab
-        if (!document.hidden || !error.message?.includes('timeout')) {
-          console.log('Auth error, attempting recovery by clearing local session');
+        // More conservative error handling - don't clear session for timeout errors
+        if (error.message?.includes('timeout')) {
+          console.log('Session check timed out - will retry when needed');
+        } else if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+          console.log('Auth token invalid, clearing session');
           try {
             await supabase.auth.signOut({ scope: 'local' });
           } catch (signOutError) {
             console.error('Error during auth recovery:', signOutError);
           }
         } else {
-          console.log('Session check failed due to background tab throttling, will retry when tab becomes active');
+          console.log('Session check failed, but not clearing session to avoid loops');
         }
         
         if (mounted) {
-          // Don't set error for timeout issues in background tabs
-          if (!document.hidden || !error.message?.includes('timeout')) {
+          // Only set error for genuine auth failures, not timeouts
+          if (!error.message?.includes('timeout')) {
             setError('Authentication error occurred');
           }
         }
       } finally {
+        sessionCheckInProgressRef.current = false;
         if (mounted) {
           console.log("Initial auth check complete, setting loading to false");
           setLoading(false);
@@ -203,13 +221,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     checkSession();
 
-    // Listen for auth changes
+    // Listen for auth changes with debouncing
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
         
+        // Prevent excessive auth state changes
+        authStateChangeCountRef.current++;
+        if (authStateChangeCountRef.current > 10) {
+          console.warn('Too many auth state changes, throttling');
+          return;
+        }
+        
         console.log("Auth state change event:", event);
-        setLoading(true);
+        
+        // Don't set loading for every auth state change
+        if (event !== 'INITIAL_SESSION') {
+          setLoading(true);
+        }
         
         if (event === 'SIGNED_IN' && session) {
           console.log("Auth state change - SIGNED_IN:", session.user.id);

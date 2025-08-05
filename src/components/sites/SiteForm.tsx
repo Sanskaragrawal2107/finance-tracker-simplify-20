@@ -84,8 +84,12 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   // The useLoadingState hook now handles timeout logic automatically
   // No need for manual timeout management
   
-  // Default form values
-  const defaultValues: Partial<SiteFormValues> = {
+  // Default form values - ensure all fields have defined values to prevent controlled/uncontrolled warnings
+  const defaultValues: SiteFormValues = {
+    name: '',
+    jobName: '',
+    posNo: '',
+    location: '',
     startDate: new Date(),
     completionDate: null,
     supervisorId: supervisorId || '',
@@ -104,6 +108,13 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       form.setValue('supervisorId', supervisorId);
     }
   }, [supervisorId, form]);
+  
+  // Reset form when dialog closes to prevent stale data
+  useEffect(() => {
+    if (!isOpen) {
+      form.reset(defaultValues);
+    }
+  }, [isOpen, form, defaultValues]);
   
   // Simple fetch supervisors function - no connection checks
   const fetchSupervisors = async () => {

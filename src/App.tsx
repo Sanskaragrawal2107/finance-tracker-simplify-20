@@ -138,25 +138,14 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           console.log(`Tab was hidden for ${timeHidden}ms - not clearing loading states to avoid interrupting form submissions`);
         }
         
-        // Only mark app as stale after substantial inactivity (>60 seconds)
-        if (timeHidden > 60000) {
+        // Only mark app as stale after substantial inactivity (>2 minutes)
+        if (timeHidden > 120000) {
           console.log('App marked as stale after long inactivity');
           setAppStale(true);
-          toast.info('Tab was inactive for a while. Click buttons again or refresh the page if functionality is limited.');
+          toast.info('Tab was inactive for a while. Some functionality may need to be refreshed.');
           
-          // Try to reconnect Supabase
+          // Only try to reconnect Supabase, avoid auth session refresh to prevent loops
           try {
-            // Try to refresh the auth session
-            if (authContextRef.current && authContextRef.current.refreshSession) {
-              console.log('Refreshing auth session after tab visibility change');
-              const refreshed = await authContextRef.current.refreshSession();
-              if (refreshed) {
-                console.log('Auth session refreshed successfully');
-              } else {
-                console.warn('Auth session refresh failed');
-              }
-            }
-            
             supabase.removeAllChannels();
             setTimeout(() => {
               supabase.channel('system').subscribe();

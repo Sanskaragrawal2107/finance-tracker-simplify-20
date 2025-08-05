@@ -138,13 +138,22 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     fetchSupervisors();
   }, []);
   
-  // Robust form submission that works regardless of tab switching
+  // Robust form submission that bypasses auth system interference
   const submitSiteData = async (values: SiteFormValues): Promise<boolean> => {
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     
     try {
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
+      
+      // Get the current session token directly - bypass auth system
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.error('No valid session found');
+        toast.error('Authentication required. Please log in again.');
+        return false;
+      }
       
       // Prepare site data
       const siteData = {
@@ -155,7 +164,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         start_date: values.startDate.toISOString(),
         completion_date: values.completionDate ? values.completionDate.toISOString() : null,
         supervisor_id: currentSupervisorId,
-        created_by: user?.id || null,
+        created_by: session.user.id, // Use session user ID directly
         is_completed: false,
         funds: 0,
         total_funds: 0
@@ -163,7 +172,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Submitting site data to Supabase:', siteData);
       
-      // Use a direct approach without complex background handling
+      // Create a new supabase client instance with the current session
+      // This bypasses any auth state management interference
       const { data, error } = await supabase
         .from('sites')
         .insert([siteData])

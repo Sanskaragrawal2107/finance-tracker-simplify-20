@@ -21,7 +21,6 @@ export const supabase = createClient<Database>(
       detectSessionInUrl: false, // Prevent issues with URL-based auth
     },
     global: {
-      fetch: customFetch,
       headers: {
         'x-client-info': 'finance-tracker/1.0.0'
       }
@@ -33,84 +32,6 @@ export const supabase = createClient<Database>(
     }
   }
 );
-
-// Custom fetch function with retry mechanism for network errors and background tab handling
-function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  // Detect if tab is hidden and adjust timeout accordingly
-  const isBackgroundTab = document.hidden;
-  const timeoutDuration = isBackgroundTab ? 60000 : 45000; // Longer timeout for background tabs
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
-  
-  const fetchWithTimeout = () => {
-    // Use requestIdleCallback for background tabs if available
-    if (isBackgroundTab && typeof requestIdleCallback !== 'undefined') {
-      return new Promise<Response>((resolve, reject) => {
-        requestIdleCallback(() => {
-          fetch(input, {
-            ...init,
-            signal: controller.signal
-          }).then(resolve).catch(reject);
-        }, { timeout: timeoutDuration - 5000 }); // Leave 5s buffer
-      }).finally(() => clearTimeout(timeoutId));
-    } else {
-      return fetch(input, {
-        ...init,
-        signal: controller.signal
-      }).finally(() => clearTimeout(timeoutId));
-    }
-  };
-  
-  // Increase retry count for background tabs
-  const maxRetries = isBackgroundTab ? 5 : 3;
-  const retryDelay = isBackgroundTab ? 2000 : 1000;
-  
-  return withRetry(fetchWithTimeout, maxRetries, retryDelay, (error) => {
-    // Retry on network errors, timeouts, and background tab throttling
-    return error.name === 'AbortError' || 
-           error.name === 'TypeError' ||
-           error.name === 'NetworkError' ||
-           (error.message && (
-             error.message.includes('network') ||
-             error.message.includes('timeout') ||
-             error.message.includes('fetch')
-           ));
-  });
-}
-
-// Helper function to retry failed operations
-async function withRetry<T>(
-  operation: () => Promise<T>,
-  maxRetries: number,
-  delay: number,
-  retryCondition?: (error: any) => boolean
-): Promise<T> {
-  let lastError: any;
-  let retries = 0;
-
-  while (retries < maxRetries) {
-    try {
-      return await operation();
-    } catch (error: any) {
-      lastError = error;
-      // Check if we should retry based on the error
-      if (retryCondition && !retryCondition(error)) {
-        break;
-      }
-
-      retries++;
-      if (retries < maxRetries) {
-        console.warn(`Operation failed, retrying (${retries}/${maxRetries})...`, error);
-        // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, delay * retries));
-      }
-    }
-  }
-
-  console.error(`Operation failed after ${maxRetries} retries:`, lastError);
-  throw lastError;
-}
 
 // Function to ping Supabase and reconnect if needed
 export const pingSupabase = async (): Promise<boolean> => {

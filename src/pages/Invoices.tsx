@@ -194,6 +194,7 @@ const Invoices: React.FC = () => {
               bankDetails: parsedBankDetails,
               billUrl: invoice.bill_url,
               paymentStatus: invoice.payment_status as PaymentStatus,
+              status: invoice.payment_status as PaymentStatus, // Add the missing status field
               createdBy: invoice.created_by || '',
               createdAt: new Date(invoice.created_at),
               approverType: invoice.approver_type as "ho" | "supervisor" || "ho",
@@ -329,6 +330,7 @@ const Invoices: React.FC = () => {
           bankDetails: bankDetails,
           billUrl: data[0].bill_url,
           paymentStatus: data[0].payment_status as PaymentStatus,
+          status: data[0].payment_status as PaymentStatus, // Add the missing status field
           createdBy: data[0].created_by || '',
           createdAt: new Date(data[0].created_at),
           approverType: data[0].approver_type as "ho" | "supervisor" || "ho",

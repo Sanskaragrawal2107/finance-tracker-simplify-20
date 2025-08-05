@@ -20,7 +20,9 @@ interface Transaction {
   type: 'expense' | 'advance' | 'funds_received' | 'invoice';
   status: 'pending' | 'approved' | 'rejected';
   description: string | null;
+  category: string;
   created_at: string;
+  site_id: string;
 }
 
 interface TransactionHistoryProps {
@@ -38,14 +40,21 @@ export function TransactionHistory({ siteId }: TransactionHistoryProps) {
   const fetchTransactions = async () => {
     try {
       const { data, error } = await supabase
-        .from('transactions')
+        .from('expenses')
         .select('*')
         .eq('site_id', siteId)
         .order('date', { ascending: false });
 
       if (error) throw error;
 
-      setTransactions(data || []);
+      // Map the expenses data to transaction format
+      const mappedTransactions = (data || []).map(expense => ({
+        ...expense,
+        type: 'expense' as const, // Since we're fetching from expenses table
+        status: 'pending' as 'pending' | 'approved' | 'rejected' // Default status since expenses table doesn't have status
+      }));
+
+      setTransactions(mappedTransactions);
     } catch (error) {
       console.error('Error fetching transactions:', error);
       toast.error('Failed to load transactions');

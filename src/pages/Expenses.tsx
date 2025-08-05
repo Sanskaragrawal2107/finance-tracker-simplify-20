@@ -385,11 +385,11 @@ const Expenses: React.FC = () => {
             materialItems,
             bankDetails,
             billUrl: invoice.bill_url || '',
-            paymentStatus: invoice.payment_status || 'pending',
-            status: invoice.payment_status || 'pending',
+            paymentStatus: (invoice.payment_status || 'pending') as PaymentStatus,
+            status: (invoice.payment_status || 'pending') as PaymentStatus,
             createdBy: invoice.created_by || '',
             createdAt: new Date(invoice.created_at),
-            approverType: invoice.approver_type || '',
+            approverType: (invoice.approver_type || 'ho') as "ho" | "supervisor",
             siteId: invoice.site_id
           };
         });
@@ -924,7 +924,6 @@ const Expenses: React.FC = () => {
         
         <SupervisorTransactionHistory 
           siteId={selectedSiteId}
-          title="Supervisor-to-Supervisor Transactions"
         />
       </div>
     );

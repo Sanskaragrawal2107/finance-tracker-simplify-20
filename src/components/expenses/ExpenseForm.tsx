@@ -239,7 +239,7 @@ Return ONLY the category name, with no additional text or explanation.
           amount: expense.amount,
           status: "pending" as any,
           siteId: siteId,
-          created_by: userId,
+          createdBy: userId,
           created_at: new Date(),
         };
         
@@ -308,7 +308,7 @@ Return ONLY the category name, with no additional text or explanation.
         amount: values.amount,
         status: "pending" as any,
         siteId: siteId,
-        created_by: userId,
+        createdBy: userId,
         created_at: new Date(),
       };
       

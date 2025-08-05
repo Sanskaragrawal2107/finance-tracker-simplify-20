@@ -117,29 +117,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Use a longer timeout for background tabs and add retry logic
         const checkSessionWithRetry = async (retryCount = 0): Promise<any> => {
           const maxRetries = 1; // Reduce retries to prevent loops
-          const timeoutDuration = document.hidden ? 15000 : 10000; // Shorter timeouts
-          
-          const checkPromise = supabase.auth.getSession();
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(() => {
-              reject(new Error('Session check timed out'));
-            }, timeoutDuration);
-          });
-          
+          const timeoutDuration = document.hidden ? 25000 : 20000; // Longer timeouts
+
           try {
-            const sessionResult = await Promise.race([checkPromise, timeoutPromise]);
-            clearTimeout(timeoutId);
-            return sessionResult;
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('Session check timed out')), timeoutDuration);
+            });
+
+            const sessionPromise = supabase.auth.getSession();
+
+            return await Promise.race([
+              sessionPromise,
+              timeoutPromise
+            ]);
           } catch (error) {
-            clearTimeout(timeoutId);
-            
-            // Only retry for genuine network issues, not auth errors
-            if (retryCount < maxRetries && document.hidden && error.message?.includes('timeout')) {
-              console.log(`Session check failed (attempt ${retryCount + 1}/${maxRetries + 1}), retrying...`);
-              await new Promise(resolve => setTimeout(resolve, 2000));
+            if (retryCount < maxRetries) {
+              console.log(`Session check failed, retrying... (${retryCount + 1}/${maxRetries})`);
+              await new Promise(res => setTimeout(res, 1000)); // wait 1s before retry
               return checkSessionWithRetry(retryCount + 1);
             }
-            throw error;
+            throw error; // re-throw error after max retries
           }
         };
         

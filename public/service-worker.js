@@ -38,6 +38,13 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const supabaseUrl = 'bpyzpnioddmzniuikbsn.supabase.co';
+
+  // If the request is for the Supabase API, always go to the network.
+  if (event.request.url.includes(supabaseUrl)) {
+    return; // Let the browser handle the request.
+  }
+
   // We only want to cache GET requests.
   if (event.request.method !== 'GET') {
     return;

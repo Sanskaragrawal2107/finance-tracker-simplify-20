@@ -26,11 +26,10 @@ import {
   SelectTrigger, SelectValue 
 } from '@/components/ui/select';
 import { format } from 'date-fns';
-import { CalendarIcon, Loader2, AlertTriangle } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-// Removed useLoadingState import as we're using regular useState for better control
 
 // Schema definition with uppercase transformation
 const siteFormSchema = z.object({
@@ -62,27 +61,87 @@ interface Supervisor {
 
 export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: SiteFormProps) {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
-  const [isLoading, setIsLoading] = useState(false); // Use regular state instead of useLoadingState to avoid interference
+  const [isLoading, setIsLoading] = useState(false);
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [completionDateOpen, setCompletionDateOpen] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [isTabHidden, setIsTabHidden] = useState(false);
+  const [submissionStartTime, setSubmissionStartTime] = useState<number | null>(null);
   const { user } = useAuth();
   
-  // Add a ref to capture the supervisorId to preserve it during tab switching
+  // Refs for tab switching resilience
   const supervisorIdRef = useRef<string | undefined>(supervisorId);
-  // Track if submission is in progress
   const submissionInProgressRef = useRef(false);
-  // Store abort controller for cancelling requests
   const abortControllerRef = useRef<AbortController | null>(null);
+  const submissionDataRef = useRef<SiteFormValues | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const visibilityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Update the ref whenever the prop changes
   useEffect(() => {
     supervisorIdRef.current = supervisorId;
   }, [supervisorId]);
   
-  // The useLoadingState hook now handles timeout logic automatically
-  // No need for manual timeout management
+  // Page Visibility API - Handle tab switching during form submission
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isHidden = document.hidden;
+      setIsTabHidden(isHidden);
+      
+      if (submissionInProgressRef.current) {
+        if (isHidden) {
+          console.log('Tab became hidden during form submission - implementing background processing');
+          // Store current time when tab becomes hidden
+          const hiddenTime = Date.now();
+          localStorage.setItem('siteFormHiddenTime', hiddenTime.toString());
+          
+          // Set a longer timeout for background processing
+          if (visibilityTimeoutRef.current) {
+            clearTimeout(visibilityTimeoutRef.current);
+          }
+          
+          visibilityTimeoutRef.current = setTimeout(() => {
+            console.log('Background processing timeout - checking submission status');
+            checkSubmissionStatus();
+          }, 30000); // 30 second timeout for background processing
+          
+        } else {
+          console.log('Tab became visible during form submission - resuming normal processing');
+          const hiddenTimeStr = localStorage.getItem('siteFormHiddenTime');
+          if (hiddenTimeStr) {
+            const hiddenTime = parseInt(hiddenTimeStr);
+            const hiddenDuration = Date.now() - hiddenTime;
+            console.log(`Tab was hidden for ${hiddenDuration}ms during submission`);
+            
+            // If tab was hidden for more than 10 seconds, check submission status
+            if (hiddenDuration > 10000) {
+              checkSubmissionStatus();
+            }
+            
+            localStorage.removeItem('siteFormHiddenTime');
+          }
+          
+          // Clear background processing timeout
+          if (visibilityTimeoutRef.current) {
+            clearTimeout(visibilityTimeoutRef.current);
+            visibilityTimeoutRef.current = null;
+          }
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (visibilityTimeoutRef.current) {
+        clearTimeout(visibilityTimeoutRef.current);
+      }
+    };
+  }, []);
+  
+
   
   // Default form values - ensure all fields have defined values to prevent controlled/uncontrolled warnings
   const defaultValues = useMemo(() => ({
@@ -146,75 +205,159 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Load supervisors on mount - once only
   useEffect(() => {
-    fetchSupervisors();
-  }, []);
+    if (isOpen) {
+      fetchSupervisors();
+    }
+  }, [isOpen]);
   
-  // Robust form submission that bypasses auth system interference
-  const submitSiteData = async (values: SiteFormValues): Promise<boolean> => {
+  // Check submission status - used when tab becomes visible after being hidden
+  const checkSubmissionStatus = useCallback(async () => {
+    if (!submissionDataRef.current || !user) {
+      console.log('No submission data to check or user not available');
+      return;
+    }
+    
+    try {
+      // Check if site was already created by searching for it
+      const { data: existingSites, error } = await supabase
+        .from('sites')
+        .select('id, name')
+        .eq('name', submissionDataRef.current.name.toUpperCase())
+        .eq('supervisor_id', submissionDataRef.current.supervisorId || user.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      if (error) {
+        console.error('Error checking submission status:', error);
+        return;
+      }
+      
+      if (existingSites && existingSites.length > 0) {
+        // Site was successfully created
+        console.log('Site was successfully created during background processing:', existingSites[0]);
+        toast.success('Site created successfully!');
+        
+        // Reset form and close
+        form.reset();
+        submissionDataRef.current = null;
+        submissionInProgressRef.current = false;
+        setIsLoading(false);
+        setSubmissionStartTime(null);
+        onSubmit(submissionDataRef.current!);
+        onClose();
+      } else {
+        // Site was not created, retry submission
+        console.log('Site was not created, retrying submission');
+        await retrySubmission();
+      }
+    } catch (error) {
+      console.error('Error in checkSubmissionStatus:', error);
+      await retrySubmission();
+    }
+  }, [user, form, onSubmit, onClose]);
+  
+  // Retry submission with exponential backoff
+  const retrySubmission = useCallback(async () => {
+    if (!submissionDataRef.current || retryCount >= 3) {
+      console.log('Max retries reached or no submission data');
+      setIsLoading(false);
+      submissionInProgressRef.current = false;
+      setSubmissionStartTime(null);
+      toast.error('Failed to create site after multiple attempts. Please try again.');
+      return;
+    }
+    
+    const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+    console.log(`Retrying submission in ${delay}ms (attempt ${retryCount + 1}/3)`);
+    
+    setRetryCount(prev => prev + 1);
+    
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+    }
+    
+    retryTimeoutRef.current = setTimeout(async () => {
+      try {
+        await performSubmission(submissionDataRef.current!);
+      } catch (error) {
+        console.error('Retry submission failed:', error);
+        await retrySubmission(); // Recursive retry
+      }
+    }, delay);
+  }, [retryCount]);
+  
+  // Core submission function that works in background
+  const performSubmission = useCallback(async (values: SiteFormValues): Promise<boolean> => {
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     
     try {
+      // Store submission data for persistence
+      const submissionId = Date.now().toString();
+      const submissionData = {
+        id: submissionId,
+        values,
+        timestamp: Date.now(),
+        userId: user?.id,
+        status: 'pending'
+      };
+      
+      // Store in localStorage for persistence across tab switches
+      localStorage.setItem(`siteSubmission_${submissionId}`, JSON.stringify(submissionData));
+      
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
       
-      // Get the current session token directly - bypass auth system
+      // Get the current session token directly
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
         console.error('No valid session found');
-        toast.error('Authentication required. Please log in again.');
+        toast.error('Authentication required. Please refresh and try again.');
         return false;
       }
       
-      // Prepare site data
       const siteData = {
         name: values.name.toUpperCase(),
         job_name: values.jobName.toUpperCase(),
         pos_no: values.posNo.toUpperCase(),
         location: values.location.toUpperCase(),
-        start_date: values.startDate.toISOString(),
-        completion_date: values.completionDate ? values.completionDate.toISOString() : null,
+        start_date: values.startDate.toISOString().split('T')[0],
+        completion_date: values.completionDate ? values.completionDate.toISOString().split('T')[0] : null,
         supervisor_id: currentSupervisorId,
-        created_by: session.user.id, // Use session user ID directly
         is_completed: false,
-        funds: 0,
-        total_funds: 0
       };
       
-      console.log('Submitting site data to Supabase:', siteData);
+      console.log('Creating site with data:', siteData);
       
-      // Create a new supabase client instance with the current session
-      // This bypasses any auth state management interference
-      const { data, error } = await supabase
-        .from('sites')
-        .insert([siteData])
-        .select()
-        .abortSignal(abortControllerRef.current.signal);
-      
-      if (error) {
-        console.error('Error creating site:', error);
-        
-        // Handle abort signal
-        if (error.name === 'AbortError') {
-          console.log('Site creation was cancelled');
-          return false;
-        }
-        
-        // Handle specific error types
-        if (error.code === '23505') { // Unique constraint violation
-          if (error.message?.includes('name')) {
-            toast.error(`A site with the name "${values.name.toUpperCase()}" already exists`);
-          } else if (error.message?.includes('pos_no')) {
-            toast.error(`A site with the P.O. number "${values.posNo.toUpperCase()}" already exists`);
-          } else {
-            toast.error('A site with these details already exists');
+      // Use requestIdleCallback for better background processing
+      const submitPromise = new Promise<any>((resolve, reject) => {
+        const doSubmit = async () => {
+          try {
+            const { data, error } = await supabase
+              .from('sites')
+              .insert([siteData])
+              .select()
+              .abortSignal(abortControllerRef.current?.signal);
+            
+            if (error) {
+              reject(error);
+            } else {
+              resolve(data);
+            }
+          } catch (err) {
+            reject(err);
           }
-          return false;
-        }
+        };
         
-        toast.error('Failed to create site: ' + error.message);
-        return false;
-      }
+        // Use requestIdleCallback if available, otherwise setTimeout
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(doSubmit, { timeout: 5000 });
+        } else {
+          setTimeout(doSubmit, 0);
+        }
+      });
+      
+      const data = await submitPromise;
       
       if (!data || data.length === 0) {
         console.warn('No data returned from site creation');
@@ -223,22 +366,34 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
       
       console.log('Site created successfully:', data);
+      
+      // Clean up localStorage on success
+      localStorage.removeItem(`siteSubmission_${submissionId}`);
+      
       return true;
       
     } catch (error: any) {
-      console.error('Exception in submitSiteData:', error);
+      console.error('Exception in performSubmission:', error);
       
       if (error.name === 'AbortError') {
         console.log('Site creation was cancelled');
         return false;
       }
       
-      toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
+      // Handle specific error types
+      if (error.code === '23505') {
+        toast.error('A site with this name already exists. Please choose a different name.');
+      } else if (error.message?.includes('violates foreign key constraint')) {
+        toast.error('Invalid supervisor selected. Please refresh and try again.');
+      } else {
+        toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
+      }
       return false;
     }
-  };
+  }, [user]);
 
-  // Main form submission handler - with proper tab switching support
+  // SIMPLIFIED AND ROBUST FORM SUBMISSION HANDLER
+  // This handles browser tab throttling by using a different approach
   const onFormSubmit = async (values: SiteFormValues) => {
     // Prevent double submission
     if (submissionInProgressRef.current) {
@@ -253,21 +408,13 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       setIsLoading(true);
       submissionInProgressRef.current = true;
+      setSubmissionStartTime(Date.now());
       
-      // Create a promise that resolves regardless of tab visibility
-      const submissionPromise = new Promise<boolean>(async (resolve) => {
-        try {
-          const success = await submitSiteData(values);
-          console.log('Submission result:', success);
-          resolve(success);
-        } catch (error) {
-          console.error('Submission error:', error);
-          resolve(false);
-        }
-      });
+      // Store submission data for persistence
+      submissionDataRef.current = values;
       
-      // Wait for submission to complete
-      const success = await submissionPromise;
+      // Use performSubmission which has background processing capabilities
+      const success = await performSubmission(values);
       
       console.log('=== FORM SUBMISSION RESULT ===', success);
       
@@ -313,10 +460,18 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       console.log('Resetting loading state');
       setIsLoading(false);
       submissionInProgressRef.current = false;
+      submissionDataRef.current = null;
+      setSubmissionStartTime(null);
       
       // Clear abort controller
       if (abortControllerRef.current) {
         abortControllerRef.current = null;
+      }
+      
+      // Clear any retry timeouts
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
     }
   };

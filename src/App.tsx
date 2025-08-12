@@ -122,12 +122,9 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         
         console.log(`Tab became visible after ${timeHidden}ms`);
         
-        // Ensure Supabase session is fresh on return
+        // Always try to refresh Supabase session on return
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) {
-            await supabase.auth.refreshSession();
-          }
+          await supabase.auth.refreshSession();
         } catch (e) {
           console.warn('Session refresh on visibility failed or not needed:', e);
         }

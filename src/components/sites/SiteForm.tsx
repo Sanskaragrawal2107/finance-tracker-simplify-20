@@ -335,7 +335,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       try {
         await supabase.auth.refreshSession();
       } catch (e) {
-        // Non-fatal; we'll still attempt getSession below
+        console.warn('Initial refreshSession failed or not needed:', e);
       }
       
       // Get the current session token directly
@@ -360,27 +360,50 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Creating site with data:', siteData);
       
-      // Direct submit with a hard timeout safeguard
-      const queryPromise = supabase
+      // Define an insert function we can retry after refresh
+      const doInsert = () => supabase
         .from('sites')
         .insert([siteData])
         .select()
         .abortSignal(abortControllerRef.current?.signal);
       
-      const data = await withTimeout(queryPromise, SUBMIT_TIMEOUT_MS);
-      
-      if (!data || (Array.isArray(data) && data.length === 0)) {
-        console.warn('No data returned from site creation');
-        toast.error('No data returned from site creation. Please try again.');
-        return false;
+      // Attempt insert with a hard timeout
+      try {
+        const data = await withTimeout(doInsert(), SUBMIT_TIMEOUT_MS);
+        if (!data || (Array.isArray(data) && data.length === 0)) {
+          console.warn('No data returned from site creation');
+          toast.error('No data returned from site creation. Please try again.');
+          return false;
+        }
+        console.log('Site created successfully (first attempt):', data);
+        localStorage.removeItem(`siteSubmission_${submissionId}`);
+        return true;
+      } catch (firstErr: any) {
+        // If 401/JWT-related, try a one-time refresh and retry
+        const msg = String(firstErr?.message || '');
+        const status = (firstErr?.status || firstErr?.code || '').toString();
+        const looksAuth = msg.includes('JWT') || msg.includes('token') || status === '401';
+        console.warn('First insert attempt failed:', firstErr);
+        if (looksAuth) {
+          try {
+            console.log('Attempting session refresh and retry after auth-related error...');
+            await supabase.auth.refreshSession();
+            const data = await withTimeout(doInsert(), SUBMIT_TIMEOUT_MS);
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+              console.warn('No data returned from site creation (after retry)');
+              toast.error('No data returned from site creation. Please try again.');
+              return false;
+            }
+            console.log('Site created successfully (after retry):', data);
+            localStorage.removeItem(`siteSubmission_${submissionId}`);
+            return true;
+          } catch (retryErr: any) {
+            console.error('Retry after session refresh failed:', retryErr);
+            throw retryErr;
+          }
+        }
+        throw firstErr;
       }
-      
-      console.log('Site created successfully:', data);
-      
-      // Clean up localStorage on success
-      localStorage.removeItem(`siteSubmission_${submissionId}`);
-      
-      return true;
       
     } catch (error: any) {
       console.error('Exception in performSubmission:', error);

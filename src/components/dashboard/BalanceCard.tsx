@@ -32,21 +32,6 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
         .single();
       
       if (error) {
-        const status = (error as any).status || (error as any).code;
-        if (status === 406 || (error as any).code === 'PGRST116') {
-          setLocalBalanceData({
-            fundsReceived: 0,
-            fundsReceivedFromSupervisor: 0,
-            totalExpenditure: 0,
-            totalAdvances: 0,
-            debitsToWorker: 0,
-            invoicesPaid: 0,
-            advancePaidToSupervisor: 0,
-            pendingInvoices: localBalanceData?.pendingInvoices || 0,
-            totalBalance: 0
-          });
-          return;
-        }
         console.error("Error fetching site financial summary:", error);
         return;
       }

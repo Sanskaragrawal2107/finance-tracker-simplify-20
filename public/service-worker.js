@@ -1,7 +1,8 @@
-const CACHE_NAME = 'finance-tracker-cache-v2';
+const CACHE_NAME = 'finance-tracker-cache-v1';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
+  '/manifest.json',
   '/favicon.ico',
 ];
 
@@ -39,17 +40,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const supabaseUrl = 'bpyzpnioddmzniuikbsn.supabase.co';
 
-  // Ignore non-HTTP(S) schemes (e.g., chrome-extension://)
-  const url = new URL(event.request.url);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    return;
-  }
-
-  // Exclude GPT Engineer script from SW handling and caching
-  if (event.request.url.includes('cdn.gpteng.co/gptengineer.js')) {
-    return; // Let the browser handle without caching
-  }
-
   // If the request is for the Supabase API, always go to the network.
   if (event.request.url.includes(supabaseUrl)) {
     return; // Let the browser handle the request.
@@ -57,14 +47,6 @@ self.addEventListener('fetch', (event) => {
 
   // We only want to cache GET requests.
   if (event.request.method !== 'GET') {
-    return;
-  }
-
-  // Always network-first for JS and CSS to avoid stale hashed bundles
-  if (event.request.destination === 'script' || event.request.destination === 'style') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
-    );
     return;
   }
 
@@ -88,13 +70,12 @@ self.addEventListener('fetch', (event) => {
 
         // Otherwise, fetch from the network.
         return fetch(event.request).then((networkResponse) => {
-          // If we received a valid response, cache it, but only for http(s) URLs
-          if (networkResponse && networkResponse.status === 200 && (url.protocol === 'http:' || url.protocol === 'https:')) {
+          // If we received a valid response, cache it.
+          if (networkResponse && networkResponse.status === 200) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME)
               .then((cache) => {
-                // Best-effort cache put, ignore failures
-                cache.put(event.request, responseToCache).catch(() => {});
+                cache.put(event.request, responseToCache);
               });
           }
           return networkResponse;

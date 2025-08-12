@@ -189,27 +189,10 @@ const AdminSupervisorSites: React.FC = () => {
         .single();
         
       if (error) {
-        // PostgREST returns 406 when single() finds zero or multiple rows
-        // Treat as "no data yet" and default to zeros
-        const status = (error as any).status || (error as any).code;
-        if (status === 406 || (error as any).code === 'PGRST116') {
-          setFinancialSummary({
-            fundsReceived: 0,
-            fundsReceivedFromSupervisor: 0,
-            totalExpenditure: 0,
-            totalAdvances: 0,
-            debitsToWorker: 0,
-            invoicesPaid: 0,
-            advancePaidToSupervisor: 0,
-            pendingInvoices: 0,
-            totalBalance: 0
-          });
-          return;
-        }
         console.error('Error fetching financial summary:', error);
         toast({
           title: 'Error loading financial summary',
-          description: (error as any).message || 'Failed to load financial data',
+          description: error.message,
           variant: 'destructive',
         });
         setFinancialSummary(null);

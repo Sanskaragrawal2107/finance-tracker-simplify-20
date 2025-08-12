@@ -6,7 +6,7 @@ import { Home, Building, LogOut, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import { VisibilityContext } from '@/contexts/visibility';
+import { VisibilityContext } from '@/App';
 import { toast } from 'sonner';
 
 
@@ -25,8 +25,8 @@ const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { logout, user, refreshSession } = useAuth();
-  const { forceRefresh, registerAuthContext } = useContext(VisibilityContext);
+  const { logout, user } = useAuth();
+  const { forceRefresh } = useContext(VisibilityContext);
   const lastInteractionRef = useRef<number>(Date.now());
   
   // Check if the app needs a refresh based on last interaction time
@@ -58,15 +58,6 @@ const Navbar: React.FC<NavbarProps> = ({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
-
-  // Register auth context so global forceRefresh can refresh session when needed
-  useEffect(() => {
-    try {
-      registerAuthContext?.({ refreshSession });
-    } catch (e) {
-      console.warn('Failed to register auth context:', e);
-    }
-  }, [registerAuthContext, refreshSession]);
   
   // Function to handle home button click based on user role
   const handleHomeClick = () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useCallback, useRef } from 'react';
-import { VisibilityContext } from '@/contexts/visibility';
+import { VisibilityContext } from '@/App';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

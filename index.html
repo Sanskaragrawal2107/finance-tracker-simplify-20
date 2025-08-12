@@ -12,19 +12,7 @@
   <body>
     <div id="root"></div>
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
-    <script>
-      // Load GPT Engineer only in development (localhost) or with ?gpteng=1
-      (function() {
-        const isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-        const enabledByQuery = location.search.includes('gpteng=1');
-        if (isLocalhost || enabledByQuery) {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.gpteng.co/gptengineer.js';
-          s.type = 'module';
-          document.head.appendChild(s);
-        }
-      })();
-    </script>
+    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
     <script type="module" src="/src/main.tsx"></script>
     
     <!-- Service Worker Registration - Netlify-compatible -->
@@ -124,9 +112,81 @@
               console.log('ServiceWorker registration failed: ', error);
             });
         });
-        // Removed legacy network connectivity pings and Supabase HEAD checks
-        // to avoid interfering with Supabase auth/session refresh and to
-        // prevent noisy console warnings/timeouts.
+        
+        // Helper function to handle network errors
+        const handleNetworkError = () => {
+          console.warn('Network error detected, trying to recover...');
+          
+          // Try to ping Supabase directly
+          fetch('https://bpyzpnioddmzniuikbsn.supabase.co/rest/v1/', { 
+            method: 'HEAD',
+            mode: 'cors',
+            cache: 'no-cache'
+          })
+          .then(response => {
+            if (response.ok) {
+              console.log('Supabase is reachable, page might need refresh');
+              
+              // Show a notification that lets the user refresh
+              const notification = document.createElement('div');
+              notification.style.position = 'fixed';
+              notification.style.top = '0';
+              notification.style.left = '0';
+              notification.style.right = '0';
+              notification.style.backgroundColor = '#f8d7da';
+              notification.style.color = '#721c24';
+              notification.style.padding = '10px';
+              notification.style.textAlign = 'center';
+              notification.style.zIndex = '9999';
+              notification.innerHTML = 'Connection issues detected. <button style="background-color: #721c24; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px;">Refresh</button>';
+              
+              document.body.appendChild(notification);
+              
+              // Add event listener to the button
+              const refreshButton = notification.querySelector('button');
+              if (refreshButton) {
+                refreshButton.addEventListener('click', () => {
+                  window.location.reload();
+                });
+              }
+            }
+          })
+          .catch(error => {
+            console.error('Connectivity test failed:', error);
+          });
+        };
+        
+        // Check service worker status periodically
+        setInterval(() => {
+          if (navigator.serviceWorker.controller && document.visibilityState === 'visible') {
+            const messageChannel = new MessageChannel();
+            
+            // Set up a timeout for the response
+            const timeout = setTimeout(() => {
+              console.warn('Service worker ping timed out');
+              handleNetworkError();
+            }, 2000); // Longer timeout for Netlify
+            
+            // Handle the response
+            messageChannel.port1.onmessage = (event) => {
+              clearTimeout(timeout);
+              if (event.data && event.data.type === 'PONG') {
+                console.log('Service worker is alive');
+              }
+            };
+            
+            // Send ping to service worker
+            try {
+              navigator.serviceWorker.controller.postMessage(
+                { type: 'PING' },
+                [messageChannel.port2]
+              );
+            } catch (error) {
+              console.error('Error pinging service worker:', error);
+              clearTimeout(timeout);
+            }
+          }
+        }, 60000); // Check every minute
       }
     </script>
   </body>

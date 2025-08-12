@@ -7,7 +7,7 @@ import { InvoiceList } from '@/components/invoices/InvoiceList';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { UserRole } from '@/lib/types';
 import { SupervisorTransactionHistory } from '../transactions/SupervisorTransactionHistory';
-import { VisibilityContext } from '@/contexts/visibility';
+import { VisibilityContext } from '@/App';
 
 interface SiteDetailTransactionsProps {
   siteId: string;

@@ -1,8 +1,7 @@
-const CACHE_NAME = 'finance-tracker-cache-v1';
+const CACHE_NAME = 'finance-tracker-cache-v2';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json',
   '/favicon.ico',
 ];
 
@@ -38,15 +37,46 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const reqUrl = event.request.url || '';
+
+  // Skip chrome-extension and other unsupported schemes early
+  if (reqUrl.startsWith('chrome-extension://')) {
+    return;
+  }
+
   const supabaseUrl = 'bpyzpnioddmzniuikbsn.supabase.co';
 
+  // Ignore non-HTTP(S) schemes (e.g., chrome-extension://)
+  let url;
+  try {
+    url = new URL(reqUrl);
+  } catch {
+    return;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return;
+  }
+
+  // Exclude GPT Engineer script from SW handling and caching
+  if (reqUrl.includes('cdn.gpteng.co/gptengineer.js')) {
+    return; // Let the browser handle without caching
+  }
+
   // If the request is for the Supabase API, always go to the network.
-  if (event.request.url.includes(supabaseUrl)) {
+  if (reqUrl.includes(supabaseUrl)) {
     return; // Let the browser handle the request.
   }
 
   // We only want to cache GET requests.
   if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Always network-first for JS and CSS to avoid stale hashed bundles
+  if (event.request.destination === 'script' || event.request.destination === 'style') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
     return;
   }
 
@@ -70,12 +100,21 @@ self.addEventListener('fetch', (event) => {
 
         // Otherwise, fetch from the network.
         return fetch(event.request).then((networkResponse) => {
-          // If we received a valid response, cache it.
-          if (networkResponse && networkResponse.status === 200) {
+          // Only cache valid http(s) 200 responses
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            (url.protocol === 'http:' || url.protocol === 'https:')
+          ) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME)
               .then((cache) => {
-                cache.put(event.request, responseToCache);
+                // Best-effort cache put, ignore failures (e.g., chrome-extension requests)
+                try {
+                  if (!reqUrl.startsWith('chrome-extension://')) {
+                    cache.put(event.request, responseToCache).catch(() => {});
+                  }
+                } catch {}
               });
           }
           return networkResponse;

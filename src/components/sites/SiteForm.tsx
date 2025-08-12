@@ -69,6 +69,33 @@ async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   ]);
 }
 
+// Soft helpers that never throw — they resolve fallback values on timeout/error
+async function softGetSession(timeoutMs: number): Promise<any | null> {
+  try {
+    const result = await Promise.race([
+      (supabase.auth.getSession() as unknown as Promise<any>),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+    // result could be null (timeout) or { data: { session } }
+    return result && result.data ? result.data.session : null;
+  } catch {
+    return null;
+  }
+}
+
+async function softRefreshSession(timeoutMs: number): Promise<boolean> {
+  try {
+    const result = await Promise.race([
+      (supabase.auth.refreshSession() as unknown as Promise<any>),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+    ]);
+    // If race returned false (timeout), treat as no-op; otherwise consider success
+    return result !== false;
+  } catch {
+    return false;
+  }
+}
+
 export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: SiteFormProps) {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -332,28 +359,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
       
-      // Ensure session is fresh right before submitting
-      try {
-        await withTimeout(supabase.auth.refreshSession(), AUTH_OP_TIMEOUT_MS);
-      } catch (e) {
-        console.warn('Initial refreshSession timed out/failed or not needed:', e);
-      }
-      
-      // Get the current session token directly (with timeout)
-      let session = null as null | any;
-      try {
-        const sessionResp = await withTimeout(supabase.auth.getSession(), AUTH_OP_TIMEOUT_MS);
-        session = sessionResp?.data?.session ?? null;
-      } catch (e) {
-        console.warn('getSession timed out/failed:', e);
-      }
-      
-      if (!session) {
-        console.error('No valid session found');
-        toast.error('Authentication required. Please refresh and try again.');
-        return false;
-      }
-      
+      // Do not block on auth ops before submit; just attempt insert
       const siteData = {
         name: values.name.toUpperCase(),
         job_name: values.jobName.toUpperCase(),
@@ -367,14 +373,13 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Creating site with data:', siteData);
       
-      // Define an insert function we can retry after refresh
       const doInsert = () => supabase
         .from('sites')
         .insert([siteData])
         .select()
         .abortSignal(abortControllerRef.current?.signal);
       
-      // Attempt insert with a hard timeout
+      // First attempt
       try {
         const data = await withTimeout(doInsert(), SUBMIT_TIMEOUT_MS);
         if (!data || (Array.isArray(data) && data.length === 0)) {
@@ -386,19 +391,19 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         localStorage.removeItem(`siteSubmission_${submissionId}`);
         return true;
       } catch (firstErr: any) {
-        // If 401/JWT-related, try a one-time refresh and retry
         const msg = String(firstErr?.message || '');
         const status = (firstErr?.status || firstErr?.code || '').toString();
-        const looksAuth = msg.includes('JWT') || msg.includes('token') || status === '401';
+        const looksAuth = msg.includes('JWT') || msg.includes('token') || status === '401' || msg.includes('401');
         console.warn('First insert attempt failed:', firstErr);
+        
         if (looksAuth) {
+          // Soft-refresh session and retry once
+          await softRefreshSession(AUTH_OP_TIMEOUT_MS);
+          const sessionAfter = await softGetSession(AUTH_OP_TIMEOUT_MS);
+          if (!sessionAfter) {
+            console.warn('Session still not available after soft refresh; proceeding with retry anyway');
+          }
           try {
-            console.log('Attempting session refresh and retry after auth-related error...');
-            try {
-              await withTimeout(supabase.auth.refreshSession(), AUTH_OP_TIMEOUT_MS);
-            } catch (e) {
-              console.warn('Retry refreshSession timed out/failed:', e);
-            }
             const data = await withTimeout(doInsert(), SUBMIT_TIMEOUT_MS);
             if (!data || (Array.isArray(data) && data.length === 0)) {
               console.warn('No data returned from site creation (after retry)');
@@ -409,10 +414,12 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             localStorage.removeItem(`siteSubmission_${submissionId}`);
             return true;
           } catch (retryErr: any) {
-            console.error('Retry after session refresh failed:', retryErr);
+            console.error('Retry after soft session refresh failed:', retryErr);
+            // Fall through to general error handling below
             throw retryErr;
           }
         }
+        
         throw firstErr;
       }
       
@@ -434,6 +441,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         toast.error('A site with this name already exists. Please choose a different name.');
       } else if (error.message?.includes('violates foreign key constraint')) {
         toast.error('Invalid supervisor selected. Please refresh and try again.');
+      } else if (String(error?.status || error?.code) === '401' || String(error?.message || '').includes('JWT')) {
+        toast.error('Session expired. Please re-login.');
       } else {
         toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
       }

@@ -237,13 +237,25 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         console.log('Site was successfully created during background processing:', existingSites[0]);
         toast.success('Site created successfully!');
         
+        // Preserve values before clearing ref
+        const lastValues = submissionDataRef.current;
+        
         // Reset form and close
         form.reset();
         submissionDataRef.current = null;
         submissionInProgressRef.current = false;
         setIsLoading(false);
         setSubmissionStartTime(null);
-        onSubmit(submissionDataRef.current!);
+        if (lastValues) {
+          onSubmit({
+            ...lastValues,
+            name: lastValues.name.toUpperCase(),
+            jobName: lastValues.jobName.toUpperCase(),
+            posNo: lastValues.posNo.toUpperCase(),
+            location: lastValues.location.toUpperCase(),
+            supervisorId: lastValues.supervisorId || user?.id || ''
+          });
+        }
         onClose();
       } else {
         // Site was not created, retry submission
@@ -307,6 +319,10 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
       
+      // Configure a submission timeout to prevent indefinite hangs
+      const timeoutMs = document.hidden ? 60000 : 30000; // 60s if hidden, else 30s
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      
       // Get the current session token directly
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -357,7 +373,18 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         }
       });
       
-      const data = await submitPromise;
+      // Race the submission with a timeout that aborts the request
+      const data = await Promise.race([
+        submitPromise,
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            try {
+              abortControllerRef.current?.abort();
+            } catch {}
+            reject(new Error('Submission timed out'));
+          }, timeoutMs);
+        })
+      ]);
       
       if (!data || data.length === 0) {
         console.warn('No data returned from site creation');
@@ -367,13 +394,18 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Site created successfully:', data);
       
-      // Clean up localStorage on success
+      // Clean up timeout and localStorage on success
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       localStorage.removeItem(`siteSubmission_${submissionId}`);
       
       return true;
       
     } catch (error: any) {
       console.error('Exception in performSubmission:', error);
+      // No need to clear stored submission here; let caller decide about retries
       
       if (error.name === 'AbortError') {
         console.log('Site creation was cancelled');
@@ -460,7 +492,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       console.log('Resetting loading state');
       setIsLoading(false);
       submissionInProgressRef.current = false;
-      submissionDataRef.current = null;
       setSubmissionStartTime(null);
       
       // Clear abort controller

@@ -61,9 +61,10 @@ interface Supervisor {
 
 // Add a hard timeout to avoid indefinite "Creating..." state
 const SUBMIT_TIMEOUT_MS = 20000;
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+const AUTH_OP_TIMEOUT_MS = 4000;
+async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   return await Promise.race([
-    promise,
+    promise as Promise<T>,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Submission timed out')), ms)),
   ]);
 }
@@ -333,13 +334,19 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       // Ensure session is fresh right before submitting
       try {
-        await supabase.auth.refreshSession();
+        await withTimeout(supabase.auth.refreshSession(), AUTH_OP_TIMEOUT_MS);
       } catch (e) {
-        console.warn('Initial refreshSession failed or not needed:', e);
+        console.warn('Initial refreshSession timed out/failed or not needed:', e);
       }
       
-      // Get the current session token directly
-      const { data: { session } } = await supabase.auth.getSession();
+      // Get the current session token directly (with timeout)
+      let session = null as null | any;
+      try {
+        const sessionResp = await withTimeout(supabase.auth.getSession(), AUTH_OP_TIMEOUT_MS);
+        session = sessionResp?.data?.session ?? null;
+      } catch (e) {
+        console.warn('getSession timed out/failed:', e);
+      }
       
       if (!session) {
         console.error('No valid session found');
@@ -387,7 +394,11 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         if (looksAuth) {
           try {
             console.log('Attempting session refresh and retry after auth-related error...');
-            await supabase.auth.refreshSession();
+            try {
+              await withTimeout(supabase.auth.refreshSession(), AUTH_OP_TIMEOUT_MS);
+            } catch (e) {
+              console.warn('Retry refreshSession timed out/failed:', e);
+            }
             const data = await withTimeout(doInsert(), SUBMIT_TIMEOUT_MS);
             if (!data || (Array.isArray(data) && data.length === 0)) {
               console.warn('No data returned from site creation (after retry)');

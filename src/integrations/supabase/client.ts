@@ -18,7 +18,7 @@ export const supabase = createClient<Database>(
       storageKey: 'finance-tracker-auth',
       storage: localStorage,
       autoRefreshToken: true,
-      detectSessionInUrl: false, // Prevent issues with URL-based auth
+      detectSessionInUrl: true, // enable URL-based session detection to keep tokens in sync
     },
     global: {
       headers: {
@@ -32,6 +32,32 @@ export const supabase = createClient<Database>(
     }
   }
 );
+
+// Proactive helper to ensure a fresh session
+export async function ensureFreshSession(): Promise<boolean> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expiresAt = session?.expires_at ?? 0;
+    // If no session or expiring in <= 15s, refresh
+    if (!session || expiresAt - nowSec <= 15) {
+      const { data, error } = await supabase.auth.refreshSession();
+      return !!data?.session && !error;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Observe and log session changes (helps diagnose token loss on tab switches)
+supabase.auth.onAuthStateChange((_event, session) => {
+  if (session) {
+    console.log('Supabase auth state changed. New token ends with:', session.access_token?.slice(-8));
+  } else {
+    console.warn('Supabase auth state changed. No active session');
+  }
+});
 
 
 // Function to refresh schema cache - this was missing and causing errors

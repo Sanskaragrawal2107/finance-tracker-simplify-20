@@ -12,10 +12,11 @@ import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import RegisterForm from '@/components/auth/RegisterForm';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, ensureFreshSession } from '@/integrations/supabase/client';
 import SiteForm from '@/components/sites/SiteForm';
 import SitesList from '@/components/sites/SitesList';
 import { useLoadingState } from '@/hooks/use-loading-state';
+import { fetchSupabaseData } from '@/utils/dataFetching';
 
 interface SupervisorStats {
   totalSites: number;
@@ -40,7 +41,7 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user } = useAuth();
-  
+
   const fetchSupervisorsAndSites = async () => {
     const isInitialLoad = initialLoading;
     if (!isInitialLoad) {
@@ -48,55 +49,65 @@ const AdminDashboard: React.FC = () => {
     } else {
       setInitialLoading(true);
     }
-    
+
     try {
-      const { data: supervisorsData, error: supervisorsError } = await supabase
-        .from('users')
-        .select('id, name')
-        .eq('role', 'supervisor');
-        
-      if (supervisorsError) {
-        console.error('Error fetching supervisors:', supervisorsError);
-        toast.error('Error loading supervisors data. Please refresh the page.');
-        setSupervisorsList([]);
-        setSupervisorStats({});
-        return;
-      }
-      
+      // Proactively ensure a fresh session before querying
+      await ensureFreshSession();
+
+      const supervisorsData = await fetchSupabaseData<SupervisorWithId[]>(
+        async () => {
+          const { data, error } = await supabase
+            .from('users')
+            .select('id, name')
+            .eq('role', 'supervisor');
+          return { data, error } as any;
+        },
+        { context: 'supervisors' }
+      );
+
       if (!supervisorsData || supervisorsData.length === 0) {
         setSupervisorsList([]);
         setSupervisorStats({});
+        if (!supervisorsData) {
+          // Null only when all retries failed
+          toast.error('Error loading supervisors data. Please refresh the page.');
+        }
         return;
       }
-      
+
       setSupervisorsList(supervisorsData);
-      
-      const { data: sitesData, error: sitesError } = await supabase
-        .from('sites')
-        .select('id, supervisor_id, is_completed');
-        
-      if (sitesError) {
-        console.error('Error fetching sites:', sitesError);
-        toast.error('Error loading sites data. Please refresh the page.');
+
+      const sitesData = await fetchSupabaseData<any[]>(
+        async () => {
+          const { data, error } = await supabase
+            .from('sites')
+            .select('id, supervisor_id, is_completed');
+          return { data, error } as any;
+        },
+        { context: 'sites' }
+      );
+
+      if (!sitesData) {
         setSupervisorStats({});
+        toast.error('Error loading sites data. Please refresh the page.');
         return;
       }
-      
+
       const stats: Record<string, SupervisorStats> = {};
-      
+
       supervisorsData.forEach(supervisor => {
         const supervisorSites = sitesData ? sitesData.filter(site => site.supervisor_id === supervisor.id) : [];
         const total = supervisorSites.length;
         const active = supervisorSites.filter(site => !site.is_completed).length;
         const completed = supervisorSites.filter(site => site.is_completed).length;
-        
+
         stats[supervisor.id] = {
           totalSites: total,
           activeSites: active,
           completedSites: completed
         };
       });
-      
+
       setSupervisorStats(stats);
     } catch (error) {
       console.error('Error fetching supervisors and sites:', error);
@@ -115,10 +126,10 @@ const AdminDashboard: React.FC = () => {
       }
     }
   };
-  
+
   useEffect(() => {
     let mounted = true;
-    
+
     if (mounted) {
       if (user) {
         fetchSupervisorsAndSites();
@@ -126,21 +137,33 @@ const AdminDashboard: React.FC = () => {
         setLoadingSupervisors(false);
       }
     }
-    
+
+    // Refresh session and refetch when tab becomes visible (admin page specific)
+    const onVis = async () => {
+      if (document.visibilityState === 'visible') {
+        await ensureFreshSession();
+        if (user) {
+          fetchSupervisorsAndSites();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+
     return () => {
       mounted = false;
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, [user]);
 
   const handleViewSites = (supervisorId: string) => {
     console.log("Viewing sites for supervisor:", supervisorId);
     const selectedSupervisor = supervisorsList.find(sup => sup.id === supervisorId);
-    navigate('/admin/supervisor-sites', { 
-      state: { 
+    navigate('/admin/supervisor-sites', {
+      state: {
         supervisorId: supervisorId,
         supervisorName: selectedSupervisor?.name || 'Unknown Supervisor',
-        showSites: true 
-      } 
+        showSites: true
+      }
     });
   };
 
@@ -157,7 +180,7 @@ const AdminDashboard: React.FC = () => {
       setSupervisorStats(prev => {
         const updatedStats = { ...prev };
         const supervisorId = site.supervisorId || selectedSupervisorId;
-        
+
         if (supervisorId && updatedStats[supervisorId]) {
           updatedStats[supervisorId] = {
             ...updatedStats[supervisorId],
@@ -167,7 +190,7 @@ const AdminDashboard: React.FC = () => {
         }
         return updatedStats;
       });
-      
+
       setIsSiteFormOpen(false);
     } catch (error: any) {
       console.error('Error in handleCreateSite:', error);
@@ -193,12 +216,12 @@ const AdminDashboard: React.FC = () => {
         </div>
       ) : (
         <>
-          <PageTitle 
-            title="Admin Dashboard" 
+          <PageTitle
+            title="Admin Dashboard"
             subtitle="Manage supervisors and view site statistics"
             className="mb-4"
           />
-          
+
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold">User Management</h2>
             <Button onClick={() => setIsRegisterFormOpen(true)}>
@@ -206,7 +229,7 @@ const AdminDashboard: React.FC = () => {
               Add User
             </Button>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <CustomCard className="bg-gradient-to-br from-blue-50 to-indigo-50">
               <div className="flex items-center">
@@ -219,7 +242,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             </CustomCard>
-            
+
             <CustomCard className="bg-gradient-to-br from-green-50 to-emerald-50">
               <div className="flex items-center">
                 <div className="p-3 rounded-full bg-green-100 mr-4">
@@ -233,7 +256,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             </CustomCard>
-            
+
             <CustomCard className="bg-gradient-to-br from-purple-50 to-violet-50">
               <div className="flex items-center">
                 <div className="p-3 rounded-full bg-purple-100 mr-4">
@@ -248,7 +271,7 @@ const AdminDashboard: React.FC = () => {
               </div>
             </CustomCard>
           </div>
-          
+
           <CustomCard>
             <h2 className="text-xl font-semibold mb-4">Supervisor Management</h2>
             <div className="mb-6">
@@ -256,8 +279,8 @@ const AdminDashboard: React.FC = () => {
                 Select a supervisor to view their sites
               </label>
               <div className="max-w-md">
-                <Select 
-                  value={selectedSupervisorId || ''} 
+                <Select
+                  value={selectedSupervisorId || ''}
                   onValueChange={(value) => setSelectedSupervisorId(value || null)}
                 >
                   <SelectTrigger className="w-full">
@@ -274,7 +297,7 @@ const AdminDashboard: React.FC = () => {
                 </Select>
               </div>
             </div>
-            
+
             {selectedSupervisorId && supervisorStats[selectedSupervisorId] && (
               <div className="space-y-4">
                 <div className="p-4 border rounded-lg bg-background">
@@ -284,7 +307,7 @@ const AdminDashboard: React.FC = () => {
                         <User className="h-5 w-5 text-primary" />
                         <h3 className="text-lg font-medium">{getSelectedSupervisor()?.name}</h3>
                       </div>
-                      
+
                       <div className="flex flex-wrap gap-2 mt-2">
                         <Badge variant="outline" className="bg-blue-50 text-blue-800 hover:bg-blue-50">
                           {supervisorStats[selectedSupervisorId]?.totalSites || 0} Total Sites
@@ -297,7 +320,7 @@ const AdminDashboard: React.FC = () => {
                         </Badge>
                       </div>
                     </div>
-                    
+
                     <Button onClick={() => handleViewSites(selectedSupervisorId)}>
                       <Building2 className="h-4 w-4 mr-2" />
                       View Sites
@@ -306,7 +329,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             )}
-            
+
             {(!selectedSupervisorId) && (
               <div className="text-center py-6">
                 <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -314,24 +337,24 @@ const AdminDashboard: React.FC = () => {
                   {initialLoading ? 'Loading Supervisors...' : 'Select a Supervisor'}
                 </h3>
                 <p className="text-muted-foreground max-w-md mx-auto">
-                  {initialLoading 
+                  {initialLoading
                     ? 'Please wait while we fetch the supervisor data.'
-                    : supervisorsList.length > 0 
+                    : supervisorsList.length > 0
                       ? 'Choose a supervisor from the dropdown to view their sites and performance statistics.'
                       : 'No supervisors found. Please add a supervisor first.'}
                 </p>
               </div>
             )}
           </CustomCard>
-          
+
           <CustomCard>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Quick Actions</h2>
             </div>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto py-6 flex flex-col items-center justify-center text-center"
                 onClick={() => navigate('/expenses')}
               >
@@ -341,9 +364,9 @@ const AdminDashboard: React.FC = () => {
                   Access complete site listing
                 </span>
               </Button>
-              
-              <Button 
-                variant="outline" 
+
+              <Button
+                variant="outline"
                 className="h-auto py-6 flex flex-col items-center justify-center text-center"
                 onClick={() => navigate('/dashboard')}
               >
@@ -353,9 +376,9 @@ const AdminDashboard: React.FC = () => {
                   View financial statistics
                 </span>
               </Button>
-              
-              <Button 
-                variant="outline" 
+
+              <Button
+                variant="outline"
                 className="h-auto py-6 flex flex-col items-center justify-center text-center"
                 onClick={() => handleAddSite()}
               >
@@ -368,11 +391,11 @@ const AdminDashboard: React.FC = () => {
             </div>
           </CustomCard>
 
-          <RegisterForm 
+          <RegisterForm
             isOpen={isRegisterFormOpen}
             onClose={() => setIsRegisterFormOpen(false)}
           />
-          
+
           <SiteForm
             isOpen={isSiteFormOpen}
             onClose={() => setIsSiteFormOpen(false)}

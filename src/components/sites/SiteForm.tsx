@@ -331,6 +331,13 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
       
+      // Ensure session is fresh right before submitting
+      try {
+        await supabase.auth.refreshSession();
+      } catch (e) {
+        // Non-fatal; we'll still attempt getSession below
+      }
+      
       // Get the current session token directly
       const { data: { session } } = await supabase.auth.getSession();
       

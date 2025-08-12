@@ -740,7 +740,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {retryCount > 0 ? (
-                      `Retrying... (${retryCount}/2)`
+                      `Retrying... (${retryCount}/3)`
                     ) : (
                       'Creating...'
                     )}

@@ -59,9 +59,9 @@ interface Supervisor {
   name?: string;
 }
 
-// Add a hard timeout to avoid indefinite "Creating..." state
-const SUBMIT_TIMEOUT_MS = 20000;
-const AUTH_OP_TIMEOUT_MS = 4000;
+// Increase timeouts to better tolerate tab-throttle/network spin-up after returning
+const SUBMIT_TIMEOUT_MS = 45000;
+const AUTH_OP_TIMEOUT_MS = 15000;
 async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   return await Promise.race([
     promise as Promise<T>,
@@ -343,6 +343,12 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     
     try {
+      // Offline guard
+      if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
+        toast.error('You appear to be offline. Please check your connection and try again.');
+        return false;
+      }
+      
       // Store submission data for persistence
       const submissionId = Date.now().toString();
       const submissionData = {
@@ -415,7 +421,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             return true;
           } catch (retryErr: any) {
             console.error('Retry after soft session refresh failed:', retryErr);
-            // Fall through to general error handling below
             throw retryErr;
           }
         }
@@ -442,7 +447,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       } else if (error.message?.includes('violates foreign key constraint')) {
         toast.error('Invalid supervisor selected. Please refresh and try again.');
       } else if (String(error?.status || error?.code) === '401' || String(error?.message || '').includes('JWT')) {
-        toast.error('Session expired. Please re-login.');
+        toast.error('Your session looks expired. Please reload the page to re-authenticate.');
       } else {
         toast.error('Failed to create site: ' + (error.message || 'Unknown error'));
       }

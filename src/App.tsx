@@ -122,6 +122,16 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         
         console.log(`Tab became visible after ${timeHidden}ms`);
         
+        // Ensure Supabase session is fresh on return
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            await supabase.auth.refreshSession();
+          }
+        } catch (e) {
+          console.warn('Session refresh on visibility failed or not needed:', e);
+        }
+        
         // Only clear loading states if tab was hidden for more than 30 seconds
         // This prevents interrupting legitimate form submissions which can take time
         if (timeHidden > 30000) {

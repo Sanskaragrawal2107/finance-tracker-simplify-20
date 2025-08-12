@@ -96,6 +96,16 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           const hiddenTime = Date.now();
           localStorage.setItem('siteFormHiddenTime', hiddenTime.toString());
           
+          // Abort the in-flight request to avoid browser background throttling hangs
+          try {
+            if (abortControllerRef.current) {
+              console.log('Aborting in-flight submission due to tab hidden');
+              abortControllerRef.current.abort();
+            }
+          } catch (e) {
+            console.warn('Abort during hide failed:', e);
+          }
+
           // Set a longer timeout for background processing
           if (visibilityTimeoutRef.current) {
             clearTimeout(visibilityTimeoutRef.current);
@@ -106,6 +116,15 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             checkSubmissionStatus();
           }, 30000); // 30 second timeout for background processing
           
+          // Proactively retry shortly after hiding (exponential backoff still applies)
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+          }
+          retryTimeoutRef.current = setTimeout(() => {
+            console.log('Scheduling retry after hide');
+            retrySubmission();
+          }, 1000);
+          
         } else {
           console.log('Tab became visible during form submission - resuming normal processing');
           const hiddenTimeStr = localStorage.getItem('siteFormHiddenTime');
@@ -114,10 +133,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             const hiddenDuration = Date.now() - hiddenTime;
             console.log(`Tab was hidden for ${hiddenDuration}ms during submission`);
             
-            // If tab was hidden for more than 10 seconds, check submission status
-            if (hiddenDuration > 10000) {
-              checkSubmissionStatus();
-            }
+            // Always check status on return, regardless of duration
+            checkSubmissionStatus();
             
             localStorage.removeItem('siteFormHiddenTime');
           }
@@ -126,6 +143,12 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           if (visibilityTimeoutRef.current) {
             clearTimeout(visibilityTimeoutRef.current);
             visibilityTimeoutRef.current = null;
+          }
+          
+          // If no retry is pending, trigger an immediate lightweight retry check
+          if (!retryTimeoutRef.current) {
+            console.log('No pending retry; triggering status check on visible');
+            checkSubmissionStatus();
           }
         }
       }
@@ -290,13 +313,43 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     
     retryTimeoutRef.current = setTimeout(async () => {
       try {
-        await performSubmission(submissionDataRef.current!);
+        // Mark as loading/in-progress during retry
+        setIsLoading(true);
+        submissionInProgressRef.current = true;
+        
+        const success = await performSubmission(submissionDataRef.current!);
+        console.log('Retry submission result:', success);
+        
+        if (success) {
+          const lastValues = submissionDataRef.current!;
+          // Success path mirrors onFormSubmit
+          const uppercaseValues = {
+            ...lastValues,
+            name: lastValues.name.toUpperCase(),
+            jobName: lastValues.jobName.toUpperCase(),
+            posNo: lastValues.posNo.toUpperCase(),
+            location: lastValues.location.toUpperCase(),
+            supervisorId: lastValues.supervisorId || supervisorIdRef.current || ''
+          };
+          onSubmit(uppercaseValues);
+          toast.success('Site created successfully');
+          setRetryCount(0);
+          onClose();
+          form.reset();
+          submissionDataRef.current = null;
+          submissionInProgressRef.current = false;
+          setIsLoading(false);
+          setSubmissionStartTime(null);
+        } else {
+          // Try again
+          await retrySubmission();
+        }
       } catch (error) {
         console.error('Retry submission failed:', error);
         await retrySubmission(); // Recursive retry
       }
     }, delay);
-  }, [retryCount]);
+  }, [retryCount, form, onClose, onSubmit]);
   
   // Core submission function that works in background
   const performSubmission = useCallback(async (values: SiteFormValues): Promise<boolean> => {

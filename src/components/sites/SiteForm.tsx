@@ -59,6 +59,15 @@ interface Supervisor {
   name?: string;
 }
 
+// Add a hard timeout to avoid indefinite "Creating..." state
+const SUBMIT_TIMEOUT_MS = 20000;
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Submission timed out')), ms)),
+  ]);
+}
+
 export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: SiteFormProps) {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,7 +77,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const [retryCount, setRetryCount] = useState(0);
   const [isTabHidden, setIsTabHidden] = useState(false);
   const [submissionStartTime, setSubmissionStartTime] = useState<number | null>(null);
-  const { user, refreshSession } = useAuth();
+  const { user } = useAuth();
   
   // Refs for tab switching resilience
   const supervisorIdRef = useRef<string | undefined>(supervisorId);
@@ -77,8 +86,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const submissionDataRef = useRef<SiteFormValues | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const visibilityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // Ref indirection to avoid calling a function before it's declared
-  const retrySubmissionRef = useRef<() => Promise<void>>(async () => {});
   
   // Update the ref whenever the prop changes
   useEffect(() => {
@@ -87,7 +94,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Page Visibility API - Handle tab switching during form submission
   useEffect(() => {
-    const handleVisibilityChange = async () => {
+    const handleVisibilityChange = () => {
       const isHidden = document.hidden;
       setIsTabHidden(isHidden);
       
@@ -98,16 +105,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           const hiddenTime = Date.now();
           localStorage.setItem('siteFormHiddenTime', hiddenTime.toString());
           
-          // Abort the in-flight request to avoid browser background throttling hangs
-          try {
-            if (abortControllerRef.current) {
-              console.log('Aborting in-flight submission due to tab hidden');
-              abortControllerRef.current.abort();
-            }
-          } catch (e) {
-            console.warn('Abort during hide failed:', e);
-          }
-
           // Set a longer timeout for background processing
           if (visibilityTimeoutRef.current) {
             clearTimeout(visibilityTimeoutRef.current);
@@ -118,15 +115,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             checkSubmissionStatus();
           }, 30000); // 30 second timeout for background processing
           
-          // Proactively retry shortly after hiding (exponential backoff still applies)
-          if (retryTimeoutRef.current) {
-            clearTimeout(retryTimeoutRef.current);
-          }
-          retryTimeoutRef.current = setTimeout(() => {
-            console.log('Scheduling retry after hide');
-            retrySubmission();
-          }, 1000);
-          
         } else {
           console.log('Tab became visible during form submission - resuming normal processing');
           const hiddenTimeStr = localStorage.getItem('siteFormHiddenTime');
@@ -135,18 +123,10 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             const hiddenDuration = Date.now() - hiddenTime;
             console.log(`Tab was hidden for ${hiddenDuration}ms during submission`);
             
-            // Attempt a fast auth session refresh to avoid 401s after background
-            try {
-              await Promise.race([
-                refreshSession(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('refresh timeout')), 3000))
-              ]);
-            } catch (e) {
-              console.warn('Session refresh on visibility failed or timed out:', e);
+            // If tab was hidden for more than 10 seconds, check submission status
+            if (hiddenDuration > 10000) {
+              checkSubmissionStatus();
             }
-
-            // Always check status on return, regardless of duration
-            checkSubmissionStatus();
             
             localStorage.removeItem('siteFormHiddenTime');
           }
@@ -155,12 +135,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
           if (visibilityTimeoutRef.current) {
             clearTimeout(visibilityTimeoutRef.current);
             visibilityTimeoutRef.current = null;
-          }
-          
-          // If no retry is pending, trigger an immediate lightweight retry check
-          if (!retryTimeoutRef.current) {
-            console.log('No pending retry; triggering status check on visible');
-            checkSubmissionStatus();
           }
         }
       }
@@ -174,7 +148,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         clearTimeout(visibilityTimeoutRef.current);
       }
     };
-  }, [refreshSession, checkSubmissionStatus]);
+  }, []);
   
 
   
@@ -247,31 +221,23 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Check submission status - used when tab becomes visible after being hidden
   const checkSubmissionStatus = useCallback(async () => {
-    if (!submissionDataRef.current) {
-      console.log('No submission data to check');
+    if (!submissionDataRef.current || !user) {
+      console.log('No submission data to check or user not available');
       return;
     }
     
-    const pending = submissionDataRef.current;
-    const supId = pending.supervisorId || user?.id || undefined;
-    
     try {
-      setIsLoading(true);
-      // Build query: always match by name; add supervisor filter if available
-      let query = supabase
+      // Check if site was already created by searching for it
+      const { data: existingSites, error } = await supabase
         .from('sites')
-        .select('id, name, supervisor_id, created_at')
-        .eq('name', pending.name.toUpperCase())
+        .select('id, name')
+        .eq('name', submissionDataRef.current.name.toUpperCase())
+        .eq('supervisor_id', submissionDataRef.current.supervisorId || user.id)
         .order('created_at', { ascending: false })
         .limit(1);
-      if (supId) {
-        query = query.eq('supervisor_id', supId);
-      }
-      const { data: existingSites, error } = await query;
       
       if (error) {
         console.error('Error checking submission status:', error);
-        await retrySubmissionRef.current();
         return;
       }
       
@@ -280,39 +246,37 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         console.log('Site was successfully created during background processing:', existingSites[0]);
         toast.success('Site created successfully!');
         
-        // Preserve values before clearing ref
-        const lastValues = submissionDataRef.current;
+        // Capture values before clearing refs
+        const prevValues = submissionDataRef.current;
         
-        // Reset form and close
+        // Reset form and state
         form.reset();
-        submissionDataRef.current = null;
         submissionInProgressRef.current = false;
         setIsLoading(false);
         setSubmissionStartTime(null);
-        if (lastValues) {
-          onSubmit({
-            ...lastValues,
-            name: lastValues.name.toUpperCase(),
-            jobName: lastValues.jobName.toUpperCase(),
-            posNo: lastValues.posNo.toUpperCase(),
-            location: lastValues.location.toUpperCase(),
-            supervisorId: lastValues.supervisorId || user?.id || ''
-          });
+        submissionDataRef.current = null;
+        
+        // Notify parent using uppercased values if we have them
+        if (prevValues) {
+          const uppercaseValues = {
+            ...prevValues,
+            name: prevValues.name.toUpperCase(),
+            jobName: prevValues.jobName.toUpperCase(),
+            posNo: prevValues.posNo.toUpperCase(),
+            location: prevValues.location.toUpperCase(),
+            supervisorId: prevValues.supervisorId || user.id,
+          };
+          onSubmit(uppercaseValues);
         }
         onClose();
       } else {
         // Site was not created, retry submission
         console.log('Site was not created, retrying submission');
-        await retrySubmissionRef.current();
+        await retrySubmission();
       }
     } catch (error) {
       console.error('Error in checkSubmissionStatus:', error);
-      await retrySubmissionRef.current();
-    } finally {
-      // keep loading true if retry in progress; otherwise allow UI to update
-      if (!submissionInProgressRef.current) {
-        setIsLoading(false);
-      }
+      await retrySubmission();
     }
   }, [user, form, onSubmit, onClose]);
   
@@ -338,64 +302,19 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
     
     retryTimeoutRef.current = setTimeout(async () => {
       try {
-        // Mark as loading/in-progress during retry
-        setIsLoading(true);
-        submissionInProgressRef.current = true;
-        
-        const success = await performSubmission(submissionDataRef.current!);
-        console.log('Retry submission result:', success);
-        
-        if (success) {
-          const lastValues = submissionDataRef.current!;
-          // Success path mirrors onFormSubmit
-          const uppercaseValues = {
-            ...lastValues,
-            name: lastValues.name.toUpperCase(),
-            jobName: lastValues.jobName.toUpperCase(),
-            posNo: lastValues.posNo.toUpperCase(),
-            location: lastValues.location.toUpperCase(),
-            supervisorId: lastValues.supervisorId || supervisorIdRef.current || ''
-          };
-          onSubmit(uppercaseValues);
-          toast.success('Site created successfully');
-          setRetryCount(0);
-          onClose();
-          form.reset();
-          submissionDataRef.current = null;
-          submissionInProgressRef.current = false;
-          setIsLoading(false);
-          setSubmissionStartTime(null);
-        } else {
-          // Try again
-          await retrySubmission();
-        }
+        await performSubmission(submissionDataRef.current!);
       } catch (error) {
         console.error('Retry submission failed:', error);
         await retrySubmission(); // Recursive retry
       }
     }, delay);
-  }, [retryCount, form, onClose, onSubmit]);
-
-  // Keep the ref pointing at the latest retry function
-  useEffect(() => {
-    retrySubmissionRef.current = retrySubmission;
-  }, [retrySubmission]);
+  }, [retryCount]);
   
   // Core submission function that works in background
   const performSubmission = useCallback(async (values: SiteFormValues): Promise<boolean> => {
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     
     try {
-      // Proactively refresh session before attempting submission to avoid 401 after tab switches
-      try {
-        await Promise.race([
-          refreshSession(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('refresh timeout')), 3000))
-        ]);
-      } catch (e) {
-        console.warn('Pre-submission session refresh failed or timed out:', e);
-      }
-
       // Store submission data for persistence
       const submissionId = Date.now().toString();
       const submissionData = {
@@ -411,10 +330,6 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       // Create abort controller for this request
       abortControllerRef.current = new AbortController();
-      
-      // Configure a submission timeout to prevent indefinite hangs
-      const timeoutMs = document.hidden ? 60000 : 30000; // 60s if hidden, else 30s
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
       
       // Get the current session token directly
       const { data: { session } } = await supabase.auth.getSession();
@@ -438,48 +353,16 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Creating site with data:', siteData);
       
-      // Use requestIdleCallback for better background processing
-      const submitPromise = new Promise<any>((resolve, reject) => {
-        const doSubmit = async () => {
-          try {
-            const { data, error } = await supabase
-              .from('sites')
-              .insert([siteData])
-              .select()
-              .abortSignal(abortControllerRef.current?.signal);
-            
-            if (error) {
-              reject(error);
-            } else {
-              resolve(data);
-            }
-          } catch (err) {
-            reject(err);
-          }
-        };
-        
-        // Use requestIdleCallback if available, otherwise setTimeout
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(doSubmit, { timeout: 5000 });
-        } else {
-          setTimeout(doSubmit, 0);
-        }
-      });
+      // Direct submit with a hard timeout safeguard
+      const queryPromise = supabase
+        .from('sites')
+        .insert([siteData])
+        .select()
+        .abortSignal(abortControllerRef.current?.signal);
       
-      // Race the submission with a timeout that aborts the request
-      const data = await Promise.race([
-        submitPromise,
-        new Promise((_, reject) => {
-          timeoutId = setTimeout(() => {
-            try {
-              abortControllerRef.current?.abort();
-            } catch {}
-            reject(new Error('Submission timed out'));
-          }, timeoutMs);
-        })
-      ]);
+      const data = await withTimeout(queryPromise, SUBMIT_TIMEOUT_MS);
       
-      if (!data || data.length === 0) {
+      if (!data || (Array.isArray(data) && data.length === 0)) {
         console.warn('No data returned from site creation');
         toast.error('No data returned from site creation. Please try again.');
         return false;
@@ -487,21 +370,21 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       
       console.log('Site created successfully:', data);
       
-      // Clean up timeout and localStorage on success
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
+      // Clean up localStorage on success
       localStorage.removeItem(`siteSubmission_${submissionId}`);
       
       return true;
       
     } catch (error: any) {
       console.error('Exception in performSubmission:', error);
-      // No need to clear stored submission here; let caller decide about retries
       
       if (error.name === 'AbortError') {
         console.log('Site creation was cancelled');
+        return false;
+      }
+      
+      if (error.message === 'Submission timed out') {
+        toast.error('Request timed out. Please check your connection and try again.');
         return false;
       }
       
@@ -515,7 +398,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
       return false;
     }
-  }, [user, refreshSession]);
+  }, [user]);
 
   // SIMPLIFIED AND ROBUST FORM SUBMISSION HANDLER
   // This handles browser tab throttling by using a different approach
@@ -585,6 +468,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       console.log('Resetting loading state');
       setIsLoading(false);
       submissionInProgressRef.current = false;
+      submissionDataRef.current = null;
       setSubmissionStartTime(null);
       
       // Clear abort controller
@@ -833,7 +717,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {retryCount > 0 ? (
-                      `Retrying... (${retryCount}/3)`
+                      `Retrying... (${retryCount}/2)`
                     ) : (
                       'Creating...'
                     )}

@@ -6,7 +6,7 @@ import { Home, Building, LogOut, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import { VisibilityContext } from '@/App';
+import { VisibilityContext } from '@/contexts/visibility';
 import { toast } from 'sonner';
 
 

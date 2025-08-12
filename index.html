@@ -12,7 +12,19 @@
   <body>
     <div id="root"></div>
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
-    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
+    <script>
+      // Load GPT Engineer only in development (localhost) or with ?gpteng=1
+      (function() {
+        const isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+        const enabledByQuery = location.search.includes('gpteng=1');
+        if (isLocalhost || enabledByQuery) {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.gpteng.co/gptengineer.js';
+          s.type = 'module';
+          document.head.appendChild(s);
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     
     <!-- Service Worker Registration - Netlify-compatible -->

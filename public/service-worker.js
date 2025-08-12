@@ -1,8 +1,7 @@
-const CACHE_NAME = 'finance-tracker-cache-v1';
+const CACHE_NAME = 'finance-tracker-cache-v2';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json',
   '/favicon.ico',
 ];
 
@@ -46,6 +45,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Exclude GPT Engineer script from SW handling and caching
+  if (event.request.url.includes('cdn.gpteng.co/gptengineer.js')) {
+    return; // Let the browser handle without caching
+  }
+
   // If the request is for the Supabase API, always go to the network.
   if (event.request.url.includes(supabaseUrl)) {
     return; // Let the browser handle the request.
@@ -53,6 +57,14 @@ self.addEventListener('fetch', (event) => {
 
   // We only want to cache GET requests.
   if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Always network-first for JS and CSS to avoid stale hashed bundles
+  if (event.request.destination === 'script' || event.request.destination === 'style') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
     return;
   }
 

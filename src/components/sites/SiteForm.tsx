@@ -68,7 +68,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const [retryCount, setRetryCount] = useState(0);
   const [isTabHidden, setIsTabHidden] = useState(false);
   const [submissionStartTime, setSubmissionStartTime] = useState<number | null>(null);
-  const { user } = useAuth();
+  const { user, refreshSession } = useAuth();
   
   // Refs for tab switching resilience
   const supervisorIdRef = useRef<string | undefined>(supervisorId);
@@ -77,6 +77,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   const submissionDataRef = useRef<SiteFormValues | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const visibilityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref indirection to avoid calling a function before it's declared
+  const retrySubmissionRef = useRef<() => Promise<void>>(async () => {});
   
   // Update the ref whenever the prop changes
   useEffect(() => {
@@ -85,7 +87,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Page Visibility API - Handle tab switching during form submission
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       const isHidden = document.hidden;
       setIsTabHidden(isHidden);
       
@@ -133,6 +135,16 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             const hiddenDuration = Date.now() - hiddenTime;
             console.log(`Tab was hidden for ${hiddenDuration}ms during submission`);
             
+            // Attempt a fast auth session refresh to avoid 401s after background
+            try {
+              await Promise.race([
+                refreshSession(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('refresh timeout')), 3000))
+              ]);
+            } catch (e) {
+              console.warn('Session refresh on visibility failed or timed out:', e);
+            }
+
             // Always check status on return, regardless of duration
             checkSubmissionStatus();
             
@@ -162,7 +174,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         clearTimeout(visibilityTimeoutRef.current);
       }
     };
-  }, []);
+  }, [refreshSession, checkSubmissionStatus]);
   
 
   
@@ -235,23 +247,31 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
   
   // Check submission status - used when tab becomes visible after being hidden
   const checkSubmissionStatus = useCallback(async () => {
-    if (!submissionDataRef.current || !user) {
-      console.log('No submission data to check or user not available');
+    if (!submissionDataRef.current) {
+      console.log('No submission data to check');
       return;
     }
     
+    const pending = submissionDataRef.current;
+    const supId = pending.supervisorId || user?.id || undefined;
+    
     try {
-      // Check if site was already created by searching for it
-      const { data: existingSites, error } = await supabase
+      setIsLoading(true);
+      // Build query: always match by name; add supervisor filter if available
+      let query = supabase
         .from('sites')
-        .select('id, name')
-        .eq('name', submissionDataRef.current.name.toUpperCase())
-        .eq('supervisor_id', submissionDataRef.current.supervisorId || user.id)
+        .select('id, name, supervisor_id, created_at')
+        .eq('name', pending.name.toUpperCase())
         .order('created_at', { ascending: false })
         .limit(1);
+      if (supId) {
+        query = query.eq('supervisor_id', supId);
+      }
+      const { data: existingSites, error } = await query;
       
       if (error) {
         console.error('Error checking submission status:', error);
+        await retrySubmissionRef.current();
         return;
       }
       
@@ -283,11 +303,16 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       } else {
         // Site was not created, retry submission
         console.log('Site was not created, retrying submission');
-        await retrySubmission();
+        await retrySubmissionRef.current();
       }
     } catch (error) {
       console.error('Error in checkSubmissionStatus:', error);
-      await retrySubmission();
+      await retrySubmissionRef.current();
+    } finally {
+      // keep loading true if retry in progress; otherwise allow UI to update
+      if (!submissionInProgressRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [user, form, onSubmit, onClose]);
   
@@ -350,12 +375,27 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
     }, delay);
   }, [retryCount, form, onClose, onSubmit]);
+
+  // Keep the ref pointing at the latest retry function
+  useEffect(() => {
+    retrySubmissionRef.current = retrySubmission;
+  }, [retrySubmission]);
   
   // Core submission function that works in background
   const performSubmission = useCallback(async (values: SiteFormValues): Promise<boolean> => {
     const currentSupervisorId = values.supervisorId || supervisorIdRef.current || '';
     
     try {
+      // Proactively refresh session before attempting submission to avoid 401 after tab switches
+      try {
+        await Promise.race([
+          refreshSession(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('refresh timeout')), 3000))
+        ]);
+      } catch (e) {
+        console.warn('Pre-submission session refresh failed or timed out:', e);
+      }
+
       // Store submission data for persistence
       const submissionId = Date.now().toString();
       const submissionData = {
@@ -475,7 +515,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
       }
       return false;
     }
-  }, [user]);
+  }, [user, refreshSession]);
 
   // SIMPLIFIED AND ROBUST FORM SUBMISSION HANDLER
   // This handles browser tab throttling by using a different approach

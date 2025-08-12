@@ -103,8 +103,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async (): Promise<void> => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      // Proactively clear realtime channels to avoid stale subscriptions
+      try {
+        supabase.removeAllChannels();
+      } catch (chErr) {
+        console.warn('Error clearing Supabase channels during logout:', chErr);
+      }
+
+      // Add a timeout so background-tab throttling doesn't hang logout
+      const signOutWithTimeout = Promise.race([
+        supabase.auth.signOut(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timeout')), 6000))
+      ]);
+
+      try {
+        const result = await signOutWithTimeout as { error?: any } | void;
+        if ((result as any)?.error) throw (result as any).error;
+      } catch (err) {
+        console.warn('Global signOut failed or timed out, attempting local signOut fallback:', err);
+        // Fallback: ensure local session is cleared so the UI can recover
+        try {
+          // Some versions support scope: 'local' to clear only local session
+          await (supabase.auth as any).signOut?.({ scope: 'local' });
+        } catch (fallbackErr) {
+          console.warn('Local signOut fallback failed:', fallbackErr);
+        }
+      }
+
+      // Ensure local user state is cleared and navigate home regardless
       setUser(null);
       navigate('/');
     } catch (err: any) {

@@ -111,24 +111,46 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (isHandling) return;
       isHandling = true;
       
-      const { timeHidden, timestamp } = event.detail;
-      console.log(`App received gentle visibility event - tab was hidden for ${timeHidden}ms`);
+      const { timeHidden, timestamp, sessionRefreshed } = event.detail;
+      console.log(`App received gentle visibility event - tab was hidden for ${timeHidden}ms, session refreshed: ${sessionRefreshed}`);
       
       try {
-        // Only refresh auth session, don't clear states or force re-renders
-        if (authContextRef.current && authContextRef.current.refreshSession) {
-          console.log('Gently refreshing auth session');
-          await authContextRef.current.refreshSession();
+        // If the visibility hook already refreshed the session successfully, we're good
+        if (sessionRefreshed) {
+          console.log('Session already refreshed successfully by visibility hook');
+          setAppStale(false);
+        } else {
+          // If session refresh failed in visibility hook, try one more time with auth context
+          console.log('Session refresh failed in visibility hook, trying with auth context');
+          if (authContextRef.current && authContextRef.current.refreshSession) {
+            const authRefreshSuccess = await authContextRef.current.refreshSession();
+            if (authRefreshSuccess) {
+              console.log('Auth context session refresh succeeded');
+              setAppStale(false);
+            } else {
+              console.warn('Auth context session refresh also failed');
+              setAppStale(true);
+            }
+          } else {
+            console.warn('No auth context available for session refresh');
+            setAppStale(true);
+          }
         }
-        
-        // Don't mark app as stale or force refresh - let React handle its own state
-        console.log('Session refreshed successfully after tab switch');
       } catch (e) {
-        console.warn('Gentle session refresh failed:', e);
-        // Only show stale warning if session refresh actually failed
+        console.warn('Error in gentle visibility handling:', e);
         setAppStale(true);
       } finally {
         isHandling = false;
+      }
+    };
+
+    const handleSessionFailure = (event: CustomEvent) => {
+      const { reason } = event.detail;
+      console.error('Session failure detected:', reason);
+      setAppStale(true);
+      // Show a more specific error message
+      if (reason === 'tab-switch-refresh-failed') {
+        console.warn('Session refresh failed after tab switch - user may need to refresh or re-login');
       }
     };
 
@@ -137,12 +159,14 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       authContextRef.current = { refreshSession: event.detail.refreshSession };
     };
 
-    // Listen for the new gentle visibility event instead of the aggressive one
+    // Listen for the new gentle visibility event and session failure events
     window.addEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
+    window.addEventListener('app:session-failed', handleSessionFailure as EventListener);
     window.addEventListener('auth:context-ready', handleAuthContextReady as EventListener);
     
     return () => {
       window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
+      window.removeEventListener('app:session-failed', handleSessionFailure as EventListener);
       window.removeEventListener('auth:context-ready', handleAuthContextReady as EventListener);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);

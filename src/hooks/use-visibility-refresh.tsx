@@ -23,18 +23,42 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
     }
   }, []);
   
-  // Gentle connection refresh without disrupting active connections
+  // Comprehensive session and connection refresh after tab switch
   const refreshConnections = useCallback(async () => {
     try {
-      // Don't forcefully disconnect - just ensure we have a good session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        console.log('Session verified after tab switch');
+      console.log('Starting comprehensive session refresh after tab switch');
+      
+      // Step 1: Force refresh the session to get a fresh token
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError) {
+        console.error('Session refresh failed:', refreshError);
+        return false;
+      }
+      
+      if (refreshData?.session) {
+        console.log('Session refreshed successfully, token ends with:', refreshData.session.access_token?.slice(-8));
+        
+        // Step 2: Verify the session is working by making a simple query
+        const { data: testData, error: testError } = await supabase
+          .from('users')
+          .select('id')
+          .limit(1);
+          
+        if (testError) {
+          console.error('Session verification query failed:', testError);
+          return false;
+        }
+        
+        console.log('Session verification successful');
+        return true;
       } else {
-        console.log('No session found, may need to re-authenticate');
+        console.log('No session found after refresh, may need to re-authenticate');
+        return false;
       }
     } catch (error) {
-      console.error('Error checking session after tab switch:', error);
+      console.error('Error in comprehensive session refresh:', error);
+      return false;
     }
   }, []);
 
@@ -54,15 +78,27 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
           // Use a small delay to allow React to stabilize
           timeoutId = setTimeout(async () => {
             try {
-              console.log(`Tab was hidden for ${timeHidden}ms - refreshing session only`);
+              console.log(`Tab was hidden for ${timeHidden}ms - performing comprehensive session refresh`);
               
-              // Only refresh session, don't clear states or force reconnections
-              await refreshConnections();
+              // Perform comprehensive session refresh and verification
+              const refreshSuccess = await refreshConnections();
               
-              // Dispatch a gentle visibility event without forcing state changes
+              // Dispatch a gentle visibility event with refresh status
               window.dispatchEvent(new CustomEvent('app:visibility-gentle', { 
-                detail: { timeHidden, timestamp: Date.now() } 
+                detail: { 
+                  timeHidden, 
+                  timestamp: Date.now(),
+                  sessionRefreshed: refreshSuccess
+                } 
               }));
+              
+              if (!refreshSuccess) {
+                console.warn('Session refresh failed - user may need to re-authenticate');
+                // Dispatch a session failure event for the app to handle
+                window.dispatchEvent(new CustomEvent('app:session-failed', {
+                  detail: { reason: 'tab-switch-refresh-failed' }
+                }));
+              }
             } catch (error) {
               console.error('Error handling visibility change:', error);
             } finally {

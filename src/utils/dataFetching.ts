@@ -79,7 +79,7 @@ interface FetchOptions {
 }
 
 /**
- * Fetch data with automatic retry mechanism
+ * Fetch data with automatic retry mechanism and session recovery
  * @param fetchFn The function that performs the actual data fetch
  * @param options Configuration options for retries
  * @returns The fetched data or null if all retries failed
@@ -98,86 +98,69 @@ export async function fetchWithRetry<T>(
   } = options;
   
   let lastError: any = null;
-  let retries = 0;
+  let sessionRefreshAttempted = false;
   
-  while (retries <= maxRetries) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // Create timeout promise
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`${context} fetch timeout after ${timeout}ms`));
-        }, timeout);
-      });
-
-      // Race between fetch and timeout
-      const result = await Promise.race([fetchFn(), timeoutPromise]);
+      const result = await Promise.race([
+        fetchFn(),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout after ${timeout}ms`)), timeout)
+        )
+      ]);
       return result;
     } catch (error: any) {
       lastError = error;
+      console.warn(`Attempt ${attempt + 1} failed for ${context}:`, error);
       
-      // Check for session errors to handle them specially
-      if (error?.message?.includes('JWT') || 
-          error?.message?.includes('token') || 
-          error?.message?.includes('session')) {
-        if (showToast && !reconnectionState.suppressNetworkErrors) {
-          toast.error('Your session has expired. Please refresh the page or log in again.');
-        }
-        console.error('Session error during data fetch:', error);
+      // Check if this is a session/auth error and try to refresh session once
+      if (!sessionRefreshAttempted && 
+          (error?.message?.includes('JWT') || error?.message?.includes('token') || error?.code === 'PGRST301')) {
+        console.log('Detected auth error, attempting session refresh before retry');
+        sessionRefreshAttempted = true;
         
-        // Try to refresh the session before giving up
         try {
+          // Try to refresh the session
           const { data, error: refreshError } = await supabase.auth.refreshSession();
-          if (data.session && !refreshError) {
-            // Session refreshed successfully, try the fetch again immediately
-            continue;
+          if (data?.session && !refreshError) {
+            console.log('Session refreshed successfully, retrying fetch');
+            // Don't increment attempt counter for session refresh retry
+            attempt--;
           }
-        } catch (refreshError) {
-          console.error('Failed to refresh session:', refreshError);
-        }
-        
-        // Session refresh failed or we have a definite session error
-        // Break immediately without further retries
-        break;
-      }
-      
-      // For network errors, try to reconnect
-      if (error?.message?.includes('network') || 
-          error?.message?.includes('connection') ||
-          error?.name === 'AbortError') {
-        console.warn(`Network error (retry ${retries + 1}/${maxRetries + 1}):`, error);
-        
-        // Only show toast on the first retry for network errors
-        // AND only if we're not reconnecting from a tab switch
-        // or if we explicitly want to bypass toast suppression
-        if (retries === 0 && showToast && 
-            (bypassToastSuppression || !reconnectionState.suppressNetworkErrors)) {
-          toast.error(`Connection issue while fetching ${context}. Retrying...`);
-        }
-      } else {
-        // For other errors, log them
-        console.error(`Fetch error (retry ${retries + 1}/${maxRetries + 1}):`, error);
-        
-        // Only show toast on the last retry for other errors
-        // and only if we're not suppressing error messages
-        if (retries === maxRetries && showToast && 
-            (bypassToastSuppression || !reconnectionState.suppressNetworkErrors)) {
-          toast.error(`Error fetching ${context}. Please try again later.`);
+        } catch (refreshErr) {
+          console.error('Session refresh failed:', refreshErr);
         }
       }
       
-      retries++;
-      
-      // If we have more retries, wait before trying again
-      if (retries <= maxRetries) {
-        // Use exponential backoff
-        const delay = retryDelay * Math.pow(2, retries - 1);
-        await new Promise(resolve => setTimeout(resolve, delay));
+      // If this is the last attempt, don't wait
+      if (attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
       }
     }
   }
   
-  // All retries failed
-  console.error('All fetch retries failed:', lastError);
+  // If we've exhausted retries, check if we should suppress the toast
+  if (showToast && !bypassToastSuppression) {
+    // Check if we're in a reconnection state
+    if (reconnectionState.suppressNetworkErrors) {
+      console.log(`Suppressing error toast for ${context} during reconnection:`, lastError?.message);
+    } else {
+      // Show the error toast with more specific messaging
+      let errorMessage = lastError?.message || `Failed to fetch ${context}`;
+      
+      // Check for specific Supabase auth errors
+      if (lastError?.message?.includes('JWT') || lastError?.message?.includes('token') || lastError?.code === 'PGRST301') {
+        errorMessage = `Session expired. Please refresh the page or log in again.`;
+        // Dispatch session failure event
+        window.dispatchEvent(new CustomEvent('app:session-failed', {
+          detail: { reason: 'auth-error-in-fetch', originalError: lastError }
+        }));
+      }
+      
+      toast.error(errorMessage);
+    }
+  }
+  
   return null;
 }
 

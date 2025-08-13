@@ -129,14 +129,25 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (isHandling) return;
       isHandling = true;
       
-      const { timeHidden, timestamp, sessionRefreshed } = event.detail;
-      console.log(`App received gentle visibility event - tab was hidden for ${timeHidden}ms, session refreshed: ${sessionRefreshed}`);
+      const { timeHidden, timestamp, sessionRefreshed, recoveryType } = event.detail;
+      console.log(`App received gentle visibility event - tab was hidden for ${timeHidden}ms, session refreshed: ${sessionRefreshed}, recovery: ${recoveryType}`);
       
       try {
         // If the visibility hook already refreshed the session successfully, we're good
         if (sessionRefreshed) {
-          console.log('Session already refreshed successfully by visibility hook');
+          console.log(`Session successfully recovered using ${recoveryType} recovery`);
           setAppStale(false);
+          
+          // Force a complete app refresh to ensure all components re-initialize with fresh session
+          if (recoveryType === 'aggressive') {
+            console.log('Forcing complete app refresh after aggressive recovery');
+            setLastRefreshTime(Date.now());
+            
+            // Dispatch a custom event to notify all components to refresh their data
+            window.dispatchEvent(new CustomEvent('app:force-refresh', {
+              detail: { reason: 'session-recovery', timestamp: Date.now() }
+            }));
+          }
         } else {
           // If session refresh failed in visibility hook, try one more time with auth context
           console.log('Session refresh failed in visibility hook, trying with auth context');
@@ -163,12 +174,29 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
 
     const handleSessionFailure = (event: CustomEvent) => {
-      const { reason } = event.detail;
-      console.error('Session failure detected:', reason);
+      const { reason, severity, action } = event.detail;
+      console.error('Session failure detected:', { reason, severity, action });
+      
       setAppStale(true);
-      // Show a more specific error message
-      if (reason === 'tab-switch-refresh-failed') {
-        console.warn('Session refresh failed after tab switch - user may need to refresh or re-login');
+      
+      // Handle different types of session failures
+      if (severity === 'critical') {
+        console.error('Critical session failure - immediate action required');
+        
+        if (action === 'refresh-required') {
+          // Show a more prominent error state
+          console.warn('Complete session recovery failed - user must refresh page or re-login');
+          
+          // Optionally show a modal or toast with refresh button
+          setTimeout(() => {
+            if (window.confirm('Session expired. Click OK to refresh the page, or Cancel to continue (may cause errors).')) {
+              window.location.reload();
+            }
+          }, 1000);
+        }
+      } else {
+        // Handle less severe session issues
+        console.warn('Session issue detected:', reason);
       }
     };
 
@@ -212,17 +240,27 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       registerAuthContext
     }}>
       {appStale && (
-        <div className="fixed top-16 left-0 w-full bg-yellow-100 text-yellow-800 p-2 text-center z-50 shadow-md">
-          <div className="flex items-center justify-center gap-2">
-            <span>App state may be outdated after inactivity.</span>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={forceRefresh}
-              className="bg-yellow-200 border-yellow-300 hover:bg-yellow-300"
-            >
-              Refresh Data
-            </Button>
+        <div className="fixed top-16 left-0 w-full bg-red-100 text-red-800 p-3 text-center z-50 shadow-lg border-b-2 border-red-300">
+          <div className="flex items-center justify-center gap-3">
+            <span className="font-medium">⚠️ Session expired after tab switch. Please refresh to restore functionality.</span>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={forceRefresh}
+                className="bg-red-200 border-red-400 hover:bg-red-300 text-red-800"
+              >
+                Try Recovery
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => window.location.reload()}
+                className="bg-red-300 border-red-500 hover:bg-red-400 text-red-900"
+              >
+                Refresh Page
+              </Button>
+            </div>
           </div>
         </div>
       )}

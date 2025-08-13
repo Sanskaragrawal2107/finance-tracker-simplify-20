@@ -44,6 +44,26 @@ const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
   // Centralized visibility/session handling (debounced via hook)
   useVisibilityRefresh(3000);
+  
+  // Listen for force refresh events after session recovery
+  useEffect(() => {
+    const handleForceRefresh = (event: CustomEvent) => {
+      const { reason, timestamp } = event.detail;
+      console.log(`AdminDashboard received force refresh event: ${reason} at ${timestamp}`);
+      
+      if (reason === 'session-recovery') {
+        console.log('Reloading all admin dashboard data after session recovery');
+        // Force reload all data
+        fetchSupervisorsAndSites();
+      }
+    };
+    
+    window.addEventListener('app:force-refresh', handleForceRefresh as EventListener);
+    
+    return () => {
+      window.removeEventListener('app:force-refresh', handleForceRefresh as EventListener);
+    };
+  }, []);
 
   const fetchSupervisorsAndSites = async () => {
     const isInitialLoad = initialLoading;

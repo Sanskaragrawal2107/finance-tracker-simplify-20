@@ -32,41 +32,102 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
     }
   }, []);
   
-  // Comprehensive session and connection refresh after tab switch
+  // Aggressive session recovery after tab switch
   const refreshConnections = useCallback(async () => {
     try {
-      console.log('Starting comprehensive session refresh after tab switch');
+      console.log('Starting aggressive session recovery after tab switch');
       
-      // Step 1: Force refresh the session to get a fresh token
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      // Step 1: Get current session to check if we have one
+      const { data: currentSession } = await supabase.auth.getSession();
       
-      if (refreshError) {
-        console.error('Session refresh failed:', refreshError);
+      if (!currentSession?.session) {
+        console.error('No current session found');
         return false;
       }
       
-      if (refreshData?.session) {
-        console.log('Session refreshed successfully, token ends with:', refreshData.session.access_token?.slice(-8));
+      console.log('Current session token ends with:', currentSession.session.access_token?.slice(-8));
+      
+      // Step 2: Force refresh the session multiple times if needed
+      let refreshAttempts = 0;
+      let refreshSuccess = false;
+      
+      while (refreshAttempts < 3 && !refreshSuccess) {
+        refreshAttempts++;
+        console.log(`Session refresh attempt ${refreshAttempts}/3`);
         
-        // Step 2: Verify the session is working by making a simple query
-        const { data: testData, error: testError } = await supabase
-          .from('users')
-          .select('id')
-          .limit(1);
-          
-        if (testError) {
-          console.error('Session verification query failed:', testError);
-          return false;
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError) {
+          console.error(`Session refresh attempt ${refreshAttempts} failed:`, refreshError);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+          continue;
         }
         
-        console.log('Session verification successful');
-        return true;
-      } else {
-        console.log('No session found after refresh, may need to re-authenticate');
+        if (refreshData?.session) {
+          console.log(`Session refresh attempt ${refreshAttempts} successful, token ends with:`, refreshData.session.access_token?.slice(-8));
+          
+          // Step 3: Verify the session works with multiple test queries
+          const testQueries = [
+            () => supabase.from('users').select('id').limit(1),
+            () => supabase.from('sites').select('id').limit(1),
+            () => supabase.auth.getUser()
+          ];
+          
+          let allTestsPassed = true;
+          
+          for (let i = 0; i < testQueries.length; i++) {
+            try {
+              const result = await testQueries[i]();
+              if (result.error) {
+                console.error(`Test query ${i + 1} failed:`, result.error);
+                allTestsPassed = false;
+                break;
+              }
+              console.log(`Test query ${i + 1} passed`);
+            } catch (error) {
+              console.error(`Test query ${i + 1} threw error:`, error);
+              allTestsPassed = false;
+              break;
+            }
+          }
+          
+          if (allTestsPassed) {
+            console.log('All session verification tests passed');
+            refreshSuccess = true;
+          } else {
+            console.warn('Session verification tests failed, retrying refresh');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } else {
+          console.error(`Session refresh attempt ${refreshAttempts} returned no session`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (!refreshSuccess) {
+        console.error('All session refresh attempts failed');
+        // Force a complete re-initialization
+        try {
+          console.log('Attempting complete Supabase client re-initialization');
+          // Clear any cached auth state
+          await supabase.auth.signOut({ scope: 'local' });
+          // Wait a moment
+          await new Promise(resolve => setTimeout(resolve, 500));
+          // Try to restore from localStorage
+          const { data: restoredSession } = await supabase.auth.getSession();
+          if (restoredSession?.session) {
+            console.log('Session restored from localStorage');
+            return true;
+          }
+        } catch (reinitError) {
+          console.error('Complete re-initialization failed:', reinitError);
+        }
         return false;
       }
+      
+      return true;
     } catch (error) {
-      console.error('Error in comprehensive session refresh:', error);
+      console.error('Error in aggressive session recovery:', error);
       return false;
     }
   }, []);
@@ -105,23 +166,29 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
             try {
               console.log(`Tab was hidden for ${timeHidden}ms - performing comprehensive session refresh`);
               
-              // Perform comprehensive session refresh and verification
+              // Perform aggressive session recovery
               const refreshSuccess = await refreshConnections();
               
-              // Dispatch a gentle visibility event with refresh status
-              window.dispatchEvent(new CustomEvent('app:visibility-gentle', { 
-                detail: { 
-                  timeHidden, 
-                  timestamp: Date.now(),
-                  sessionRefreshed: refreshSuccess
-                } 
-              }));
-              
-              if (!refreshSuccess) {
-                console.warn('Session refresh failed - user may need to re-authenticate');
+              if (refreshSuccess) {
+                console.log('Session recovery successful - dispatching success event');
+                // Dispatch a gentle visibility event with refresh status
+                window.dispatchEvent(new CustomEvent('app:visibility-gentle', { 
+                  detail: { 
+                    timeHidden, 
+                    timestamp: Date.now(),
+                    sessionRefreshed: true,
+                    recoveryType: 'aggressive'
+                  } 
+                }));
+              } else {
+                console.error('Session recovery failed completely - user needs to refresh or re-login');
                 // Dispatch a session failure event for the app to handle
                 window.dispatchEvent(new CustomEvent('app:session-failed', {
-                  detail: { reason: 'tab-switch-refresh-failed' }
+                  detail: { 
+                    reason: 'tab-switch-recovery-failed',
+                    severity: 'critical',
+                    action: 'refresh-required'
+                  }
                 }));
               }
             } catch (error) {

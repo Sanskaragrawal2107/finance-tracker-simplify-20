@@ -139,6 +139,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [fetchUserProfile]);
 
+  // Register this auth context with the visibility system
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('auth:context-ready', { 
+        detail: { refreshSession } 
+      }));
+    }
+  }, [refreshSession]);
+
   const value = { user, loading, error, login, logout, signUp, refreshSession };
 
   return (

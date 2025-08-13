@@ -118,25 +118,43 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useVisibilityRefresh(5000);
 
   // Listen for the centralized visibility event
+  // Listen for the centralized visibility event and auth context ready
   useEffect(() => {
+    let isHandling = false; // Prevent multiple simultaneous handlers
+    
     const handleCentralizedVisibility = async () => {
+      if (isHandling) return;
+      isHandling = true;
+      
       console.log('App received centralized visibility event');
       
-      // Always try to refresh Supabase session on return
       try {
-        await supabase.auth.refreshSession();
+        // Refresh auth session if we have auth context
+        if (authContextRef.current && authContextRef.current.refreshSession) {
+          console.log('Refreshing auth session through centralized handler');
+          await authContextRef.current.refreshSession();
+        }
+        
+        // Mark app as fresh again
+        setAppStale(false);
       } catch (e) {
-        console.warn('Session refresh on visibility failed or not needed:', e);
+        console.warn('Session refresh on visibility failed:', e);
+      } finally {
+        isHandling = false;
       }
-      
-      // Mark app as fresh again
-      setAppStale(false);
+    };
+
+    const handleAuthContextReady = (event: CustomEvent) => {
+      console.log('Auth context ready, registering refresh function');
+      authContextRef.current = { refreshSession: event.detail.refreshSession };
     };
 
     window.addEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
+    window.addEventListener('auth:context-ready', handleAuthContextReady as EventListener);
     
     return () => {
       window.removeEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
+      window.removeEventListener('auth:context-ready', handleAuthContextReady as EventListener);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }

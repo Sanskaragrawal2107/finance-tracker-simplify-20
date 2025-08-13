@@ -75,6 +75,7 @@ interface FetchOptions {
   showToast?: boolean;
   context?: string;
   bypassToastSuppression?: boolean;
+  timeout?: number;
 }
 
 /**
@@ -92,7 +93,8 @@ export async function fetchWithRetry<T>(
     retryDelay = 1000,
     showToast = true,
     context = 'data',
-    bypassToastSuppression = false
+    bypassToastSuppression = false,
+    timeout = 8000 // 8 second timeout
   } = options;
   
   let lastError: any = null;
@@ -100,8 +102,15 @@ export async function fetchWithRetry<T>(
   
   while (retries <= maxRetries) {
     try {
-      // Attempt to fetch data
-      const result = await fetchFn();
+      // Create timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`${context} fetch timeout after ${timeout}ms`));
+        }, timeout);
+      });
+
+      // Race between fetch and timeout
+      const result = await Promise.race([fetchFn(), timeoutPromise]);
       return result;
     } catch (error: any) {
       lastError = error;

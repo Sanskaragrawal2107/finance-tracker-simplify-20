@@ -21,13 +21,18 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
   
   // Reset connection to ensure all subscriptions are refreshed
   const resetConnections = useCallback(() => {
-    // Force reconnection of Supabase client
-    supabase.removeAllChannels();
-    
-    // Reconnect after a short delay
-    setTimeout(() => {
-      supabase.channel('system').subscribe();
-    }, 100);
+    try {
+      // Only reconnect if we're not already connected
+      const channels = supabase.getChannels();
+      if (channels.length === 0) {
+        console.log('No active channels, reconnecting...');
+        supabase.channel('system').subscribe();
+      } else {
+        console.log('Channels already active, skipping reconnection');
+      }
+    } catch (error) {
+      console.error('Error in resetConnections:', error);
+    }
   }, []);
 
   useEffect(() => {

@@ -65,7 +65,7 @@ const AdminDashboard: React.FC = () => {
             .eq('role', 'supervisor');
           return { data, error } as any;
         },
-        { context: 'supervisors' }
+        { context: 'supervisors', timeout: 5000, maxRetries: 2 }
       );
 
       if (!supervisorsData || supervisorsData.length === 0) {
@@ -87,7 +87,7 @@ const AdminDashboard: React.FC = () => {
             .select('id, supervisor_id, is_completed');
           return { data, error } as any;
         },
-        { context: 'sites' }
+        { context: 'sites', timeout: 5000, maxRetries: 2 }
       );
 
       if (!sitesData) {
@@ -141,13 +141,23 @@ const AdminDashboard: React.FC = () => {
       }
     }
 
-    // Listen for centralized visibility event from useVisibilityRefresh
+    // Listen for centralized visibility event from useVisibilityRefresh  
+    let isRefreshing = false;
     const onAppVisibility = async () => {
-      await ensureFreshSession();
-      if (user) {
-        fetchSupervisorsAndSites();
+      if (isRefreshing || !user) return;
+      isRefreshing = true;
+      
+      try {
+        console.log('Admin dashboard refreshing data after visibility change');
+        await ensureFreshSession();
+        await fetchSupervisorsAndSites();
+      } catch (error) {
+        console.error('Error refreshing admin dashboard:', error);
+      } finally {
+        isRefreshing = false;
       }
     };
+    
     window.addEventListener('app:visibility-change', onAppVisibility as EventListener);
 
     return () => {

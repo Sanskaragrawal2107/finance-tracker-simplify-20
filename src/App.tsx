@@ -52,59 +52,44 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const hiddenTimeRef = useRef<number | null>(null);
   const authContextRef = useRef<any>(null);
 
-  // Clear all loading states and force a refresh only when explicitly called
+  // Manual refresh only when user explicitly requests it
   const forceRefresh = useCallback(async () => {
-    // Reset all loading states to false
-    Object.keys(loadingStatesRef.current).forEach(key => {
-      loadingStatesRef.current[key] = false;
-    });
-    
-    // Force component refresh by updating the refresh time
-    setLastRefreshTime(Date.now());
-    
-    // Reset stale state
-    setAppStale(false);
-    
-    // Reconnect Supabase channels
-    supabase.removeAllChannels();
+    console.log('User requested manual refresh');
     
     try {
-      // Try to refresh the auth session too (this will be properly initialized once AuthProvider mounts)
+      // Only refresh auth session, don't forcefully clear all states
       if (authContextRef.current && authContextRef.current.refreshSession) {
-        console.log('Refreshing auth session through forceRefresh');
+        console.log('Manually refreshing auth session');
         await authContextRef.current.refreshSession();
       }
       
-      setTimeout(() => {
-        try {
-          supabase.channel('system').subscribe();
-          console.log('Reconnected Supabase channels');
-        } catch (error) {
-          console.error('Error reconnecting Supabase channels:', error);
-        }
-      }, 100);
+      // Reset stale state
+      setAppStale(false);
+      
+      // Force component refresh by updating the refresh time
+      setLastRefreshTime(Date.now());
+      
+      console.log('Manual refresh completed');
     } catch (error) {
-      console.error('Error in forceRefresh:', error);
+      console.error('Error in manual refresh:', error);
+      // Show user-friendly error
+      setAppStale(true);
     }
   }, []);
 
-  // Register a loading state from a component
+  // Register a loading state from a component (simplified)
   const registerLoadingState = useCallback((id: string, isLoading: boolean) => {
     loadingStatesRef.current[id] = isLoading;
     
-    // If anything is loading, set a timeout to clear all loading states
-    // This prevents infinite loading states but with longer timeout
-    if (isLoading && !timeoutRef.current) {
-      timeoutRef.current = setTimeout(() => {
-        console.warn(`Forcing loading state to clear after timeout for: ${id}`);
-        // Only clear the specific loading state that timed out
-        loadingStatesRef.current[id] = false;
-        timeoutRef.current = null;
-      }, 30000); // 30 second timeout - more reasonable for form submissions
-    } else if (!isLoading && timeoutRef.current) {
-      // If this specific loading state is done, clear the timeout
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+    // Only set timeout for specific loading state, don't clear all states
+    if (isLoading) {
+      // Set a timeout for this specific loading state only
+      setTimeout(() => {
+        if (loadingStatesRef.current[id]) {
+          console.warn(`Loading state timeout for: ${id}`);
+          loadingStatesRef.current[id] = false;
+        }
+      }, 45000); // 45 second timeout for individual operations
     }
   }, []);
 
@@ -114,31 +99,34 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     authContextRef.current = authContext;
   }, []);
 
-  // Use centralized visibility refresh hook instead of direct listener
-  useVisibilityRefresh(5000);
+  // Use centralized visibility refresh hook with longer duration to be less aggressive
+  useVisibilityRefresh(10000); // 10 seconds instead of 5
 
   // Listen for the centralized visibility event
-  // Listen for the centralized visibility event and auth context ready
+  // Listen for the gentle visibility event and auth context ready
   useEffect(() => {
     let isHandling = false; // Prevent multiple simultaneous handlers
     
-    const handleCentralizedVisibility = async () => {
+    const handleGentleVisibility = async (event: CustomEvent) => {
       if (isHandling) return;
       isHandling = true;
       
-      console.log('App received centralized visibility event');
+      const { timeHidden, timestamp } = event.detail;
+      console.log(`App received gentle visibility event - tab was hidden for ${timeHidden}ms`);
       
       try {
-        // Refresh auth session if we have auth context
+        // Only refresh auth session, don't clear states or force re-renders
         if (authContextRef.current && authContextRef.current.refreshSession) {
-          console.log('Refreshing auth session through centralized handler');
+          console.log('Gently refreshing auth session');
           await authContextRef.current.refreshSession();
         }
         
-        // Mark app as fresh again
-        setAppStale(false);
+        // Don't mark app as stale or force refresh - let React handle its own state
+        console.log('Session refreshed successfully after tab switch');
       } catch (e) {
-        console.warn('Session refresh on visibility failed:', e);
+        console.warn('Gentle session refresh failed:', e);
+        // Only show stale warning if session refresh actually failed
+        setAppStale(true);
       } finally {
         isHandling = false;
       }
@@ -149,11 +137,12 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       authContextRef.current = { refreshSession: event.detail.refreshSession };
     };
 
-    window.addEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
+    // Listen for the new gentle visibility event instead of the aggressive one
+    window.addEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
     window.addEventListener('auth:context-ready', handleAuthContextReady as EventListener);
     
     return () => {
-      window.removeEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
+      window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
       window.removeEventListener('auth:context-ready', handleAuthContextReady as EventListener);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);

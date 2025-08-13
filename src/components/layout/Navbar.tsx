@@ -35,25 +35,29 @@ const Navbar: React.FC<NavbarProps> = ({
       const now = Date.now();
       const timeSinceLastInteraction = now - lastInteractionRef.current;
       
-      // If it's been more than 10 minutes, show a warning
-      if (timeSinceLastInteraction > 10 * 60 * 1000) {
-        toast.info("It's been a while. Click refresh if needed.", {
-          duration: 5000
+      // If it's been more than 15 minutes, show a gentle warning
+      if (timeSinceLastInteraction > 15 * 60 * 1000) {
+        toast.info("Long inactivity detected. Refresh if needed.", {
+          duration: 3000
         });
       }
       
       lastInteractionRef.current = now;
     };
     
-    // Listen for centralized visibility event instead of direct listener
-    const handleCentralizedVisibility = () => {
-      checkInteraction();
+    // Listen for gentle visibility event instead of aggressive one
+    const handleGentleVisibility = (event: CustomEvent) => {
+      const { timeHidden } = event.detail;
+      // Only check interaction if tab was hidden for a very long time
+      if (timeHidden > 15 * 60 * 1000) { // 15 minutes
+        checkInteraction();
+      }
     };
     
-    window.addEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
+    window.addEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
     
     return () => {
-      window.removeEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
+      window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
     };
   }, []);
   
@@ -61,6 +65,7 @@ const Navbar: React.FC<NavbarProps> = ({
   const handleHomeClick = () => {
     lastInteractionRef.current = Date.now();
     try {
+      console.log('Home navigation initiated');
       if (userRole === UserRole.ADMIN) {
         navigate('/admin');
       } else {
@@ -68,19 +73,20 @@ const Navbar: React.FC<NavbarProps> = ({
       }
     } catch (error) {
       console.error('Error navigating to home:', error);
-      toast.error('Navigation failed. Please try refreshing the page.');
+      toast.error('Navigation failed. Please try again.');
     }
   };
   
-  // Handle logout with error handling
+  // Handle logout with error handling and loading state
   const handleLogout = async () => {
     lastInteractionRef.current = Date.now();
     try {
+      console.log('Logout initiated');
       await logout();
+      console.log('Logout completed successfully');
     } catch (error) {
       console.error('Error logging out:', error);
-      toast.error('Logout failed. Please try refreshing the page.');
-      
+      toast.error('Logout failed. Please try again.');
     }
   };
   
@@ -88,19 +94,22 @@ const Navbar: React.FC<NavbarProps> = ({
   const handleExpensesClick = () => {
     lastInteractionRef.current = Date.now();
     try {
+      console.log('Expenses navigation initiated');
       navigate('/expenses');
     } catch (error) {
       console.error('Error navigating to expenses:', error);
-      toast.error('Navigation failed. Please try refreshing the page.');
+      toast.error('Navigation failed. Please try again.');
     }
   };
   
-  // Force refresh app state
+  // Manual refresh app state
   const handleRefresh = () => {
     lastInteractionRef.current = Date.now();
+    console.log('Manual refresh requested from navbar');
     forceRefresh();
-    toast.success('App state refreshed');
-    
+    toast.success('App refreshed successfully!', {
+      duration: 2000
+    });
   };
   
   return (

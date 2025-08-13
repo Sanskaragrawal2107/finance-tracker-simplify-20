@@ -32,6 +32,12 @@ const queryClient = new QueryClient({
   },
 });
 
+// Global singleton to prevent duplicate app-level event listeners
+const globalAppState = {
+  listenersAttached: false,
+  instances: new Set()
+};
+
 // Create a context for visibility change handling
 export const VisibilityContext = createContext<{
   forceRefresh: () => void;
@@ -51,7 +57,7 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [appStale, setAppStale] = useState(false);
   const hiddenTimeRef = useRef<number | null>(null);
   const authContextRef = useRef<any>(null);
-  const listenersAttachedRef = useRef(false);
+  const instanceIdRef = useRef(Math.random().toString(36).substr(2, 9));
 
   // Manual refresh only when user explicitly requests it
   const forceRefresh = useCallback(async () => {
@@ -106,9 +112,14 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Listen for the centralized visibility event
   // Listen for the gentle visibility event and auth context ready
   useEffect(() => {
-    // Prevent duplicate listeners
-    if (listenersAttachedRef.current) {
-      console.log('App event listeners already attached, skipping');
+    const instanceId = instanceIdRef.current;
+    
+    // Register this instance
+    globalAppState.instances.add(instanceId);
+    
+    // Only attach listeners once globally
+    if (globalAppState.listenersAttached) {
+      console.log(`App event listeners already attached globally, instance ${instanceId} registered`);
       return;
     }
     
@@ -170,15 +181,24 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     window.addEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
     window.addEventListener('app:session-failed', handleSessionFailure as EventListener);
     window.addEventListener('auth:context-ready', handleAuthContextReady as EventListener);
-    listenersAttachedRef.current = true;
-    console.log('App event listeners attached');
+    globalAppState.listenersAttached = true;
+    console.log(`Global app event listeners attached by instance ${instanceId}`);
     
     return () => {
-      window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
-      window.removeEventListener('app:session-failed', handleSessionFailure as EventListener);
-      window.removeEventListener('auth:context-ready', handleAuthContextReady as EventListener);
-      listenersAttachedRef.current = false;
-      console.log('App event listeners removed');
+      // Unregister this instance
+      globalAppState.instances.delete(instanceId);
+      
+      // Only remove listeners when no instances remain
+      if (globalAppState.instances.size === 0) {
+        window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
+        window.removeEventListener('app:session-failed', handleSessionFailure as EventListener);
+        window.removeEventListener('auth:context-ready', handleAuthContextReady as EventListener);
+        globalAppState.listenersAttached = false;
+        console.log(`Global app event listeners removed by last instance ${instanceId}`);
+      } else {
+        console.log(`App instance ${instanceId} unregistered, ${globalAppState.instances.size} instances remain`);
+      }
+      
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }

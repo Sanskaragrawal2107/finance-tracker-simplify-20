@@ -5,11 +5,19 @@ import { supabase } from '@/integrations/supabase/client';
  * Hook that handles browser tab visibility changes and refreshes data when the tab becomes visible again.
  * Updated to prevent event handler interference and maintain React event system integrity.
  */
+// Global singleton to prevent duplicate listeners across all instances
+const globalVisibilityState = {
+  listenerAttached: false,
+  instances: new Set(),
+  lastVisibleTime: Date.now(),
+  isHandling: false
+};
+
 export function useVisibilityRefresh(minHiddenDuration = 5000) {
   const lastVisibleTimeRef = useRef(Date.now());
   const loadingStateRef = useRef<{[key: string]: boolean}>({});
   const isHandlingVisibilityRef = useRef(false);
-  const listenerAttachedRef = useRef(false);
+  const instanceIdRef = useRef(Math.random().toString(36).substr(2, 9));
   
   // Set a loading state with a key
   const setLoading = useCallback((key: string, isLoading: boolean) => {
@@ -64,23 +72,33 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
   }, []);
 
   useEffect(() => {
-    // Prevent duplicate listeners
-    if (listenerAttachedRef.current) {
-      console.log('Visibility listener already attached, skipping');
+    const instanceId = instanceIdRef.current;
+    
+    // Register this instance
+    globalVisibilityState.instances.add(instanceId);
+    
+    // Only attach listener once globally, regardless of how many hook instances exist
+    if (globalVisibilityState.listenerAttached) {
+      console.log(`Visibility listener already attached globally, instance ${instanceId} registered`);
       return;
     }
     
     let timeoutId: NodeJS.Timeout;
     
     const handleVisibilityChange = async () => {
+      // Prevent multiple simultaneous handlers globally
+      if (globalVisibilityState.isHandling) {
+        console.log('Visibility change already being handled globally, skipping');
+        return;
+      }
       if (document.visibilityState === 'visible') {
         // Tab became visible again
-        const timeHidden = Date.now() - lastVisibleTimeRef.current;
+        const timeHidden = Date.now() - globalVisibilityState.lastVisibleTime;
         console.log(`Tab became visible after ${timeHidden}ms`);
         
         // Only take action if the tab was hidden for a significant duration
         if (timeHidden > minHiddenDuration) {
-          isHandlingVisibilityRef.current = true;
+          globalVisibilityState.isHandling = true;
           
           // Use a small delay to allow React to stabilize
           timeoutId = setTimeout(async () => {
@@ -109,26 +127,35 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
             } catch (error) {
               console.error('Error handling visibility change:', error);
             } finally {
-              isHandlingVisibilityRef.current = false;
+              globalVisibilityState.isHandling = false;
             }
           }, 100); // Small delay to let React settle
         }
       } else {
-        // Tab is being hidden, store the current time
-        lastVisibleTimeRef.current = Date.now();
+        // Tab is being hidden, store the current time globally
+        globalVisibilityState.lastVisibleTime = Date.now();
         console.log('Tab hidden at:', new Date().toISOString());
       }
     };
 
     // Listen for visibility changes with passive option for better performance
     document.addEventListener('visibilitychange', handleVisibilityChange, { passive: true });
-    listenerAttachedRef.current = true;
-    console.log('Visibility change listener attached');
+    globalVisibilityState.listenerAttached = true;
+    console.log(`Global visibility change listener attached by instance ${instanceId}`);
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      listenerAttachedRef.current = false;
-      console.log('Visibility change listener removed');
+      // Unregister this instance
+      globalVisibilityState.instances.delete(instanceId);
+      
+      // Only remove listener when no instances remain
+      if (globalVisibilityState.instances.size === 0) {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        globalVisibilityState.listenerAttached = false;
+        console.log(`Global visibility change listener removed by last instance ${instanceId}`);
+      } else {
+        console.log(`Instance ${instanceId} unregistered, ${globalVisibilityState.instances.size} instances remain`);
+      }
+      
       if (timeoutId) {
         clearTimeout(timeoutId);
       }

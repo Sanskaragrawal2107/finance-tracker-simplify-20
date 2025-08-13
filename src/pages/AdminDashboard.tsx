@@ -17,6 +17,7 @@ import SiteForm from '@/components/sites/SiteForm';
 import SitesList from '@/components/sites/SitesList';
 import { useLoadingState } from '@/hooks/use-loading-state';
 import { fetchSupabaseData } from '@/utils/dataFetching';
+import { useVisibilityRefresh } from '@/hooks/use-visibility-refresh';
 
 interface SupervisorStats {
   totalSites: number;
@@ -41,6 +42,8 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user } = useAuth();
+  // Centralized visibility/session handling (debounced via hook)
+  useVisibilityRefresh(3000);
 
   const fetchSupervisorsAndSites = async () => {
     const isInitialLoad = initialLoading;
@@ -138,20 +141,18 @@ const AdminDashboard: React.FC = () => {
       }
     }
 
-    // Refresh session and refetch when tab becomes visible (admin page specific)
-    const onVis = async () => {
-      if (document.visibilityState === 'visible') {
-        await ensureFreshSession();
-        if (user) {
-          fetchSupervisorsAndSites();
-        }
+    // Listen for centralized visibility event from useVisibilityRefresh
+    const onAppVisibility = async () => {
+      await ensureFreshSession();
+      if (user) {
+        fetchSupervisorsAndSites();
       }
     };
-    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('app:visibility-change', onAppVisibility as EventListener);
 
     return () => {
       mounted = false;
-      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('app:visibility-change', onAppVisibility as EventListener);
     };
   }, [user]);
 

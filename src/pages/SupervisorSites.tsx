@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import SiteDetail from '@/components/sites/SiteDetail';
-import { useVisibilityRefresh } from '@/hooks/use-visibility-refresh';
+
 import { createVisibilityAwareTimeout } from '@/lib/connectivity';
 import { useLoadingState } from '@/hooks/use-loading-state';
 

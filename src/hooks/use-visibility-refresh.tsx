@@ -9,6 +9,7 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
   const lastVisibleTimeRef = useRef(Date.now());
   const loadingStateRef = useRef<{[key: string]: boolean}>({});
   const isHandlingVisibilityRef = useRef(false);
+  const listenerAttachedRef = useRef(false);
   
   // Set a loading state with a key
   const setLoading = useCallback((key: string, isLoading: boolean) => {
@@ -63,6 +64,12 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
   }, []);
 
   useEffect(() => {
+    // Prevent duplicate listeners
+    if (listenerAttachedRef.current) {
+      console.log('Visibility listener already attached, skipping');
+      return;
+    }
+    
     let timeoutId: NodeJS.Timeout;
     
     const handleVisibilityChange = async () => {
@@ -115,9 +122,13 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
 
     // Listen for visibility changes with passive option for better performance
     document.addEventListener('visibilitychange', handleVisibilityChange, { passive: true });
+    listenerAttachedRef.current = true;
+    console.log('Visibility change listener attached');
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      listenerAttachedRef.current = false;
+      console.log('Visibility change listener removed');
       if (timeoutId) {
         clearTimeout(timeoutId);
       }

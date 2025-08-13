@@ -28,9 +28,16 @@ const Navbar: React.FC<NavbarProps> = ({
   const { logout, user } = useAuth();
   const { forceRefresh } = useContext(VisibilityContext);
   const lastInteractionRef = useRef<number>(Date.now());
+  const isLoggingOutRef = useRef(false);
+  const listenerAttachedRef = useRef(false);
   
   // Check if the app needs a refresh based on last interaction time
   useEffect(() => {
+    // Prevent duplicate listeners
+    if (listenerAttachedRef.current) {
+      console.log('Navbar event listener already attached, skipping');
+      return;
+    }
     const checkInteraction = () => {
       const now = Date.now();
       const timeSinceLastInteraction = now - lastInteractionRef.current;
@@ -55,9 +62,13 @@ const Navbar: React.FC<NavbarProps> = ({
     };
     
     window.addEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
+    listenerAttachedRef.current = true;
+    console.log('Navbar event listener attached');
     
     return () => {
       window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
+      listenerAttachedRef.current = false;
+      console.log('Navbar event listener removed');
     };
   }, []);
   
@@ -79,7 +90,15 @@ const Navbar: React.FC<NavbarProps> = ({
   
   // Handle logout with error handling and loading state
   const handleLogout = async () => {
+    // Prevent multiple simultaneous logout attempts
+    if (isLoggingOutRef.current) {
+      console.log('Logout already in progress, ignoring duplicate request');
+      return;
+    }
+    
+    isLoggingOutRef.current = true;
     lastInteractionRef.current = Date.now();
+    
     try {
       console.log('Logout initiated');
       await logout();
@@ -87,6 +106,8 @@ const Navbar: React.FC<NavbarProps> = ({
     } catch (error) {
       console.error('Error logging out:', error);
       toast.error('Logout failed. Please try again.');
+    } finally {
+      isLoggingOutRef.current = false;
     }
   };
   

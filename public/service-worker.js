@@ -44,7 +44,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip service worker interference for auth and API requests to prevent session issues
   const supabaseUrl = 'bpyzpnioddmzniuikbsn.supabase.co';
+  if (reqUrl.includes(supabaseUrl)) {
+    // Let Supabase requests pass through without service worker interference
+    return;
+  }
 
   // Ignore non-HTTP(S) schemes (e.g., chrome-extension://)
   let url;
@@ -60,11 +65,6 @@ self.addEventListener('fetch', (event) => {
   // Exclude GPT Engineer script from SW handling and caching
   if (reqUrl.includes('cdn.gpteng.co/gptengineer.js')) {
     return; // Let the browser handle without caching
-  }
-
-  // If the request is for the Supabase API, always go to the network.
-  if (reqUrl.includes(supabaseUrl)) {
-    return; // Let the browser handle the request.
   }
 
   // We only want to cache GET requests.

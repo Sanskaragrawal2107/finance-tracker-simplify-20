@@ -51,6 +51,7 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [appStale, setAppStale] = useState(false);
   const hiddenTimeRef = useRef<number | null>(null);
   const authContextRef = useRef<any>(null);
+  const listenersAttachedRef = useRef(false);
 
   // Manual refresh only when user explicitly requests it
   const forceRefresh = useCallback(async () => {
@@ -105,6 +106,12 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Listen for the centralized visibility event
   // Listen for the gentle visibility event and auth context ready
   useEffect(() => {
+    // Prevent duplicate listeners
+    if (listenersAttachedRef.current) {
+      console.log('App event listeners already attached, skipping');
+      return;
+    }
+    
     let isHandling = false; // Prevent multiple simultaneous handlers
     
     const handleGentleVisibility = async (event: CustomEvent) => {
@@ -163,11 +170,15 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     window.addEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
     window.addEventListener('app:session-failed', handleSessionFailure as EventListener);
     window.addEventListener('auth:context-ready', handleAuthContextReady as EventListener);
+    listenersAttachedRef.current = true;
+    console.log('App event listeners attached');
     
     return () => {
       window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
       window.removeEventListener('app:session-failed', handleSessionFailure as EventListener);
       window.removeEventListener('auth:context-ready', handleAuthContextReady as EventListener);
+      listenersAttachedRef.current = false;
+      console.log('App event listeners removed');
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }

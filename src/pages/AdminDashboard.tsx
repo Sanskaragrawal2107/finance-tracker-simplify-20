@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
@@ -34,8 +34,10 @@ const AdminDashboard: React.FC = () => {
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string | null>(null);
   const [supervisorStats, setSupervisorStats] = useState<Record<string, SupervisorStats>>({});
   const [supervisorsList, setSupervisorsList] = useState<SupervisorWithId[]>([]);
-  const [isRegisterFormOpen, setIsRegisterFormOpen] = useState(false);
   const [isSiteFormOpen, setIsSiteFormOpen] = useState(false);
+  const [isRegisterFormOpen, setIsRegisterFormOpen] = useState(false);
+  const lastTabSwitchRef = useRef<number>(0);
+  const buttonCooldownRef = useRef<boolean>(false);
   const [initialLoadingState, setInitialLoading] = useLoadingState(true, 30000); // 30 second timeout
   const [loadingSupervisorsState, setLoadingSupervisors] = useLoadingState(false, 30000); // 30 second timeout
   const [initialLoading, loadingSupervisors] = [initialLoadingState[0], loadingSupervisorsState[0]];
@@ -58,10 +60,28 @@ const AdminDashboard: React.FC = () => {
       }
     };
     
+    const handleGentleVisibility = (event: CustomEvent) => {
+      const { timeHidden } = event.detail;
+      
+      // Record tab switch time and enable button cooldown
+      lastTabSwitchRef.current = Date.now();
+      buttonCooldownRef.current = true;
+      
+      console.log('AdminDashboard: Tab switch detected - enabling button cooldown for 2 seconds');
+      
+      // Disable button cooldown after 2 seconds
+      setTimeout(() => {
+        buttonCooldownRef.current = false;
+        console.log('AdminDashboard: Button cooldown disabled');
+      }, 2000);
+    };
+    
     window.addEventListener('app:force-refresh', handleForceRefresh as EventListener);
+    window.addEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
     
     return () => {
       window.removeEventListener('app:force-refresh', handleForceRefresh as EventListener);
+      window.removeEventListener('app:visibility-gentle', handleGentleVisibility as EventListener);
     };
   }, []);
 
@@ -187,6 +207,13 @@ const AdminDashboard: React.FC = () => {
   }, [user]);
 
   const handleViewSites = (supervisorId: string) => {
+    // Check if we're in button cooldown period after tab switch
+    if (buttonCooldownRef.current) {
+      const timeSinceTabSwitch = Date.now() - lastTabSwitchRef.current;
+      console.log(`View sites blocked - tab switch cooldown active (${timeSinceTabSwitch}ms ago)`);
+      return;
+    }
+    
     console.log("Viewing sites for supervisor:", supervisorId);
     const selectedSupervisor = supervisorsList.find(sup => sup.id === supervisorId);
     navigate('/admin/supervisor-sites', {
@@ -199,6 +226,14 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleAddSite = () => {
+    // Check if we're in button cooldown period after tab switch
+    if (buttonCooldownRef.current) {
+      const timeSinceTabSwitch = Date.now() - lastTabSwitchRef.current;
+      console.log(`Create site blocked - tab switch cooldown active (${timeSinceTabSwitch}ms ago)`);
+      toast.info('Please wait a moment after switching tabs before creating a site.');
+      return;
+    }
+    
     if (selectedSupervisorId) {
       setIsSiteFormOpen(true);
     } else {

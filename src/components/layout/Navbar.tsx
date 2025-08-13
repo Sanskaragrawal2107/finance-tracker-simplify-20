@@ -30,6 +30,8 @@ const Navbar: React.FC<NavbarProps> = ({
   const lastInteractionRef = useRef<number>(Date.now());
   const isLoggingOutRef = useRef(false);
   const listenerAttachedRef = useRef(false);
+  const lastTabSwitchRef = useRef<number>(0);
+  const buttonCooldownRef = useRef<boolean>(false);
   
   // Check if the app needs a refresh based on last interaction time
   useEffect(() => {
@@ -55,6 +57,19 @@ const Navbar: React.FC<NavbarProps> = ({
     // Listen for gentle visibility event instead of aggressive one
     const handleGentleVisibility = (event: CustomEvent) => {
       const { timeHidden } = event.detail;
+      
+      // Record tab switch time and enable button cooldown
+      lastTabSwitchRef.current = Date.now();
+      buttonCooldownRef.current = true;
+      
+      console.log('Tab switch detected - enabling button cooldown for 2 seconds');
+      
+      // Disable button cooldown after 2 seconds
+      setTimeout(() => {
+        buttonCooldownRef.current = false;
+        console.log('Button cooldown disabled');
+      }, 2000);
+      
       // Only check interaction if tab was hidden for a very long time
       if (timeHidden > 15 * 60 * 1000) { // 15 minutes
         checkInteraction();
@@ -74,6 +89,13 @@ const Navbar: React.FC<NavbarProps> = ({
   
   // Function to handle home button click based on user role
   const handleHomeClick = () => {
+    // Check if we're in button cooldown period after tab switch
+    if (buttonCooldownRef.current) {
+      const timeSinceTabSwitch = Date.now() - lastTabSwitchRef.current;
+      console.log(`Home navigation blocked - tab switch cooldown active (${timeSinceTabSwitch}ms ago)`);
+      return;
+    }
+    
     lastInteractionRef.current = Date.now();
     try {
       console.log('Home navigation initiated');
@@ -90,6 +112,14 @@ const Navbar: React.FC<NavbarProps> = ({
   
   // Handle logout with error handling and loading state
   const handleLogout = async () => {
+    // Check if we're in button cooldown period after tab switch
+    if (buttonCooldownRef.current) {
+      const timeSinceTabSwitch = Date.now() - lastTabSwitchRef.current;
+      console.log(`Logout blocked - tab switch cooldown active (${timeSinceTabSwitch}ms ago)`);
+      toast.info('Please wait a moment after switching tabs before logging out.');
+      return;
+    }
+    
     // Prevent multiple simultaneous logout attempts
     if (isLoggingOutRef.current) {
       console.log('Logout already in progress, ignoring duplicate request');
@@ -113,6 +143,13 @@ const Navbar: React.FC<NavbarProps> = ({
   
   // Handle navigation to expenses
   const handleExpensesClick = () => {
+    // Check if we're in button cooldown period after tab switch
+    if (buttonCooldownRef.current) {
+      const timeSinceTabSwitch = Date.now() - lastTabSwitchRef.current;
+      console.log(`Expenses navigation blocked - tab switch cooldown active (${timeSinceTabSwitch}ms ago)`);
+      return;
+    }
+    
     lastInteractionRef.current = Date.now();
     try {
       console.log('Expenses navigation initiated');
@@ -125,6 +162,7 @@ const Navbar: React.FC<NavbarProps> = ({
   
   // Manual refresh app state
   const handleRefresh = () => {
+    // Allow refresh even during cooldown as it's a recovery action
     lastInteractionRef.current = Date.now();
     console.log('Manual refresh requested from navbar');
     forceRefresh();

@@ -157,47 +157,69 @@ export function useVisibilityRefresh(minHiddenDuration = 5000) {
         const timeHidden = Date.now() - globalVisibilityState.lastVisibleTime;
         console.log(`Tab became visible after ${timeHidden}ms`);
         
-        // Only take action if the tab was hidden for a significant duration
-        if (timeHidden > minHiddenDuration) {
-          globalVisibilityState.isHandling = true;
-          
-          // Use a small delay to allow React to stabilize
-          timeoutId = setTimeout(async () => {
-            try {
-              console.log(`Tab was hidden for ${timeHidden}ms - performing comprehensive session refresh`);
+        // Always dispatch visibility event for button cooldown protection, but only do session refresh for longer durations
+        globalVisibilityState.isHandling = true;
+        
+        // Use a small delay to allow React to stabilize
+        timeoutId = setTimeout(async () => {
+          try {
+            // Always dispatch the gentle visibility event for button cooldown protection
+            console.log(`Tab was hidden for ${timeHidden}ms - dispatching visibility event`);
+            
+            let refreshSuccess = false;
+            let recoveryType = 'none';
+            
+            // Only perform session refresh if tab was hidden for significant duration
+            if (timeHidden > minHiddenDuration) {
+              console.log(`Performing comprehensive session refresh (threshold: ${minHiddenDuration}ms exceeded)`);
               
               // Perform aggressive session recovery
-              const refreshSuccess = await refreshConnections();
+              refreshSuccess = await refreshConnections();
+              recoveryType = refreshSuccess ? 'aggressive' : 'failed';
               
               if (refreshSuccess) {
-                console.log('Session recovery successful - dispatching success event');
-                // Dispatch a gentle visibility event with refresh status
-                window.dispatchEvent(new CustomEvent('app:visibility-gentle', { 
-                  detail: { 
-                    timeHidden, 
-                    timestamp: Date.now(),
-                    sessionRefreshed: true,
-                    recoveryType: 'aggressive'
-                  } 
-                }));
+                console.log('Session recovery successful');
               } else {
-                console.error('Session recovery failed completely - user needs to refresh or re-login');
-                // Dispatch a session failure event for the app to handle
+                console.error('Session recovery failed - dispatching failure event');
+                // Dispatch failure event
                 window.dispatchEvent(new CustomEvent('app:session-failed', {
-                  detail: { 
-                    reason: 'tab-switch-recovery-failed',
+                  detail: {
+                    reason: 'tab-switch-refresh-failed',
                     severity: 'critical',
                     action: 'refresh-required'
                   }
                 }));
               }
-            } catch (error) {
-              console.error('Error handling visibility change:', error);
-            } finally {
-              globalVisibilityState.isHandling = false;
+            } else {
+              console.log(`Tab switch duration under threshold (${minHiddenDuration}ms) - skipping session refresh`);
+              recoveryType = 'skipped';
             }
-          }, 100); // Small delay to let React settle
-        }
+            
+            // Always dispatch gentle visibility event for button cooldown protection
+            window.dispatchEvent(new CustomEvent('app:visibility-gentle', { 
+              detail: { 
+                timeHidden, 
+                timestamp: Date.now(),
+                sessionRefreshed: refreshSuccess,
+                recoveryType: recoveryType
+              } 
+            }));
+            
+          } catch (error) {
+            console.error('Error in visibility change handler:', error);
+            // Still dispatch the event even if there was an error
+            window.dispatchEvent(new CustomEvent('app:visibility-gentle', { 
+              detail: { 
+                timeHidden, 
+                timestamp: Date.now(),
+                sessionRefreshed: false,
+                recoveryType: 'error'
+              } 
+            }));
+          } finally {
+            globalVisibilityState.isHandling = false;
+          }
+        }, 100);
       } else {
         // Tab is being hidden, store the current time globally
         globalVisibilityState.lastVisibleTime = Date.now();

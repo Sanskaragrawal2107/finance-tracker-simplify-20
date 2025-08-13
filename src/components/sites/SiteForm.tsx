@@ -87,14 +87,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
 
   useEffect(() => { supervisorIdRef.current = supervisorId; }, [supervisorId]);
 
-  // Proactive refresh on tab regain
-  useEffect(() => {
-    document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState === 'visible') {
-        await supabase.auth.refreshSession();
-      }
-    });
-  }, []);
+  // Removed extra visibility listener here; global handlers already refresh session
 
   const defaultValues = useMemo(() => ({
     name: '',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ExpenseList } from '@/components/expenses/ExpenseList';
 import { AdvanceList } from '@/components/advances/AdvanceList';
@@ -7,7 +7,6 @@ import { InvoiceList } from '@/components/invoices/InvoiceList';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { UserRole } from '@/lib/types';
 import { SupervisorTransactionHistory } from '../transactions/SupervisorTransactionHistory';
-import { VisibilityContext } from '@/App';
 
 interface SiteDetailTransactionsProps {
   siteId: string;

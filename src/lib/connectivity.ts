@@ -46,27 +46,17 @@ export const createVisibilityAwareTimeout = (
     }
   };
   
-  // Handle visibility changes
-  const handleVisibilityChange = () => {
+  // Listen for centralized visibility event instead of direct listener
+  const handleCentralizedVisibility = () => {
     const currentTime = Date.now();
-    isTabVisible = document.visibilityState === 'visible';
+    isTabVisible = true; // Always visible when this event fires
     
-    if (isTabVisible) {
-      // Tab became visible, restart the timeout with remaining time
-      updateTimeout();
-    } else {
-      // Tab hidden, pause the timeout and calculate elapsed time
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      // Update the elapsed time
-      visibleElapsedTime += currentTime - startTime;
-    }
+    // Tab became visible, restart the timeout with remaining time
+    updateTimeout();
   };
   
-  // Start listening for visibility changes
-  document.addEventListener('visibilitychange', handleVisibilityChange);
+  // Start listening for centralized visibility changes
+  window.addEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
   
   // Initialize the timeout
   updateTimeout();
@@ -79,7 +69,7 @@ export const createVisibilityAwareTimeout = (
         timeoutId = null;
       }
       isActive = false;
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
     }
   };
 };

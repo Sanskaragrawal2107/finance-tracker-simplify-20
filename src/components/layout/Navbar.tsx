@@ -45,17 +45,15 @@ const Navbar: React.FC<NavbarProps> = ({
       lastInteractionRef.current = now;
     };
     
-    // Check when the tab becomes visible
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkInteraction();
-      }
+    // Listen for centralized visibility event instead of direct listener
+    const handleCentralizedVisibility = () => {
+      checkInteraction();
     };
     
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
     };
   }, []);
   

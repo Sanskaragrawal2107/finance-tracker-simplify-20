@@ -17,7 +17,8 @@ import { useIsMobile } from "./hooks/use-mobile";
 import { AuthProvider, useAuth } from "./hooks/use-auth";
 import AppLayout from "./components/layout/AppLayout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
-import { refreshSchemaCache, supabase } from "./integrations/supabase/client";
+import { supabase, refreshSchemaCache } from '@/integrations/supabase/client';
+import { useVisibilityRefresh } from '@/hooks/use-visibility-refresh';
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -113,69 +114,29 @@ const VisibilityRefreshProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     authContextRef.current = authContext;
   }, []);
 
-  // Handle document visibility changes - with improved reconnection
+  // Use centralized visibility refresh hook instead of direct listener
+  useVisibilityRefresh(5000);
+
+  // Listen for the centralized visibility event
   useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        const currentTime = Date.now();
-        const timeHidden = hiddenTimeRef.current ? currentTime - hiddenTimeRef.current : 0;
-        
-        console.log(`Tab became visible after ${timeHidden}ms`);
-        
-        // Always try to refresh Supabase session on return
-        try {
-          await supabase.auth.refreshSession();
-        } catch (e) {
-          console.warn('Session refresh on visibility failed or not needed:', e);
-        }
-        
-        // Only clear loading states if tab was hidden for more than 30 seconds
-        // This prevents interrupting legitimate form submissions which can take time
-        if (timeHidden > 30000) {
-          console.log('Clearing loading states after extended inactivity (30+ seconds)');
-          Object.keys(loadingStatesRef.current).forEach(key => {
-            // Only clear if the loading state has been active for more than 60 seconds
-            // This prevents clearing legitimate ongoing operations
-            if (loadingStatesRef.current[key]) {
-              console.log(`Clearing potentially stuck loading state after extended time: ${key}`);
-              loadingStatesRef.current[key] = false;
-            }
-          });
-        } else if (timeHidden > 5000) {
-          console.log(`Tab was hidden for ${timeHidden}ms - not clearing loading states to avoid interrupting form submissions`);
-        }
-        
-        // Only mark app as stale after substantial inactivity (>2 minutes)
-        if (timeHidden > 120000) {
-          console.log('App marked as stale after long inactivity');
-          setAppStale(true);
-          toast.info('Tab was inactive for a while. Some functionality may need to be refreshed.');
-          
-          // Only try to reconnect Supabase, avoid auth session refresh to prevent loops
-          try {
-            supabase.removeAllChannels();
-            setTimeout(() => {
-              supabase.channel('system').subscribe();
-              console.log('Attempted to reconnect Supabase after inactivity');
-            }, 100);
-          } catch (err) {
-            console.error('Error reconnecting after inactivity:', err);
-          }
-        }
-        
-        hiddenTimeRef.current = null;
-      } else {
-        // Tab is being hidden, store the current time
-        hiddenTimeRef.current = Date.now();
+    const handleCentralizedVisibility = async () => {
+      console.log('App received centralized visibility event');
+      
+      // Always try to refresh Supabase session on return
+      try {
+        await supabase.auth.refreshSession();
+      } catch (e) {
+        console.warn('Session refresh on visibility failed or not needed:', e);
       }
+      
+      // Mark app as fresh again
+      setAppStale(false);
     };
 
-    // Listen for visibility changes
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      // Clear any pending timeouts
+      window.removeEventListener('app:visibility-change', handleCentralizedVisibility as EventListener);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }

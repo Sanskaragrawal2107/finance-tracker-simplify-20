@@ -14,18 +14,15 @@ import RegisterForm from '@/components/auth/RegisterForm';
 import { supabase } from '@/integrations/supabase/client';
 import SiteForm from '@/components/sites/SiteForm';
 import { usePageVisibility } from '@/utils/pageVisibility';
-
 interface SupervisorStats {
   totalSites: number;
   activeSites: number;
   completedSites: number;
 }
-
 interface SupervisorWithId {
   id: string;
   name: string;
 }
-
 const AdminDashboard: React.FC = () => {
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string | null>(null);
   const [supervisorStats, setSupervisorStats] = useState<Record<string, SupervisorStats>>({});
@@ -34,15 +31,15 @@ const AdminDashboard: React.FC = () => {
   const [isRegisterFormOpen, setIsRegisterFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { user } = useAuth();
-  
+  const {
+    user
+  } = useAuth();
+
   // Stable refs to prevent re-binding event handlers
   const buttonsEnabledRef = useRef(true);
   const lastFetchTimeRef = useRef(0);
-
   const fetchSupervisorsAndSites = useCallback(async () => {
     const now = Date.now();
     // Prevent rapid successive calls
@@ -51,53 +48,32 @@ const AdminDashboard: React.FC = () => {
       return;
     }
     lastFetchTimeRef.current = now;
-
     try {
       setIsRefreshing(true);
 
       // Add timeout to prevent hanging
-      const fetchPromise = Promise.all([
-        supabase
-          .from('users')
-          .select('id, name')
-          .eq('role', 'supervisor'),
-        supabase
-          .from('sites')
-          .select('id, supervisor_id, is_completed')
-      ]);
-
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Fetch timeout')), 8000)
-      );
-
-      const [supervisorsResult, sitesResult] = await Promise.race([
-        fetchPromise,
-        timeoutPromise
-      ]) as any;
-
+      const fetchPromise = Promise.all([supabase.from('users').select('id, name').eq('role', 'supervisor'), supabase.from('sites').select('id, supervisor_id, is_completed')]);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Fetch timeout')), 8000));
+      const [supervisorsResult, sitesResult] = (await Promise.race([fetchPromise, timeoutPromise])) as any;
       if (supervisorsResult.error) {
         console.error('Error fetching supervisors:', supervisorsResult.error);
         toast.error('Failed to load supervisors');
         return;
       }
-
       const supervisorsData = supervisorsResult.data;
       if (!supervisorsData || supervisorsData.length === 0) {
         setSupervisorsList([]);
         setSupervisorStats({});
         return;
       }
-
       setSupervisorsList(supervisorsData);
-
       if (sitesResult.error) {
         console.error('Error fetching sites:', sitesResult.error);
         toast.error('Failed to load sites data');
         return;
       }
-
       const sitesData = sitesResult.data;
-      
+
       // Calculate stats
       const stats: Record<string, SupervisorStats> = {};
       supervisorsData.forEach(supervisor => {
@@ -105,14 +81,12 @@ const AdminDashboard: React.FC = () => {
         const total = supervisorSites.length;
         const active = supervisorSites.filter(site => !site.is_completed).length;
         const completed = supervisorSites.filter(site => site.is_completed).length;
-
         stats[supervisor.id] = {
           totalSites: total,
           activeSites: active,
           completedSites: completed
         };
       });
-
       setSupervisorStats(stats);
     } catch (error) {
       console.error('Error in fetchSupervisorsAndSites:', error);
@@ -126,7 +100,6 @@ const AdminDashboard: React.FC = () => {
       setIsRefreshing(false);
     }
   }, []);
-
   useEffect(() => {
     if (user) {
       fetchSupervisorsAndSites();
@@ -140,7 +113,7 @@ const AdminDashboard: React.FC = () => {
     const handleTabRecovery = () => {
       console.log('Admin dashboard recovered from tab switch');
       buttonsEnabledRef.current = true;
-      
+
       // Force re-enable event handlers by refreshing data
       if (user) {
         setTimeout(() => {
@@ -148,20 +121,16 @@ const AdminDashboard: React.FC = () => {
         }, 100);
       }
     };
-
     window.addEventListener('app:tab-recovered', handleTabRecovery);
-    
     return () => {
       window.removeEventListener('app:tab-recovered', handleTabRecovery);
     };
   }, [user, fetchSupervisorsAndSites]);
-
   const handleViewSites = useCallback((supervisorId: string) => {
     if (!buttonsEnabledRef.current) {
       console.log('Button disabled - ignoring click');
       return;
     }
-    
     const selectedSupervisor = supervisorsList.find(sup => sup.id === supervisorId);
     navigate('/admin/supervisor-sites', {
       state: {
@@ -171,27 +140,25 @@ const AdminDashboard: React.FC = () => {
       }
     });
   }, [supervisorsList, navigate]);
-
   const handleAddSite = useCallback(() => {
     if (!buttonsEnabledRef.current) {
       console.log('Button disabled - ignoring click');
       return;
     }
-    
     if (selectedSupervisorId) {
       setIsSiteFormOpen(true);
     } else {
       toast.error("Please select a supervisor first");
     }
   }, [selectedSupervisorId]);
-
   const handleCreateSite = async (site: any) => {
     try {
       // Update local stats optimistically
       setSupervisorStats(prev => {
-        const updatedStats = { ...prev };
+        const updatedStats = {
+          ...prev
+        };
         const supervisorId = site.supervisorId || selectedSupervisorId;
-
         if (supervisorId && updatedStats[supervisorId]) {
           updatedStats[supervisorId] = {
             ...updatedStats[supervisorId],
@@ -201,7 +168,6 @@ const AdminDashboard: React.FC = () => {
         }
         return updatedStats;
       });
-
       setIsSiteFormOpen(false);
       toast.success('Site created successfully!');
     } catch (error: any) {
@@ -209,11 +175,9 @@ const AdminDashboard: React.FC = () => {
       toast.error('Failed to create site: ' + error.message);
     }
   };
-
   const getSelectedSupervisor = () => {
     return supervisorsList.find(s => s.id === selectedSupervisorId);
   };
-
   const handleRefresh = useCallback(() => {
     if (!buttonsEnabledRef.current) {
       console.log('Button disabled - ignoring click');
@@ -221,10 +185,8 @@ const AdminDashboard: React.FC = () => {
     }
     fetchSupervisorsAndSites();
   }, [fetchSupervisorsAndSites]);
-
   if (!user) {
-    return (
-      <div className="space-y-6 animate-fade-in">
+    return <div className="space-y-6 animate-fade-in">
         <div className="text-center py-12">
           <div className="animate-pulse">
             <Users className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -234,27 +196,13 @@ const AdminDashboard: React.FC = () => {
             </p>
           </div>
         </div>
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="space-y-6 animate-fade-in">
+  return <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <PageTitle
-          title="Admin Dashboard"
-          subtitle="Manage supervisors and view site statistics"
-        />
-        <Button 
-          variant="outline" 
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-        >
-          {isRefreshing ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <BarChart className="h-4 w-4 mr-2" />
-          )}
+        <PageTitle title="Admin Dashboard" subtitle="Manage supervisors and view site statistics" />
+        <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+          {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart className="h-4 w-4 mr-2" />}
           Refresh
         </Button>
       </div>
@@ -314,39 +262,30 @@ const AdminDashboard: React.FC = () => {
       <CustomCard>
         <h2 className="text-xl font-semibold mb-4">Supervisor Management</h2>
         
-        {isLoading ? (
-          <div className="text-center py-8">
+        {isLoading ? <div className="text-center py-8">
             <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin text-primary" />
             <p className="text-muted-foreground">Loading supervisors...</p>
-          </div>
-        ) : (
-          <>
+          </div> : <>
             <div className="mb-6">
               <label className="text-sm font-medium text-muted-foreground mb-2 block">
                 Select a supervisor to view their sites
               </label>
               <div className="max-w-md">
-                <Select
-                  value={selectedSupervisorId || ''}
-                  onValueChange={(value) => setSelectedSupervisorId(value || null)}
-                >
+                <Select value={selectedSupervisorId || ''} onValueChange={value => setSelectedSupervisorId(value || null)}>
                   <SelectTrigger className="w-full">
                     <User className="h-4 w-4 mr-2 text-muted-foreground" />
                     <SelectValue placeholder="Select Supervisor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {supervisorsList.map((supervisor) => (
-                      <SelectItem key={supervisor.id} value={supervisor.id}>
+                    {supervisorsList.map(supervisor => <SelectItem key={supervisor.id} value={supervisor.id}>
                         {supervisor.name}
-                      </SelectItem>
-                    ))}
+                      </SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {selectedSupervisorId && supervisorStats[selectedSupervisorId] ? (
-              <div className="p-4 border rounded-lg bg-background">
+            {selectedSupervisorId && supervisorStats[selectedSupervisorId] ? <div className="p-4 border rounded-lg bg-background">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
@@ -372,22 +311,16 @@ const AdminDashboard: React.FC = () => {
                     View Sites
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
+              </div> : <div className="text-center py-8">
                 <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                 <h3 className="text-lg font-medium mb-2">
                   {supervisorsList.length > 0 ? 'Select a Supervisor' : 'No Supervisors Found'}
                 </h3>
                 <p className="text-muted-foreground max-w-md mx-auto">
-                  {supervisorsList.length > 0
-                    ? 'Choose a supervisor from the dropdown to view their sites and performance statistics.'
-                    : 'No supervisors found. Please add a supervisor first.'}
+                  {supervisorsList.length > 0 ? 'Choose a supervisor from the dropdown to view their sites and performance statistics.' : 'No supervisors found. Please add a supervisor first.'}
                 </p>
-              </div>
-            )}
-          </>
-        )}
+              </div>}
+          </>}
       </CustomCard>
 
       {/* Quick Actions */}
@@ -397,11 +330,7 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          <Button
-            variant="outline"
-            className="h-auto py-6 flex flex-col items-center justify-center text-center"
-            onClick={() => navigate('/expenses')}
-          >
+          <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center text-center" onClick={() => navigate('/expenses')}>
             <Building2 className="h-8 w-8 mb-2" />
             <span className="text-base font-medium">View All Sites</span>
             <span className="text-xs text-muted-foreground mt-1">
@@ -409,23 +338,9 @@ const AdminDashboard: React.FC = () => {
             </span>
           </Button>
 
-          <Button
-            variant="outline"
-            className="h-auto py-6 flex flex-col items-center justify-center text-center"
-            onClick={() => navigate('/dashboard')}
-          >
-            <PieChart className="h-8 w-8 mb-2" />
-            <span className="text-base font-medium">Financial Overview</span>
-            <span className="text-xs text-muted-foreground mt-1">
-              View financial statistics
-            </span>
-          </Button>
+          
 
-          <Button
-            variant="outline"
-            className="h-auto py-6 flex flex-col items-center justify-center text-center"
-            onClick={handleAddSite}
-          >
+          <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center text-center" onClick={handleAddSite}>
             <Building2 className="h-8 w-8 mb-2" />
             <span className="text-base font-medium">Create New Site</span>
             <span className="text-xs text-muted-foreground mt-1">
@@ -436,19 +351,9 @@ const AdminDashboard: React.FC = () => {
       </CustomCard>
 
       {/* Forms */}
-      <RegisterForm
-        isOpen={isRegisterFormOpen}
-        onClose={() => setIsRegisterFormOpen(false)}
-      />
+      <RegisterForm isOpen={isRegisterFormOpen} onClose={() => setIsRegisterFormOpen(false)} />
 
-      <SiteForm
-        isOpen={isSiteFormOpen}
-        onClose={() => setIsSiteFormOpen(false)}
-        onSubmit={handleCreateSite}
-        supervisorId={selectedSupervisorId || undefined}
-      />
-    </div>
-  );
+      <SiteForm isOpen={isSiteFormOpen} onClose={() => setIsSiteFormOpen(false)} onSubmit={handleCreateSite} supervisorId={selectedSupervisorId || undefined} />
+    </div>;
 };
-
 export default AdminDashboard;

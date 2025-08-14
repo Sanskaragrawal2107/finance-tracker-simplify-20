@@ -10,6 +10,7 @@ import Expenses from "./pages/Expenses";
 import AdminDashboard from "./pages/AdminDashboard";
 import SupervisorSites from "./pages/SupervisorSites";
 import AdminSupervisorSites from "./pages/admin/SupervisorSites";
+import AllSites from "./pages/admin/AllSites";
 import NotFound from "./pages/NotFound";
 import Navbar from "./components/layout/Navbar";
 import { UserRole } from "./lib/types";
@@ -104,6 +105,14 @@ const AppContent: React.FC = () => {
             <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
               <AppLayout>
                 <AdminSupervisorSites />
+              </AppLayout>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/admin/all-sites" element={
+            <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+              <AppLayout>
+                <AllSites />
               </AppLayout>
             </ProtectedRoute>
           } />

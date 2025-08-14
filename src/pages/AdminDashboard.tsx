@@ -330,7 +330,7 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center text-center" onClick={() => navigate('/expenses')}>
+          <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center text-center" onClick={() => navigate('/admin/all-sites')}>
             <Building2 className="h-8 w-8 mb-2" />
             <span className="text-base font-medium">View All Sites</span>
             <span className="text-xs text-muted-foreground mt-1">

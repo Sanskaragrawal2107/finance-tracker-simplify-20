@@ -51,7 +51,9 @@ export async function ensureFreshSession(): Promise<boolean> {
 }
 
 // Observe and log session changes (helps diagnose token loss on tab switches)
+// CRITICAL: Using non-async callback to prevent Supabase deadlock
 supabase.auth.onAuthStateChange((_event, session) => {
+  // Synchronous logging only - no async calls here
   if (session) {
     console.log('Supabase auth state changed. New token ends with:', session.access_token?.slice(-8));
   } else {

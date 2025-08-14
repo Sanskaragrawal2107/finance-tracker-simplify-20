@@ -18,6 +18,8 @@ import { AuthProvider, useAuth } from "./hooks/use-auth";
 import AppLayout from "./components/layout/AppLayout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { supabase, refreshSchemaCache } from '@/integrations/supabase/client';
+import { pageVisibilityManager } from '@/utils/pageVisibility';
+import '@/utils/runtime-guard'; // Import for side effects in development
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,6 +130,27 @@ const App: React.FC = () => {
     };
     
     initializeApp();
+
+    // Set up centralized visibility handling to prevent admin page freezing
+    const handleVisibilityChange = (state: { isPageVisible: boolean; timeHidden: number }) => {
+      if (state.isPageVisible && state.timeHidden > 3000) {
+        console.log(`Tab became visible after ${state.timeHidden}ms - triggering recovery`);
+        
+        // Dispatch recovery event for components to handle
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('app:tab-recovered', {
+            detail: { timeHidden: state.timeHidden }
+          }));
+        }, 0);
+      }
+    };
+
+    // Subscribe to visibility changes
+    const unsubscribeVisibility = pageVisibilityManager.subscribe(handleVisibilityChange);
+
+    return () => {
+      unsubscribeVisibility();
+    };
   }, []);
 
   return (

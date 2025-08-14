@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/use-auth';
 import RegisterForm from '@/components/auth/RegisterForm';
 import { supabase } from '@/integrations/supabase/client';
 import SiteForm from '@/components/sites/SiteForm';
+import { usePageVisibility } from '@/utils/pageVisibility';
 
 interface SupervisorStats {
   totalSites: number;
@@ -37,23 +38,50 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user } = useAuth();
+  
+  // Stable refs to prevent re-binding event handlers
+  const buttonsEnabledRef = useRef(true);
+  const lastFetchTimeRef = useRef(0);
 
-  const fetchSupervisorsAndSites = async () => {
+  const fetchSupervisorsAndSites = useCallback(async () => {
+    const now = Date.now();
+    // Prevent rapid successive calls
+    if (now - lastFetchTimeRef.current < 1000) {
+      console.log('Skipping fetch - too soon since last fetch');
+      return;
+    }
+    lastFetchTimeRef.current = now;
+
     try {
       setIsRefreshing(true);
 
-      // Fetch supervisors
-      const { data: supervisorsData, error: supervisorsError } = await supabase
-        .from('users')
-        .select('id, name')
-        .eq('role', 'supervisor');
+      // Add timeout to prevent hanging
+      const fetchPromise = Promise.all([
+        supabase
+          .from('users')
+          .select('id, name')
+          .eq('role', 'supervisor'),
+        supabase
+          .from('sites')
+          .select('id, supervisor_id, is_completed')
+      ]);
 
-      if (supervisorsError) {
-        console.error('Error fetching supervisors:', supervisorsError);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Fetch timeout')), 8000)
+      );
+
+      const [supervisorsResult, sitesResult] = await Promise.race([
+        fetchPromise,
+        timeoutPromise
+      ]) as any;
+
+      if (supervisorsResult.error) {
+        console.error('Error fetching supervisors:', supervisorsResult.error);
         toast.error('Failed to load supervisors');
         return;
       }
 
+      const supervisorsData = supervisorsResult.data;
       if (!supervisorsData || supervisorsData.length === 0) {
         setSupervisorsList([]);
         setSupervisorStats({});
@@ -62,17 +90,14 @@ const AdminDashboard: React.FC = () => {
 
       setSupervisorsList(supervisorsData);
 
-      // Fetch sites
-      const { data: sitesData, error: sitesError } = await supabase
-        .from('sites')
-        .select('id, supervisor_id, is_completed');
-
-      if (sitesError) {
-        console.error('Error fetching sites:', sitesError);
+      if (sitesResult.error) {
+        console.error('Error fetching sites:', sitesResult.error);
         toast.error('Failed to load sites data');
         return;
       }
 
+      const sitesData = sitesResult.data;
+      
       // Calculate stats
       const stats: Record<string, SupervisorStats> = {};
       supervisorsData.forEach(supervisor => {
@@ -91,12 +116,16 @@ const AdminDashboard: React.FC = () => {
       setSupervisorStats(stats);
     } catch (error) {
       console.error('Error in fetchSupervisorsAndSites:', error);
-      toast.error('Failed to load dashboard data');
+      if (error.message === 'Fetch timeout') {
+        toast.error('Request timed out. Please try again.');
+      } else {
+        toast.error('Failed to load dashboard data');
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -104,9 +133,35 @@ const AdminDashboard: React.FC = () => {
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, fetchSupervisorsAndSites]);
 
-  const handleViewSites = (supervisorId: string) => {
+  // Handle tab recovery to fix unresponsive buttons
+  useEffect(() => {
+    const handleTabRecovery = () => {
+      console.log('Admin dashboard recovered from tab switch');
+      buttonsEnabledRef.current = true;
+      
+      // Force re-enable event handlers by refreshing data
+      if (user) {
+        setTimeout(() => {
+          fetchSupervisorsAndSites();
+        }, 100);
+      }
+    };
+
+    window.addEventListener('app:tab-recovered', handleTabRecovery);
+    
+    return () => {
+      window.removeEventListener('app:tab-recovered', handleTabRecovery);
+    };
+  }, [user, fetchSupervisorsAndSites]);
+
+  const handleViewSites = useCallback((supervisorId: string) => {
+    if (!buttonsEnabledRef.current) {
+      console.log('Button disabled - ignoring click');
+      return;
+    }
+    
     const selectedSupervisor = supervisorsList.find(sup => sup.id === supervisorId);
     navigate('/admin/supervisor-sites', {
       state: {
@@ -115,15 +170,20 @@ const AdminDashboard: React.FC = () => {
         showSites: true
       }
     });
-  };
+  }, [supervisorsList, navigate]);
 
-  const handleAddSite = () => {
+  const handleAddSite = useCallback(() => {
+    if (!buttonsEnabledRef.current) {
+      console.log('Button disabled - ignoring click');
+      return;
+    }
+    
     if (selectedSupervisorId) {
       setIsSiteFormOpen(true);
     } else {
       toast.error("Please select a supervisor first");
     }
-  };
+  }, [selectedSupervisorId]);
 
   const handleCreateSite = async (site: any) => {
     try {
@@ -154,9 +214,13 @@ const AdminDashboard: React.FC = () => {
     return supervisorsList.find(s => s.id === selectedSupervisorId);
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
+    if (!buttonsEnabledRef.current) {
+      console.log('Button disabled - ignoring click');
+      return;
+    }
     fetchSupervisorsAndSites();
-  };
+  }, [fetchSupervisorsAndSites]);
 
   if (!user) {
     return (

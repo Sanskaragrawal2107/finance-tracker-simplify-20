@@ -128,10 +128,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     setLoading(true);
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const profile = session?.user ? await fetchUserProfile(session.user.id) : null;
-      setUser(profile);
-      setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // CRITICAL: Never use async callbacks in onAuthStateChange to prevent deadlocks
+      setLoading(true);
+      
+      // Move async work to setTimeout to prevent Supabase deadlock
+      setTimeout(() => {
+        if (session?.user) {
+          fetchUserProfile(session.user.id)
+            .then(profile => {
+              setUser(profile);
+              setLoading(false);
+            })
+            .catch(error => {
+              console.error('Error fetching user profile after auth change:', error);
+              setUser(null);
+              setLoading(false);
+            });
+        } else {
+          setUser(null);
+          setLoading(false);
+        }
+      }, 0);
     });
 
     return () => {

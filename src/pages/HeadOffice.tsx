@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import PageTitle from '@/components/common/PageTitle';
-import CustomCard from '@/components/ui/CustomCard';
-import { Search, Filter, Plus, Download, ChevronLeft, ChevronRight, Trash2, Edit2, AlertCircle } from 'lucide-react';
+import { Search, Filter, Plus, Download, ChevronLeft, ChevronRight, Trash2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { HeadOfficeTransaction, FundsReceived, UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
@@ -190,36 +189,36 @@ const HeadOffice: React.FC = () => {
         </div>
       </div>
       
-      <CustomCard>
+      <div className="bg-white border border-border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="w-full">
             <thead>
-              <tr className="border-b text-left">
-                <th className="pb-3 pl-4 font-medium text-muted-foreground">Date</th>
-                <th className="pb-3 font-medium text-muted-foreground">Supervisor</th>
-                <th className="pb-3 font-medium text-muted-foreground">Amount</th>
-                <th className="pb-3 font-medium text-muted-foreground">Description</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Actions</th>
+              <tr className="border-b bg-muted/30">
+                <th className="py-3 pl-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
+                <th className="py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Supervisor</th>
+                <th className="py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
+                <th className="py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</th>
+                <th className="py-3 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {transactions.map((transaction) => (
-                <tr key={transaction.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                  <td className="py-4 pl-4 text-sm">{format(transaction.date, 'MMM dd, yyyy')}</td>
-                  <td className="py-4 text-sm">{transaction.supervisorName}</td>
-                  <td className="py-4 text-sm font-medium">₹{transaction.amount.toLocaleString()}</td>
-                  <td className="py-4 text-sm">{transaction.description}</td>
-                  <td className="py-4 pr-4 text-right">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button className="p-1 rounded-md hover:bg-muted transition-colors">
-                        <Download className="h-4 w-4 text-muted-foreground" />
+                <tr key={transaction.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="py-3.5 pl-4 text-sm text-muted-foreground">{format(transaction.date, 'dd MMM yyyy')}</td>
+                  <td className="py-3.5 text-sm font-medium">{transaction.supervisorName}</td>
+                  <td className="py-3.5 text-sm font-semibold text-emerald-700">₹{transaction.amount.toLocaleString('en-IN')}</td>
+                  <td className="py-3.5 text-sm text-muted-foreground">{transaction.description}</td>
+                  <td className="py-3.5 pr-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors">
+                        <Download className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                       {user?.role === UserRole.ADMIN && (
-                        <button 
-                          className="p-1 rounded-md hover:bg-red-100 transition-colors text-red-600"
+                        <button
+                          className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-red-100 transition-colors text-red-500"
                           onClick={() => confirmDelete(transaction.id)}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
@@ -229,20 +228,20 @@ const HeadOffice: React.FC = () => {
             </tbody>
           </table>
         </div>
-        
-        <div className="flex items-center justify-between mt-4 border-t pt-4">
-          <p className="text-sm text-muted-foreground">Showing 1-6 of 6 entries</p>
-          <div className="flex items-center space-x-2">
-            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
-              <ChevronLeft className="h-5 w-5 text-muted-foreground" />
+
+        <div className="flex items-center justify-between px-4 py-3 border-t">
+          <p className="text-xs text-muted-foreground">Showing 1–6 of 6 entries</p>
+          <div className="flex items-center gap-1">
+            <button className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors opacity-40" disabled>
+              <ChevronLeft className="h-4 w-4" />
             </button>
-            <button className="px-3 py-1 rounded-md bg-primary text-primary-foreground text-sm">1</button>
-            <button className="p-1 rounded-md hover:bg-muted transition-colors" disabled>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            <button className="h-7 w-7 flex items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-medium">1</button>
+            <button className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors opacity-40" disabled>
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
-      </CustomCard>
+      </div>
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>

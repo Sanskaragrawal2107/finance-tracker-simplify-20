@@ -28,142 +28,118 @@ const LoginForm: React.FC<LoginFormProps> = ({ className }) => {
   };
   
   return (
-    <div className={cn("w-full max-w-md px-8 py-12 bg-card rounded-lg shadow-subtle border animate-fade-in", className)}>
-      <div className="text-center mb-8">
-        <div className="h-12 w-12 rounded-md bg-primary flex items-center justify-center mx-auto mb-4">
-          <span className="text-primary-foreground font-semibold text-xl">F</span>
-        </div>
-        <h1 className="text-2xl font-semibold">FinTrack</h1>
-        <p className="text-muted-foreground mt-2">
-          {isRegistering ? 'Create a new account' : 'Sign in to your account'}
+    <div className={cn('w-full', className)}>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">
+          {isRegistering ? 'Create account' : 'Welcome back'}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {isRegistering
+            ? 'Fill in the details below to get started'
+            : 'Sign in to your FinTrack account'}
         </p>
       </div>
-      
+
       {error && (
-        <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-600 rounded-md text-sm">
-          {error}
+        <div className="mb-5 flex items-start gap-2.5 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="h-4 w-4 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span className="text-white text-[10px] font-bold">!</span>
+          </div>
+          <p className="text-sm text-red-700">{error}</p>
         </div>
       )}
-      
-      <form onSubmit={handleSubmit} className="space-y-6">
+
+      <form onSubmit={handleSubmit} className="space-y-4">
         {isRegistering && (
-          <div className="space-y-2">
-            <label htmlFor="name" className="text-sm font-medium">
+          <div className="space-y-1.5">
+            <label htmlFor="name" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Full Name
             </label>
             <div className="relative">
-              <User className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <User className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your full name"
-                className="w-full py-2 pl-10 pr-4 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                placeholder="John Smith"
+                className="w-full h-10 pl-9 pr-4 text-sm border border-border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                 required={isRegistering}
               />
             </div>
           </div>
         )}
-        
-        <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
+
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Email Address
           </label>
           <div className="relative">
-            <Mail className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+            <Mail className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              className="w-full py-2 pl-10 pr-4 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              placeholder="you@company.com"
+              className="w-full h-10 pl-9 pr-4 text-sm border border-border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
               required
             />
           </div>
         </div>
-        
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium">
+
+        <div className="space-y-1.5">
+          <label htmlFor="password" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Password
           </label>
           <div className="relative">
-            <Lock className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+            <Lock className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               id="password"
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              className="w-full py-2 pl-10 pr-10 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              placeholder="••••••••"
+              className="w-full h-10 pl-9 pr-10 text-sm border border-border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
               required
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
         </div>
-        
-        {!isRegistering && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember"
-                type="checkbox"
-                className="h-4 w-4 border border-gray-300 rounded"
-              />
-              <label htmlFor="remember" className="ml-2 text-sm text-muted-foreground">
-                Remember me
-              </label>
-            </div>
-            <a href="#" className="text-sm text-primary hover:text-primary/90 transition-colors">
-              Forgot password?
-            </a>
-          </div>
-        )}
-        
-        <button
-          type="submit"
-          disabled={loading}
-          className={cn(
-            "w-full py-2 rounded-md bg-primary text-primary-foreground font-medium transition-all",
-            loading ? "opacity-70" : "hover:bg-primary/90"
-          )}
-        >
-          {loading 
-            ? (isRegistering ? 'Creating account...' : 'Signing in...') 
-            : (isRegistering ? 'Create Account' : 'Sign in')}
-        </button>
-        
-        <div className="text-center text-sm text-muted-foreground mt-6">
+
+        <div className="pt-1">
+          <button
+            type="submit"
+            disabled={loading}
+            className={cn(
+              'w-full h-10 rounded-md bg-primary text-white text-sm font-semibold transition-all shadow-sm',
+              loading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-primary/90 active:scale-[0.98]'
+            )}
+          >
+            {loading
+              ? (isRegistering ? 'Creating account…' : 'Signing in…')
+              : (isRegistering ? 'Create Account' : 'Sign In')}
+          </button>
+        </div>
+
+        <div className="text-center text-sm text-muted-foreground pt-2">
           {isRegistering ? (
             <p>
               Already have an account?{' '}
-              <button
-                type="button"
-                onClick={() => setIsRegistering(false)}
-                className="text-primary hover:text-primary/90 transition-colors"
-              >
+              <button type="button" onClick={() => setIsRegistering(false)} className="text-primary font-semibold hover:underline">
                 Sign in
               </button>
             </p>
           ) : (
             <p>
-              Don't have an account?{' '}
-              <button
-                type="button"
-                onClick={() => setIsRegistering(true)}
-                className="text-primary hover:text-primary/90 transition-colors"
-              >
+              Need an account?{' '}
+              <button type="button" onClick={() => setIsRegistering(true)} className="text-primary font-semibold hover:underline">
                 Create one
               </button>
             </p>

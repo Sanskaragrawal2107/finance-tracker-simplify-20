@@ -4,7 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { PaymentStatus, Invoice, MaterialItem } from '@/lib/types';
-import { Calendar as CalendarIcon, Upload, Loader2, Camera, Plus, Trash2, FileText, User, AlertTriangle } from 'lucide-react';
+import { Calendar as CalendarIcon, Upload, Loader2, Camera, Plus, Trash2, FileText, User, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
+
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+const GEMINI_MODEL  = 'gemini-2.5-flash-lite';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -66,6 +71,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [isFetchingBankDetails, setIsFetchingBankDetails] = useLoadingState(false, 30000); // 30 second timeout
 
   const [approverType, setApproverType] = useState<"ho" | "supervisor">("ho");
+  const [isScanning, setIsScanning] = useState(false);
+  const [aiScanApplied, setAiScanApplied] = useState(false);
 
   const { user } = useAuth();
 
@@ -207,7 +214,134 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setBillFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setBillFile(file);
+      setAiScanApplied(false);
+      // Scan both images and PDFs with AI
+      if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+        scanBillWithAI(file);
+      }
+    }
+  };
+
+  const scanBillWithAI = async (file: File) => {
+    setIsScanning(true);
+    setAiScanApplied(false);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const mimeType = file.type || 'image/jpeg';
+      const docType = file.type === 'application/pdf' ? 'PDF document' : 'image';
+      const prompt = `You are an invoice data extractor for a construction company. Analyse this bill/invoice ${docType} and extract data in JSON.
+
+Return ONLY valid JSON with these exact keys (use null if not found):
+{
+  "vendorName": "supplier/party name string",
+  "invoiceNumber": "invoice/bill number string",
+  "invoiceDate": "YYYY-MM-DD or null",
+  "items": [
+    {
+      "material": "material or service description",
+      "quantity": number or null,
+      "rate": number per unit or null,
+      "gstPercent": one of 0,5,12,18,28 or null
+    }
+  ],
+  "totalAmount": total amount number or null,
+  "gstPercent": overall GST rate if uniform (0,5,12,18,28) or null
+}
+
+Be precise — extract pure numbers, no currency symbols. If the document has multiple pages, use the first invoice/bill you find.`;
+
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({
+        model: GEMINI_MODEL,
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1000 },
+      });
+      const result = await model.generateContent([
+        prompt,
+        { inlineData: { mimeType, data: base64 } },
+      ]);
+      const rawText: string = result.response.text();
+
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON in response');
+      const extracted = JSON.parse(jsonMatch[0]);
+
+      let fieldsApplied = 0;
+
+      if (extracted.vendorName) {
+        setPartyName(extracted.vendorName);
+        setPartyNameFixed(false);
+        fieldsApplied++;
+      }
+      if (extracted.invoiceNumber) {
+        setPartyId(extracted.invoiceNumber);
+        fieldsApplied++;
+      }
+      if (extracted.invoiceDate) {
+        const d = new Date(extracted.invoiceDate);
+        if (!isNaN(d.getTime())) { setDate(d); fieldsApplied++; }
+      }
+
+      const validGst = [0, 5, 12, 18, 28];
+      if (extracted.items && extracted.items.length > 0) {
+        const newItems: MaterialItem[] = extracted.items
+          .filter((item: any) => item.material)
+          .map((item: any) => {
+            const qty = Number(item.quantity) || 1;
+            const rate = Number(item.rate) || 0;
+            const gst = validGst.includes(Number(item.gstPercent))
+              ? Number(item.gstPercent)
+              : validGst.includes(Number(extracted.gstPercent))
+              ? Number(extracted.gstPercent)
+              : 18;
+            return {
+              id: `${Date.now()}-${Math.random()}`,
+              material: item.material,
+              quantity: qty,
+              rate,
+              gstPercentage: gst,
+              amount: qty * rate,
+            };
+          });
+        if (newItems.length > 0) {
+          setMaterialItems(prev => [...prev, ...newItems]);
+          fieldsApplied += newItems.length;
+        }
+      } else if (extracted.totalAmount) {
+        const gst = validGst.includes(Number(extracted.gstPercent)) ? Number(extracted.gstPercent) : 18;
+        const grossAmt = Math.round(Number(extracted.totalAmount) / (1 + gst / 100));
+        setMaterialItems(prev => [...prev, {
+          id: Date.now().toString(),
+          material: extracted.vendorName ? `Item from ${extracted.vendorName}` : 'Extracted item',
+          quantity: 1,
+          rate: grossAmt,
+          gstPercentage: gst,
+          amount: grossAmt,
+        }]);
+        fieldsApplied++;
+      }
+
+      setAiScanApplied(true);
+      toast({
+        title: `\u2713 AI extracted ${fieldsApplied} field${fieldsApplied !== 1 ? 's' : ''}`,
+        description: 'Review the auto-filled data and adjust if needed.',
+      });
+    } catch (err) {
+      console.error('Bill scan error:', err);
+      toast({
+        title: 'AI scan failed',
+        description: 'Could not extract details automatically. Please fill the form manually.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsScanning(false);
     }
   };
 
@@ -411,6 +545,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                 setGrandNetAmount(0);
                 setBillFile(null);
                 setBillUrl('');
+                setAiScanApplied(false);
                 setPaymentStatus(PaymentStatus.PENDING);
                 setAccountNumber('');
                 setBankName('');
@@ -467,6 +602,73 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6">
+
+          {/* ── Bill Upload (top – triggers AI scan) ──────────── */}
+          <div className="border-2 border-dashed border-border rounded-lg p-4 bg-muted/20">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">
+                  Upload Bill Photo
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                AI will auto-fill the form fields
+              </span>
+            </div>
+
+            <input
+              type="file"
+              id="bill-top"
+              className="hidden"
+              accept=".pdf,.jpg,.jpeg,.png,image/*"
+              onChange={handleFileChange}
+              capture="environment"
+            />
+            <label
+              htmlFor="bill-top"
+              className="cursor-pointer flex items-center gap-3 p-3 rounded-md border border-border bg-white hover:bg-muted/40 transition-colors"
+            >
+              {isScanning ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-primary flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-primary">Scanning with AI…</p>
+                    <p className="text-xs text-muted-foreground">Extracting vendor, items and amounts</p>
+                  </div>
+                </>
+              ) : aiScanApplied ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-emerald-700">
+                      {billFile?.name}
+                    </p>
+                    <p className="text-xs text-emerald-600">AI has filled the form — review and adjust if needed</p>
+                  </div>
+                </>
+              ) : billFile ? (
+                <>
+                  <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  <p className="text-sm">{billFile.name}</p>
+                </>
+              ) : (
+                <>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                    <Camera className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Click to upload or take a photo</p>
+                    <p className="text-xs text-muted-foreground">PNG, JPG or PDF — AI will read the bill automatically</p>
+                  </div>
+                </>
+              )}
+            </label>
+          </div>
+
+          <Separator />
+
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="date">Invoice Date</Label>
@@ -482,7 +684,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
                     mode="single" 
                     selected={date} 
                     onSelect={handleCalendarSelect} 
-                    initialFocus 
+                    defaultMonth={date ?? new Date()}
                     className={cn("p-3 pointer-events-auto")} 
                   />
                 </PopoverContent>
@@ -678,35 +880,17 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
 
           <Separator />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="bill">Upload Bill</Label>
-              <div className="border border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors">
-                <input type="file" id="bill" className="hidden" accept=".pdf,.jpg,.jpeg,.png,image/*" onChange={handleFileChange} capture="environment" />
-                <label htmlFor="bill" className="cursor-pointer flex flex-col items-center">
-                  <div className="flex gap-2">
-                    <Upload className="h-6 w-6 text-muted-foreground" />
-                    <Camera className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <span className="text-sm text-muted-foreground mt-2">
-                    {billFile ? billFile.name : "Click to upload or take a photo"}
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Payment Status</Label>
-              <Select value={paymentStatus} onValueChange={value => setPaymentStatus(value as PaymentStatus)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={PaymentStatus.PENDING}>Pending</SelectItem>
-                  <SelectItem value={PaymentStatus.PAID}>Paid</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="status">Payment Status</Label>
+            <Select value={paymentStatus} onValueChange={value => setPaymentStatus(value as PaymentStatus)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={PaymentStatus.PENDING}>Pending</SelectItem>
+                <SelectItem value={PaymentStatus.PAID}>Paid</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t">

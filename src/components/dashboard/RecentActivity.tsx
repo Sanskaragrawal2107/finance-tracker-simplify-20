@@ -2,8 +2,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { Activity, ActivityType } from '@/lib/types';
-import CustomCard from '../ui/CustomCard';
-import { ClockIcon, IndianRupee, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { ClockIcon, ArrowUpRight, ArrowDownRight, Banknote, FileText, Wallet, Receipt } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface RecentActivityProps {
@@ -11,69 +10,69 @@ interface RecentActivityProps {
   className?: string;
 }
 
-const RecentActivity: React.FC<RecentActivityProps> = ({ 
-  activities,
-  className 
-}) => {
-  const getActivityIcon = (type: ActivityType) => {
-    switch (type) {
-      case ActivityType.EXPENSE:
-        return <ArrowUpRight className="h-4 w-4 text-red-500" />;
-      case ActivityType.ADVANCE:
-        return <ArrowUpRight className="h-4 w-4 text-orange-500" />;
-      case ActivityType.INVOICE:
-        return <ArrowUpRight className="h-4 w-4 text-purple-500" />;
-      case ActivityType.FUNDS:
-        return <ArrowDownRight className="h-4 w-4 text-green-500" />;
-      case ActivityType.PAYMENT:
-        return <ArrowUpRight className="h-4 w-4 text-blue-500" />;
-      default:
-        return <ClockIcon className="h-4 w-4 text-gray-500" />;
-    }
-  };
+const typeConfig: Record<ActivityType, { icon: React.ElementType; color: string; bg: string; label: string; dot: string }> = {
+  [ActivityType.EXPENSE]:  { icon: ArrowUpRight, color: 'text-red-600',     bg: 'bg-red-50',     label: 'Expense',  dot: 'bg-red-500' },
+  [ActivityType.ADVANCE]:  { icon: Wallet,       color: 'text-amber-600',   bg: 'bg-amber-50',   label: 'Advance',  dot: 'bg-amber-500' },
+  [ActivityType.INVOICE]:  { icon: FileText,     color: 'text-blue-600',    bg: 'bg-blue-50',    label: 'Invoice',  dot: 'bg-blue-500' },
+  [ActivityType.FUNDS]:    { icon: ArrowDownRight,color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Funds',    dot: 'bg-emerald-500' },
+  [ActivityType.PAYMENT]:  { icon: Banknote,     color: 'text-cyan-600',    bg: 'bg-cyan-50',    label: 'Payment',  dot: 'bg-cyan-500' },
+};
 
+const RecentActivity: React.FC<RecentActivityProps> = ({ activities, className }) => {
   return (
-    <CustomCard className={cn("", className)}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Recent Activity</h3>
-        <ClockIcon className="h-5 w-5 text-muted-foreground" />
+    <div className={cn('bg-white rounded-lg border border-border/60 shadow-sm flex flex-col', className)}>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Activity</p>
+          <p className="text-sm font-semibold text-foreground mt-0.5">{activities.length} transactions</p>
+        </div>
+        <div className="p-2 rounded-md bg-muted">
+          <ClockIcon className="h-4 w-4 text-muted-foreground" />
+        </div>
       </div>
-      
-      <div className="space-y-4">
+
+      <div className="flex-1 overflow-y-auto divide-y divide-border/40">
         {activities.length === 0 ? (
-          <p className="text-center text-muted-foreground py-4">No recent activities</p>
+          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+            <ClockIcon className="h-8 w-8 mb-2 opacity-30" />
+            <p className="text-sm">No recent activities</p>
+          </div>
         ) : (
-          activities.map((activity) => (
-            <div 
-              key={activity.id}
-              className="flex items-center justify-between py-2 border-b last:border-b-0"
-            >
-              <div className="flex items-center">
-                <div className="p-2 bg-muted rounded-full mr-3">
-                  {getActivityIcon(activity.type)}
+          activities.map((activity) => {
+            const cfg = typeConfig[activity.type] ?? typeConfig[ActivityType.EXPENSE];
+            const Icon = cfg.icon;
+            const isInflow = activity.type === ActivityType.FUNDS;
+            return (
+              <div key={activity.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
+                <div className={cn('p-2 rounded-md flex-shrink-0', cfg.bg)}>
+                  <Icon className={cn('h-3.5 w-3.5', cfg.color)} />
                 </div>
-                <div>
-                  <p className="text-sm font-medium">{activity.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(activity.date, 'MMM dd, yyyy')} • {activity.user}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{activity.description}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {format(activity.date, 'dd MMM yyyy')} · {activity.user}
                   </p>
                 </div>
+                <div className="text-right flex-shrink-0">
+                  <p className={cn('text-sm font-semibold tabular-nums', isInflow ? 'text-emerald-600' : 'text-foreground')}>
+                    {isInflow ? '+' : '-'}₹{activity.amount.toLocaleString('en-IN')}
+                  </p>
+                  <span className={cn('text-xs font-medium', cfg.color)}>{cfg.label}</span>
+                </div>
               </div>
-              <div className="flex items-center">
-                <IndianRupee className="h-3 w-3 text-muted-foreground mr-1" />
-                <span className="font-medium">{activity.amount.toLocaleString()}</span>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
-      
+
       {activities.length > 0 && (
-        <button className="w-full mt-4 text-center text-sm text-primary font-medium py-2 hover:bg-primary/5 rounded-md transition-colors">
-          View All Activity
-        </button>
+        <div className="px-5 py-3 border-t border-border/50">
+          <button className="w-full text-center text-xs font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wide">
+            View All Transactions →
+          </button>
+        </div>
       )}
-    </CustomCard>
+    </div>
   );
 };
 

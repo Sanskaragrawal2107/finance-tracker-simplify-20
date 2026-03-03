@@ -1,12 +1,26 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Home, Building, LogOut, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Building2, LogOut, RefreshCw, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
+
+const roleConfig: Record<UserRole, { label: string; color: string }> = {
+  [UserRole.ADMIN]:      { label: 'Admin',      color: 'bg-blue-100 text-blue-700' },
+  [UserRole.SUPERVISOR]: { label: 'Supervisor',  color: 'bg-emerald-100 text-emerald-700' },
+  [UserRole.VIEWER]:     { label: 'Viewer',      color: 'bg-gray-100 text-gray-700' },
+};
+
+const routeMap: Record<string, string> = {
+  '/admin':                  'Admin Dashboard',
+  '/dashboard':              'Dashboard',
+  '/expenses':               'Sites & Expenses',
+  '/admin/all-sites':        'All Sites',
+  '/admin/supervisor-sites': 'Supervisor Sites',
+};
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -15,135 +29,127 @@ interface NavbarProps {
   className?: string;
 }
 
-const Navbar: React.FC<NavbarProps> = ({
-  onMenuClick,
-  pageTitle,
-  userRole,
-  className
-}) => {
+const Navbar: React.FC<NavbarProps> = ({ pageTitle, className }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
   const { logout, user } = useAuth();
 
-  // Handle logout with simple error handling
   const handleLogout = async () => {
     try {
-      console.log('Logout initiated');
       await logout();
-      console.log('Logout completed successfully');
-    } catch (error) {
-      console.error('Error logging out:', error);
+    } catch {
       toast.error('Logout failed. Please try again.');
     }
   };
 
-  // Function to handle home button click based on user role
   const handleHomeClick = () => {
-    try {
-      console.log('Home navigation initiated');
-      if (user?.role === UserRole.ADMIN) {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
-    } catch (error) {
-      console.error('Error navigating to home:', error);
-      toast.error('Navigation failed. Please try again.');
-    }
+    navigate(user?.role === UserRole.ADMIN ? '/admin' : '/dashboard');
   };
 
-  // Handle navigation to expenses
-  const handleExpensesClick = () => {
-    try {
-      console.log('Expenses navigation initiated');
-      navigate('/expenses');
-    } catch (error) {
-      console.error('Error navigating to expenses:', error);
-      toast.error('Navigation failed. Please try again.');
-    }
-  };
+  const currentTitle = pageTitle || routeMap[location.pathname] || '';
 
-  // Manual refresh - simple page reload
-  const handleRefresh = () => {
-    console.log('Manual refresh requested from navbar');
-    window.location.reload();
-  };
+  const initials = user?.name
+    ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'U';
+
+  const role = (user?.role ?? UserRole.VIEWER) as UserRole;
+  const roleStyle = roleConfig[role];
 
   return (
-    <nav className={cn(
-      "fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b",
-      className
-    )}>
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* Left side - Logo/Title */}
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Building className="h-6 w-6 text-primary" />
-              <span className="font-semibold text-lg">Finance Tracker</span>
-            </div>
-            {pageTitle && (
-              <>
-                <div className="hidden sm:block text-muted-foreground">•</div>
-                <span className="hidden sm:block text-sm text-muted-foreground">
-                  {pageTitle}
+    <nav className={cn('fixed top-0 left-0 right-0 z-50 bg-white border-b border-border/60 shadow-sm', className)}>
+      <div className="px-4 md:px-6">
+        <div className="flex items-center justify-between h-14">
+
+          {/* Left — Logo + Breadcrumb */}
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={handleHomeClick} className="flex items-center gap-2 flex-shrink-0 group">
+              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+                <Building2 className="h-4 w-4 text-white" />
+              </div>
+              {!isMobile && (
+                <span className="font-bold text-sm text-foreground tracking-tight group-hover:text-primary transition-colors">
+                  FinTrack
                 </span>
-              </>
+              )}
+            </button>
+
+            {currentTitle && !isMobile && (
+              <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+                <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 opacity-40" />
+                <span className="text-sm font-medium text-foreground truncate">{currentTitle}</span>
+              </div>
+            )}
+            {/* Mobile: show page title in a compact pill */}
+            {currentTitle && isMobile && (
+              <span className="text-xs font-semibold text-muted-foreground truncate max-w-[120px]">{currentTitle}</span>
             )}
           </div>
 
-          {/* Right side - Navigation */}
-          <div className="flex items-center space-x-2">
-            {user && (
-              <>
-                {/* Home Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleHomeClick}
-                  className="hidden sm:flex"
-                >
-                  <Home className="h-4 w-4 mr-2" />
-                  Home
-                </Button>
-
-                {/* Expenses Button - Show for supervisors and admins */}
-                {(user?.role === UserRole.SUPERVISOR || user?.role === UserRole.ADMIN) && (
+          {/* Right — Actions + User */}
+          {user && (
+            <div className="flex items-center gap-1">
+              {!isMobile && (
+                <>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleExpensesClick}
-                    className="hidden sm:flex"
+                    onClick={handleHomeClick}
+                    className="text-muted-foreground hover:text-foreground h-8 px-3 text-xs font-medium"
                   >
-                    <Building className="h-4 w-4 mr-2" />
-                    Sites
+                    <LayoutDashboard className="h-3.5 w-3.5 mr-1.5" />
+                    Home
                   </Button>
-                )}
 
-                {/* Refresh Button */}
+                  {(user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate('/expenses')}
+                      className="text-muted-foreground hover:text-foreground h-8 px-3 text-xs font-medium"
+                    >
+                      <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                      Sites
+                    </Button>
+                  )}
+                </>
+              )}
+
+              <div className="w-px h-5 bg-border mx-1" />
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => window.location.reload()}
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                title="Refresh"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+
+              <div className="flex items-center gap-2 ml-1 pl-2 border-l border-border">
+                <div className="text-right hidden sm:block">
+                  <p className="text-xs font-semibold text-foreground leading-none">{user.name}</p>
+                  <span className={cn('inline-block mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded', roleStyle.color)}>
+                    {roleStyle.label}
+                  </span>
+                </div>
+                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                  <span className="text-[11px] font-bold text-white">{initials}</span>
+                </div>
+                {/* Logout button — hidden on mobile since bottom nav handles it */}
                 <Button
                   variant="ghost"
-                  size="sm"
-                  onClick={handleRefresh}
-                  title="Refresh page"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  {!isMobile && <span className="ml-2">Refresh</span>}
-                </Button>
-
-                {/* Logout Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
+                  size="icon"
                   onClick={handleLogout}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 hidden md:flex"
+                  title="Logout"
                 >
-                  <LogOut className="h-4 w-4" />
-                  {!isMobile && <span className="ml-2">Logout</span>}
+                  <LogOut className="h-3.5 w-3.5" />
                 </Button>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </nav>

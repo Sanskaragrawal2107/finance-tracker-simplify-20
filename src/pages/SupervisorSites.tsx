@@ -26,10 +26,39 @@ const SupervisorSites: React.FC = () => {
   const [loading, setLoading] = useLoadingState(true, 45000); // 45 second timeout for operations
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewSiteForm, setShowNewSiteForm] = useState(false);
-  const [selectedSite, setSelectedSite] = useState<Site | null>(null);
-  const [showSiteDetail, setShowSiteDetail] = useState(false);
-  const [activeTab, setActiveTab] = useState('active');
   const [connectionChecking, setConnectionChecking] = useState(false);
+
+  // Persist selected-site state so a page reload (e.g. returning from another app on mobile)
+  // brings the user back to the site they had open instead of the sites list.
+  const [selectedSite, setSelectedSite] = useState<Site | null>(() => {
+    try {
+      const raw = sessionStorage.getItem('supervisor-selected-site');
+      return raw ? JSON.parse(raw, (k, v) =>
+        ['startDate','completionDate','createdAt'].includes(k) && v ? new Date(v) : v
+      ) : null;
+    } catch { return null; }
+  });
+  const [showSiteDetail, setShowSiteDetail] = useState<boolean>(
+    () => sessionStorage.getItem('supervisor-show-site-detail') === 'true'
+  );
+  const [activeTab, setActiveTab] = useState(
+    () => sessionStorage.getItem('supervisor-active-tab') || 'active'
+  );
+
+  const openSiteDetail = (site: Site) => {
+    setSelectedSite(site);
+    setShowSiteDetail(true);
+    sessionStorage.setItem('supervisor-selected-site', JSON.stringify(site));
+    sessionStorage.setItem('supervisor-show-site-detail', 'true');
+  };
+
+  const closeSiteDetail = () => {
+    setShowSiteDetail(false);
+    setSelectedSite(null);
+    sessionStorage.removeItem('supervisor-selected-site');
+    sessionStorage.removeItem('supervisor-show-site-detail');
+    fetchSites();
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -296,14 +325,11 @@ const SupervisorSites: React.FC = () => {
   };
 
   const handleViewSite = (site: Site) => {
-    setSelectedSite(site);
-    setShowSiteDetail(true);
+    openSiteDetail(site);
   };
 
   const handleCloseSiteDetail = () => {
-    setShowSiteDetail(false);
-    setSelectedSite(null);
-    fetchSites(); // Refresh the list in case there were updates
+    closeSiteDetail();
   };
 
   const renderSiteCard = (site: Site) => {
@@ -523,7 +549,7 @@ const SupervisorSites: React.FC = () => {
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); sessionStorage.setItem('supervisor-active-tab', v); }}>
             <TabsList className="mb-4">
               <TabsTrigger value="active">Active Sites</TabsTrigger>
               <TabsTrigger value="completed">Completed Sites</TabsTrigger>

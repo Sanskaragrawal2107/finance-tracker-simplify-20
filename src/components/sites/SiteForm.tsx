@@ -251,7 +251,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                     </FormControl>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={field.value} onSelect={(date) => { field.onChange(date); setStartDateOpen(false); }} initialFocus />
+                    <Calendar mode="single" selected={field.value} onSelect={(date) => { field.onChange(date); setStartDateOpen(false); }} defaultMonth={field.value ?? new Date()} />
                   </PopoverContent>
                 </Popover>
                 <FormMessage />
@@ -274,7 +274,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                       mode="single"
                       selected={field.value || undefined}
                       onSelect={(date) => { field.onChange(date); setCompletionDateOpen(false); }}
-                      initialFocus
+                      defaultMonth={field.value ?? form.getValues('startDate') ?? new Date()}
                       fromDate={form.getValues("startDate")}
                     />
                   </PopoverContent>

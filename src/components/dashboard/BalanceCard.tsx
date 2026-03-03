@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { IndianRupee, RefreshCw } from 'lucide-react';
-import CustomCard from '../ui/CustomCard';
 import { BalanceSummary } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '../ui/button';
@@ -19,6 +18,8 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
 }) => {
   const [localBalanceData, setLocalBalanceData] = useState(balanceData);
   const [isLoading, setIsLoading] = useState(false);
+  // Track whether we've loaded live data from DB; if so, ignore prop updates
+  const dbLoadedRef = React.useRef(false);
   
   const refreshBalanceData = async () => {
     if (!siteId) return;
@@ -65,6 +66,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
           pendingInvoices: localBalanceData.pendingInvoices || 0,
           totalBalance
         });
+        dbLoadedRef.current = true;
       }
     } catch (error) {
       console.error("Error refreshing balance data:", error);
@@ -80,6 +82,9 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   }, [siteId]);
   
   useEffect(() => {
+    // If we already loaded live data from DB, don't let stale prop data overwrite it
+    if (siteId && dbLoadedRef.current) return;
+
     // Update local balance data when prop changes
     // But ensure we calculate the correct total balance
     const fundsReceived = balanceData.fundsReceived || 0;
@@ -113,76 +118,69 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
   };
 
   return (
-    <CustomCard 
-      className={cn("bg-primary text-primary-foreground", className)}
-      hoverEffect
+    <div
+      className={cn(
+        'bg-white rounded-lg border border-border/60 shadow-sm overflow-hidden flex flex-col',
+        className
+      )}
     >
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-semibold uppercase">Site Financial Summary</h3>
+      {/* Header */}
+      <div className="bg-primary px-5 py-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary-foreground/70">Site Financial Summary</p>
+          <p
+            className={cn(
+              'text-2xl font-bold mt-1 tabular-nums',
+              safeBalanceData.totalBalance >= 0 ? 'text-white' : 'text-red-300'
+            )}
+          >
+            ₹{safeBalanceData.totalBalance.toLocaleString('en-IN')}
+          </p>
+          <p className="text-xs text-primary-foreground/60 mt-0.5">Current Balance</p>
+        </div>
         <div className="flex items-center gap-2">
-          <div className="p-2 bg-white/20 rounded-full">
-            <IndianRupee className="h-5 w-5" />
+          <div className="p-2.5 bg-white/10 rounded-lg">
+            <IndianRupee className="h-5 w-5 text-primary-foreground" />
           </div>
           {siteId && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-white hover:bg-white/20 p-2 h-auto w-auto rounded-full" 
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground hover:bg-white/20 h-8 w-8 rounded-lg"
               onClick={refreshBalanceData}
               disabled={isLoading}
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           )}
         </div>
       </div>
-      
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Funds Received from HO:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.fundsReceived.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Funds Received from Supervisor:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.fundsReceivedFromSupervisor.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Total Expenses paid by supervisor:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.totalExpenditure.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Total Advances paid by supervisor:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.totalAdvances.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Debit to Worker:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.debitsToWorker.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Invoices paid by supervisor:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.invoicesPaid.toLocaleString()}</p>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          <p className="text-sm opacity-80 uppercase">Advance Paid to Supervisor:</p>
-          <p className="text-lg font-semibold">₹{safeBalanceData.advancePaidToSupervisor.toLocaleString()}</p>
-        </div>
-        
-        <div className="pt-3 border-t border-white/20">
-          <div className="flex justify-between items-center">
-            <p className="text-sm opacity-80 uppercase">Current Balance:</p>
-            <p className={`text-lg font-semibold ${safeBalanceData.totalBalance >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-              ₹{safeBalanceData.totalBalance.toLocaleString()}
-            </p>
-          </div>
+
+      {/* Body — two-column grid */}
+      <div className="flex-1 p-5">
+        <div className="grid grid-cols-1 gap-2">
+          {[
+            { label: 'Funds from Head Office',       value: safeBalanceData.fundsReceived,            type: 'credit' },
+            { label: 'Funds from Supervisor',         value: safeBalanceData.fundsReceivedFromSupervisor, type: 'credit' },
+            { label: 'Expenses paid',                value: safeBalanceData.totalExpenditure,          type: 'debit' },
+            { label: 'Advances paid',                value: safeBalanceData.totalAdvances,             type: 'debit' },
+            { label: 'Invoices paid',                value: safeBalanceData.invoicesPaid,              type: 'debit' },
+            { label: 'Advance to Supervisor',        value: safeBalanceData.advancePaidToSupervisor,   type: 'debit' },
+            { label: 'Debit to Worker',              value: safeBalanceData.debitsToWorker,            type: 'debit' },
+          ].map(({ label, value, type }) => (
+            <div key={label} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+              <div className="flex items-center gap-2">
+                <div className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', type === 'credit' ? 'bg-emerald-500' : 'bg-red-400')} />
+                <span className="text-xs text-muted-foreground">{label}</span>
+              </div>
+              <span className={cn('text-xs font-semibold tabular-nums', type === 'credit' ? 'text-emerald-700' : 'text-foreground')}>
+                ₹{value.toLocaleString('en-IN')}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
-    </CustomCard>
+    </div>
   );
 };
 

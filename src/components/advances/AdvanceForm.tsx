@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Plus, User, Briefcase, Loader2 } from "lucide-react";
+import { CalendarIcon, Plus, User, Briefcase, Loader2, Mic } from "lucide-react";
+import VoiceMicButton from '@/components/common/VoiceMicButton';
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -221,7 +222,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="sm:max-w-md w-[95vw] max-w-[95vw] sm:w-auto max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>New Advance</DialogTitle>
           <DialogDescription>
@@ -265,7 +266,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                         mode="single"
                         selected={field.value}
                         onSelect={handleCalendarSelect}
-                        initialFocus
+                        defaultMonth={field.value ?? new Date()}
                         className="pointer-events-auto"
                       />
                     </PopoverContent>
@@ -322,10 +323,17 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                   <FormLabel>Recipient Name</FormLabel>
                   <FormControl>
                     {form.watch("recipientType") === RecipientType.WORKER ? (
-                      <Input 
-                        placeholder="Enter worker name" 
-                        {...field} 
-                      />
+                      <div className="relative">
+                        <Input
+                          placeholder="Enter worker name"
+                          {...field}
+                          className="pr-10"
+                        />
+                        <VoiceMicButton
+                          onTranscript={(t) => field.onChange(t)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2"
+                        />
+                      </div>
                     ) : form.watch("recipientType") === RecipientType.SUBCONTRACTOR ? (
                       <SearchableDropdown
                         options={recipientOptions}
@@ -384,11 +392,19 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                   <FormItem>
                     <FormLabel>Remarks</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Enter remarks for this advance..." 
-                        className="resize-none" 
-                        {...field} 
-                      />
+                      <div className="relative">
+                        <Textarea
+                          placeholder="Enter remarks for this advance..."
+                          className="resize-none pr-10"
+                          {...field}
+                        />
+                        <VoiceMicButton
+                          onTranscript={(t) => form.setValue('remarks', field.value ? `${field.value} ${t}` : t)}
+                          className="absolute right-2 top-2"
+                          append
+                          currentValue={field.value}
+                        />
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>

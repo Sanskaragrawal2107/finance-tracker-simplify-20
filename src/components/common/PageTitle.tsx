@@ -8,18 +8,19 @@ interface PageTitleProps {
   className?: string;
 }
 
-const PageTitle: React.FC<PageTitleProps> = ({ 
-  title, 
-  subtitle, 
-  className 
+const PageTitle: React.FC<PageTitleProps> = ({
+  title,
+  subtitle,
+  className,
 }) => {
   return (
-    <div className={cn("mb-8 animate-fade-up", className)}>
-      <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+    <div className={cn('animate-fade-up', className)}>
+      <div className="flex items-center gap-3">
+        <div className="h-6 w-1 rounded-full bg-primary" />
+        <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
+      </div>
       {subtitle && (
-        <p className="mt-2 text-muted-foreground">
-          {subtitle}
-        </p>
+        <p className="mt-1 ml-4 text-sm text-muted-foreground">{subtitle}</p>
       )}
     </div>
   );

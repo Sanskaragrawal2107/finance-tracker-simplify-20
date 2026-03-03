@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
 import { CalendarIcon, Plus, Loader2 } from "lucide-react";
+import VoiceMicButton from '@/components/common/VoiceMicButton';
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -177,7 +178,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md w-[95vw] max-w-[95vw] sm:w-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>RECORD FUNDS FROM H.O.</DialogTitle>
           <DialogDescription>
@@ -217,7 +218,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
-                        initialFocus
+                        defaultMonth={field.value ?? new Date()}
                         className="pointer-events-auto"
                       />
                     </PopoverContent>
@@ -256,10 +257,17 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
                 <FormItem>
                   <FormLabel>REFERENCE NUMBER (OPTIONAL)</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Enter reference number"
-                      {...field}
-                    />
+                    <div className="relative">
+                      <Input
+                        placeholder="Enter reference number"
+                        className="pr-10"
+                        {...field}
+                      />
+                      <VoiceMicButton
+                        onTranscript={(t) => field.onChange(t)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2"
+                      />
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

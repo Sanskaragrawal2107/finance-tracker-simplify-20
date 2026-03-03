@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import PageTitle from '@/components/common/PageTitle';
-import CustomCard from '@/components/ui/CustomCard';
 import { Search, Filter, Building, User, Users, CheckSquare, Plus, SendHorizontal } from 'lucide-react';
 import { 
   Expense, 
@@ -1080,17 +1079,15 @@ const Expenses: React.FC = () => {
                   onSelectSite={(siteId) => setSelectedSiteId(siteId)}
                 />
               ) : (
-                <CustomCard>
-                  <div className="p-12 text-center">
-                    <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                    <h3 className="text-lg font-medium mb-2">No Sites Added Yet</h3>
-                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                      {userRole === UserRole.ADMIN 
-                        ? "Create sites from the admin dashboard to start tracking expenses."
-                        : "No sites have been assigned to you yet."}
-                    </p>
-                  </div>
-                </CustomCard>
+                <div className="bg-white border border-dashed border-border rounded-lg p-12 text-center">
+                  <Building className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-30" />
+                  <h3 className="text-base font-semibold mb-2">No Sites Added Yet</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    {userRole === UserRole.ADMIN
+                      ? 'Create sites from the admin dashboard to start tracking expenses.'
+                      : 'No sites have been assigned to you yet.'}
+                  </p>
+                </div>
               )}
             </div>
           )}

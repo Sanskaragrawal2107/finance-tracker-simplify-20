@@ -41,19 +41,22 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
   invoices,
   onTransactionsUpdate
 }) => {
-  const [activeTab, setActiveTab] = useState('expenses');
+  const TAB_KEY = `site-txn-tab-${siteId}`;
+  const [activeTab, setActiveTab] = useState<string>(
+    () => sessionStorage.getItem(TAB_KEY) || 'expenses'
+  );
   const isMobile = useIsMobile();
   
-  // Reset components when the site changes
+  // Reset to expenses tab only when site changes
   useEffect(() => {
-    setActiveTab('expenses');
+    const saved = sessionStorage.getItem(TAB_KEY);
+    setActiveTab(saved || 'expenses');
   }, [siteId]);
   
-  // This ensures that tab changes trigger correctly and components are memoized appropriately
   const handleTabChange = useCallback((value: string) => {
-    console.log('Changing tab to:', value);
     setActiveTab(value);
-  }, []);
+    sessionStorage.setItem(TAB_KEY, value);
+  }, [TAB_KEY]);
 
   // Force a fresh render when changing tabs using a unique key per tab
   const getTabKey = useCallback((tabName: string) => {

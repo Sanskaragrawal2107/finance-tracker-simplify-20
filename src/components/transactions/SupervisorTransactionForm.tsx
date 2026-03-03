@@ -246,10 +246,10 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
                     mode="single"
                     selected={field.value}
                     onSelect={field.onChange}
+                    defaultMonth={field.value ?? new Date()}
                     disabled={(date) =>
                       date > new Date() || date < new Date("1900-01-01")
                     }
-                    initialFocus
                   />
                 </PopoverContent>
               </Popover>

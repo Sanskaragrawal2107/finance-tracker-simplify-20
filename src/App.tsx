@@ -12,8 +12,7 @@ import SupervisorSites from "./pages/SupervisorSites";
 import AdminSupervisorSites from "./pages/admin/SupervisorSites";
 import AllSites from "./pages/admin/AllSites";
 import NotFound from "./pages/NotFound";
-import Navbar from "./components/layout/Navbar";
-import { UserRole } from "./lib/types";
+import Navbar from "./components/layout/Navbar";import MobileBottomNav from './components/layout/MobileBottomNav';import { UserRole } from "./lib/types";
 import { useIsMobile } from "./hooks/use-mobile";
 import { AuthProvider, useAuth } from "./hooks/use-auth";
 import AppLayout from "./components/layout/AppLayout";
@@ -64,7 +63,8 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
       {showNavbar && <Navbar />}
-      <main className={showNavbar ? "pt-16" : ""}>
+      {showNavbar && <MobileBottomNav />}
+      <main className={showNavbar ? "pt-14" : ""}>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/role-redirect" element={<RoleBasedRedirect />} />

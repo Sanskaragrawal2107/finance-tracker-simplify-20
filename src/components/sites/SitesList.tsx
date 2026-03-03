@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 import { format } from 'date-fns';
-import { Building, CalendarCheck, Calendar, ArrowRight } from 'lucide-react';
+import { Building2, CalendarCheck, Calendar, ArrowRight, CheckCircle2, Clock } from 'lucide-react';
 import { Site } from '@/lib/types';
-import CustomCard from '@/components/ui/CustomCard';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 
 interface SitesListProps {
   sites: Site[];
@@ -114,99 +114,116 @@ const SitesList: React.FC<SitesListProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Active Sites */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Active Sites ({activeSites.length})</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-2 w-2 rounded-full bg-blue-500" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Active Sites <span className="ml-1 font-bold text-foreground">{activeSites.length}</span>
+          </p>
+        </div>
         {activeSites.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {activeSites.map((site) => (
-              <CustomCard 
-                key={site.id} 
-                className="cursor-pointer hover:border-primary/50 transition-colors"
+              <div
+                key={site.id}
+                className="bg-white rounded-lg border border-border/60 shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group"
                 onClick={() => handleSiteSelect(site)}
               >
-                <div className="p-3 sm:p-4 border-b">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-base sm:text-lg truncate">{site.name}</h4>
-                    <Building className="h-5 w-5 text-muted-foreground flex-shrink-0 ml-2" />
+                <div className="p-4 border-b border-border/40">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-foreground truncate">{site.name}</h4>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{site.jobName}</p>
+                    </div>
+                    <div className="p-1.5 rounded-md bg-blue-50 text-blue-600 flex-shrink-0">
+                      <Building2 className="h-3.5 w-3.5" />
+                    </div>
                   </div>
-                  <p className="text-muted-foreground truncate text-sm">{site.jobName}</p>
                 </div>
-                <div className="p-3 sm:p-4">
-                  <div className="flex items-center text-xs sm:text-sm mb-2">
-                    <Calendar className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">Started: {format(new Date(site.startDate), 'MMM dd, yyyy')}</span>
+                <div className="p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>Started {format(new Date(site.startDate), 'dd MMM yyyy')}</span>
                   </div>
                   {site.completionDate && (
-                    <div className="flex items-center text-xs sm:text-sm mb-2">
-                      <CalendarCheck className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                      <span className="truncate">Expected: {format(new Date(site.completionDate), 'MMM dd, yyyy')}</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <CalendarCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>Expected {format(new Date(site.completionDate), 'dd MMM yyyy')}</span>
                     </div>
                   )}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="mt-2 w-full text-xs sm:text-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSiteSelect(site);
-                    }}
+                  {site.location && (
+                    <p className="text-xs text-muted-foreground truncate">{site.location}</p>
+                  )}
+                  <button
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 py-1.5 border border-primary/20 rounded-md hover:bg-primary/5 transition-all group-hover:border-primary/40"
+                    onClick={(e) => { e.stopPropagation(); handleSiteSelect(site); }}
                   >
-                    <span>View Details</span>
-                    <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
-                  </Button>
+                    View Details
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
                 </div>
-              </CustomCard>
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center p-8 border rounded-lg bg-muted/30">
-            <p className="text-muted-foreground">No active sites found.</p>
+          <div className="flex flex-col items-center justify-center py-10 bg-white rounded-lg border border-border/60 border-dashed text-muted-foreground">
+            <Building2 className="h-8 w-8 mb-2 opacity-30" />
+            <p className="text-sm font-medium">No active sites</p>
           </div>
         )}
       </div>
-      
+
+      {/* Completed Sites */}
       {completedSites.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-4">Completed Sites ({completedSites.length})</h3>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-2 w-2 rounded-full bg-emerald-500" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Completed Sites <span className="ml-1 font-bold text-foreground">{completedSites.length}</span>
+            </p>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {completedSites.map((site) => (
-              <CustomCard 
-                key={site.id} 
-                className="cursor-pointer hover:border-primary/50 transition-colors bg-green-50/30"
+              <div
+                key={site.id}
+                className="bg-white rounded-lg border border-emerald-200/60 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer group"
                 onClick={() => handleSiteSelect(site)}
               >
-                <div className="p-3 sm:p-4 border-b">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-base sm:text-lg truncate">{site.name}</h4>
-                    <Building className="h-5 w-5 text-muted-foreground flex-shrink-0 ml-2" />
+                <div className="p-4 border-b border-border/40 bg-emerald-50/40 rounded-t-lg">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-foreground truncate">{site.name}</h4>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{site.jobName}</p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <span className="badge-success">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Done
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-muted-foreground truncate text-sm">{site.jobName}</p>
                 </div>
-                <div className="p-3 sm:p-4">
-                  <div className="flex items-center text-xs sm:text-sm mb-2">
-                    <Calendar className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">Started: {format(new Date(site.startDate), 'MMM dd, yyyy')}</span>
+                <div className="p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>Started {format(new Date(site.startDate), 'dd MMM yyyy')}</span>
                   </div>
                   {site.completionDate && (
-                    <div className="flex items-center text-xs sm:text-sm mb-2">
-                      <CalendarCheck className="h-4 w-4 mr-2 text-green-600 flex-shrink-0" />
-                      <span className="text-green-600 truncate">Completed: {format(new Date(site.completionDate), 'MMM dd, yyyy')}</span>
+                    <div className="flex items-center gap-2 text-xs text-emerald-600 font-medium">
+                      <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>Completed {format(new Date(site.completionDate), 'dd MMM yyyy')}</span>
                     </div>
                   )}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="mt-2 w-full text-xs sm:text-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSiteSelect(site);
-                    }}
+                  <button
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-600 py-1.5 border border-emerald-200 rounded-md hover:bg-emerald-50 transition-all"
+                    onClick={(e) => { e.stopPropagation(); handleSiteSelect(site); }}
                   >
-                    <span>View Details</span>
-                    <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
-                  </Button>
+                    View Details
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
                 </div>
-              </CustomCard>
+              </div>
             ))}
           </div>
         </div>

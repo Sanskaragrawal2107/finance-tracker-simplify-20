@@ -3,7 +3,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Trash2 } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Trash2, Mic } from "lucide-react";
+import VoiceMicButton from '@/components/common/VoiceMicButton';
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -80,12 +81,18 @@ interface ExpenseItem {
   amount: number;
 }
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+const GEMINI_MODEL  = 'gemini-2.5-flash-lite';
+
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, siteId }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiSuggestedCategory, setAiSuggestedCategory] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 45000); // 45 second timeout for form submissions
+  const [isSubmitting, setIsSubmitting] = useLoadingState(false, 45000);
   const { user } = useAuth();
   
   const form = useForm<FormValues>({
@@ -104,79 +111,43 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, si
 
   const analyzePurpose = async (purposeText: string) => {
     if (!purposeText || purposeText.length < 3) return;
-    
     setIsAnalyzing(true);
     try {
-      const apiKey = "AIzaSyDwqj1YcFKVzpLc_4ZyC_s9YAMCONx57RI";
-      const url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent";
-      
-      const prompt = `
-Given this expense description: "${purposeText}"
-Classify it into exactly ONE of these categories:
-- STAFF TRAVELLING CHARGES
-- STATIONARY & PRINTING
-- DIESEL & FUEL CHARGES
-- LABOUR TRAVELLING EXP.
-- LOADGING & BOARDING FOR STAFF
-- FOOD CHARGES FOR LABOUR
-- SITE EXPENSES
-- ROOM RENT FOR LABOUR
+      const prompt = `You are an expense classifier for a construction company. Classify the following expense description into exactly ONE category from the list below.
 
-Return ONLY the category name, with no additional text or explanation.
-`;
+Expense description: "${purposeText}"
 
-      const response = await fetch(`${url}?key=${apiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: prompt,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            topP: 0.8,
-            topK: 40,
-            maxOutputTokens: 50,
-          },
-        }),
+Available categories (return the EXACT text of one):
+${EXPENSE_CATEGORIES.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+Rules:
+- Return ONLY the category name, nothing else.
+- No punctuation, no explanation, no quotes.
+- If unsure, pick the closest match.`;
+
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({
+        model: GEMINI_MODEL,
+        generationConfig: { temperature: 0.1, maxOutputTokens: 40 },
       });
+      const result = await model.generateContent(prompt);
+      const raw = result.response.text().trim();
 
-      if (!response.ok) {
-        console.error("API response error:", response.status, response.statusText);
-        throw new Error("API request failed");
-      }
+      // Normalised matching — try exact first, then substring
+      const normalise = (s: string) => s.toUpperCase().replace(/[^A-Z0-9&.]/g, ' ').replace(/\s+/g, ' ').trim();
+      const normRaw = normalise(raw);
+      const matched =
+        EXPENSE_CATEGORIES.find(cat => normalise(cat) === normRaw) ||
+        EXPENSE_CATEGORIES.find(cat => normRaw.includes(normalise(cat))) ||
+        EXPENSE_CATEGORIES.find(cat => normalise(cat).includes(normRaw));
 
-      const data = await response.json();
-      console.log("Gemini API response:", data);
-      
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        const categoryText = data.candidates[0].content.parts[0].text.trim();
-        console.log("Detected category text:", categoryText);
-        
-        const matchedCategory = EXPENSE_CATEGORIES.find(cat => 
-          categoryText.includes(cat)
-        );
-        
-        if (matchedCategory) {
-          console.log("Setting category to:", matchedCategory);
-          form.setValue("category", matchedCategory);
-          toast.success(`Category detected: ${matchedCategory}`);
-        } else {
-          console.log("No matching category found in:", categoryText);
-          toast.warning("Could not determine category");
-        }
+      if (matched) {
+        form.setValue('category', matched);
+        setAiSuggestedCategory(matched);
+        toast.success(`AI suggested: ${matched}`, { duration: 2500 });
       }
-    } catch (error) {
-      console.error("Error analyzing purpose:", error);
-      console.log("Continuing without category detection");
+    } catch (err) {
+      console.error('Error analyzing purpose:', err);
     } finally {
       setIsAnalyzing(false);
     }
@@ -200,7 +171,7 @@ Return ONLY the category name, with no additional text or explanation.
       category: "",
       amount: undefined,
     });
-    
+    setAiSuggestedCategory(null);
     toast.success("Expense added to the list");
   };
   
@@ -402,7 +373,7 @@ Return ONLY the category name, with no additional text or explanation.
                         mode="single"
                         selected={field.value}
                         onSelect={handleDateChange}
-                        initialFocus
+                        defaultMonth={field.value ?? new Date()}
                         className="pointer-events-auto"
                       />
                     </PopoverContent>
@@ -419,12 +390,20 @@ Return ONLY the category name, with no additional text or explanation.
                 <FormItem>
                   <FormLabel>Purpose</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="Describe the purpose of this expense..." 
-                      className="resize-none" 
-                      {...field} 
-                      onBlur={handlePurposeBlur}
-                    />
+                    <div className="relative">
+                      <Textarea 
+                        placeholder="Describe the purpose of this expense..." 
+                        className="resize-none pr-10" 
+                        {...field} 
+                        onBlur={handlePurposeBlur}
+                      />
+                      <VoiceMicButton
+                        onTranscript={(t) => form.setValue('purpose', field.value ? `${field.value} ${t}` : t)}
+                        className="absolute right-2 top-2"
+                        append
+                        currentValue={field.value}
+                      />
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -436,11 +415,18 @@ Return ONLY the category name, with no additional text or explanation.
               name="category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="flex items-center">
+                  <FormLabel className="flex items-center gap-2">
                     Category
-                    {isAnalyzing && (
-                      <Loader2 className="ml-2 h-4 w-4 animate-spin text-muted-foreground" />
-                    )}
+                    {isAnalyzing ? (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground font-normal">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        AI analysing…
+                      </span>
+                    ) : aiSuggestedCategory && field.value === aiSuggestedCategory ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+                        ✦ AI suggested
+                      </span>
+                    ) : null}
                   </FormLabel>
                   <Select
                     onValueChange={field.onChange}

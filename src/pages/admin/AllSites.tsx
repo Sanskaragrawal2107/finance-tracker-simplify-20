@@ -115,7 +115,7 @@ const AllSites: React.FC = () => {
   }, [sites, selectedSupervisorId, searchTerm]);
 
   const handleSiteClick = (site: Site) => {
-    navigate(`/sites/${site.id}`, { 
+    navigate(`/admin/sites/${site.id}`, { 
       state: { 
         site,
         returnPath: '/admin/all-sites'

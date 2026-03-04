@@ -11,6 +11,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import SupervisorSites from "./pages/SupervisorSites";
 import AdminSupervisorSites from "./pages/admin/SupervisorSites";
 import AllSites from "./pages/admin/AllSites";
+import AdminSiteDetail from "./pages/admin/AdminSiteDetail";
 import NotFound from "./pages/NotFound";
 import Navbar from "./components/layout/Navbar";import MobileBottomNav from './components/layout/MobileBottomNav';import { UserRole } from "./lib/types";
 import { useIsMobile } from "./hooks/use-mobile";
@@ -113,6 +114,14 @@ const AppContent: React.FC = () => {
             <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
               <AppLayout>
                 <AllSites />
+              </AppLayout>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/admin/sites/:id" element={
+            <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+              <AppLayout>
+                <AdminSiteDetail />
               </AppLayout>
             </ProtectedRoute>
           } />

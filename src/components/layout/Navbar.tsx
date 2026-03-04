@@ -8,6 +8,20 @@ import { UserRole } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 
+const MEWLogo: React.FC<{ className?: string }> = ({ className }) => (
+  <div className={cn('flex items-center gap-2', className)}>
+    <img src="/mew-logo.png" alt="MEW" className="h-8 w-auto object-contain" />
+    <div className="hidden sm:flex flex-col leading-none">
+      <span className="font-extrabold text-sm tracking-tight text-foreground">
+        <span className="text-red-600">MAURICE</span>
+        {' '}
+        <span>ENGINEERING WORKS</span>
+      </span>
+      <span className="text-[9px] text-muted-foreground tracking-wide font-medium">Believe in Quality Work</span>
+    </div>
+  </div>
+);
+
 const roleConfig: Record<UserRole, { label: string; color: string }> = {
   [UserRole.ADMIN]:      { label: 'Admin',      color: 'bg-blue-100 text-blue-700' },
   [UserRole.SUPERVISOR]: { label: 'Supervisor',  color: 'bg-emerald-100 text-emerald-700' },
@@ -63,15 +77,8 @@ const Navbar: React.FC<NavbarProps> = ({ pageTitle, className }) => {
 
           {/* Left — Logo + Breadcrumb */}
           <div className="flex items-center gap-3 min-w-0">
-            <button onClick={handleHomeClick} className="flex items-center gap-2 flex-shrink-0 group">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-                <Building2 className="h-4 w-4 text-white" />
-              </div>
-              {!isMobile && (
-                <span className="font-bold text-sm text-foreground tracking-tight group-hover:text-primary transition-colors">
-                  FinTrack
-                </span>
-              )}
+            <button onClick={handleHomeClick} className="flex items-center flex-shrink-0 group">
+              <MEWLogo />
             </button>
 
             {currentTitle && !isMobile && (

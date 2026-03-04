@@ -25,9 +25,7 @@ const Index: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-white font-bold text-base">F</span>
-          </div>
+          <img src="/mew-logo.png" alt="MEW" className="h-14 w-auto object-contain" />
           <div className="h-1 w-20 bg-muted rounded-full overflow-hidden">
             <div className="h-full w-1/2 bg-primary rounded-full animate-pulse" />
           </div>
@@ -39,7 +37,7 @@ const Index: React.FC = () => {
   return (
     <div className="min-h-screen flex">
       {/* Left panel — branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-primary flex-col justify-between p-12 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 to-slate-800 flex-col justify-between p-12 relative overflow-hidden">
         {/* Subtle geometric background */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 right-0 w-96 h-96 border border-white rounded-full translate-x-1/2 -translate-y-1/2" />
@@ -48,12 +46,20 @@ const Index: React.FC = () => {
         </div>
 
         <div className="relative">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-9 w-9 rounded-lg bg-white/20 flex items-center justify-center">
-              <span className="text-white font-bold text-base">F</span>
+          {/* Logo + company name header */}
+          <div className="flex items-center gap-4 mb-2">
+            <img src="/mew-logo.png" alt="Maurice Engineering Works" className="h-16 w-auto object-contain bg-white rounded-xl p-1 shadow-lg" />
+            <div className="flex flex-col">
+              <div className="flex items-center">
+                <span className="text-white font-extrabold text-2xl tracking-tight">
+                  <span className="bg-red-600 px-2 py-0.5 rounded-sm mr-1">MAURICE</span>
+                  <span>ENGINEERING WORKS</span>
+                </span>
+              </div>
+              <span className="text-white/70 text-sm mt-1 italic font-medium">Believe in Quality Work</span>
             </div>
-            <span className="text-white font-bold text-lg tracking-tight">FinTrack</span>
           </div>
+          <div className="h-px bg-white/20 mt-4" />
         </div>
 
         <div className="relative space-y-6">
@@ -86,7 +92,7 @@ const Index: React.FC = () => {
         </div>
 
         <div className="relative">
-          <p className="text-white/40 text-xs">© 2026 FinTrack · Construction Finance Management</p>
+          <p className="text-white/40 text-xs">© 2026 Maurice Engineering Works · Construction Finance Management</p>
         </div>
       </div>
 
@@ -94,11 +100,14 @@ const Index: React.FC = () => {
       <div className="flex-1 flex items-center justify-center bg-background px-6 py-12">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-white font-bold text-sm">F</span>
+          <div className="flex items-center gap-3 mb-8 lg:hidden">
+            <img src="/mew-logo.png" alt="MEW" className="h-10 w-auto object-contain" />
+            <div className="flex flex-col leading-none">
+              <span className="font-extrabold text-sm tracking-tight">
+                <span className="text-red-600">MAURICE</span> ENGINEERING WORKS
+              </span>
+              <span className="text-[10px] text-muted-foreground">Believe in Quality Work</span>
             </div>
-            <span className="font-bold text-base tracking-tight">FinTrack</span>
           </div>
 
           <LoginForm />

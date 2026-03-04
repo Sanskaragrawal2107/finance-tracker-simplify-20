@@ -99,14 +99,13 @@ export async function exportSiteExcel(
     { width: 12 }, // R – AD worker amt
   ];
 
-  // ── Row 1: Site name banner ────────────────────────────────────────────────
-  ws.getRow(1).height = 22;
+  // ── Row 1: MEW + Site name banner ─────────────────────────────────────────
+  ws.getRow(1).height = 28;
   const titleCell = ws.getCell(1, 1);
-  titleCell.value = `Site Report – ${site.name}  |  ${site.jobName}  |  ${site.location || ''}`;
-  titleCell.font  = { bold: true, size: 13 };
+  titleCell.value = `MAURICE ENGINEERING WORKS  ·  ${site.name}  |  ${site.jobName}  |  Ref: MEW/${site.posNo || ''}  |  Date: ${format(new Date(), 'dd-MM-yyyy')}`;
+  titleCell.font  = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  titleCell.fill  = fill('FF1E3A5F');
-  titleCell.font  = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill  = fill('FF1A1A1A');
   ws.mergeCells(1, 1, 1, 18);
 
   // ── Row 2: Section headers ─────────────────────────────────────────────────

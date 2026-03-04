@@ -5,7 +5,9 @@ import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { User, Users, Building2, UserPlus, Loader2, CheckCircle2, Clock, TrendingUp, Plus, Eye } from 'lucide-react';
+import { User, Users, Building2, UserPlus, Loader2, CheckCircle2, Clock, TrendingUp, Plus, Eye, Download, FileSpreadsheet } from 'lucide-react';
+import { exportBankPayment } from '@/utils/exportBankPayment';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, format as fnsFormat } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +37,9 @@ const AdminDashboard: React.FC = () => {
   const [isRegisterFormOpen, setIsRegisterFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExportingInvoices, setIsExportingInvoices] = useState(false);
+  type InvoiceFilter = 'today' | 'month' | 'all';
+  const [invoiceExportFilter, setInvoiceExportFilter] = useState<InvoiceFilter>('all');
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const {
@@ -189,6 +194,57 @@ const AdminDashboard: React.FC = () => {
     }
     fetchSupervisorsAndSites();
   }, [fetchSupervisorsAndSites]);
+
+  const handleExportAllInvoices = useCallback(async (filter: InvoiceFilter) => {
+    try {
+      setIsExportingInvoices(true);
+      const now = new Date();
+
+      // Build date range query
+      let query = supabase
+        .from('site_invoices')
+        .select('*')
+        .eq('payment_status', 'approved')
+        .order('date', { ascending: false });
+
+      if (filter === 'today') {
+        query = query
+          .gte('date', startOfDay(now).toISOString())
+          .lte('date', endOfDay(now).toISOString());
+      } else if (filter === 'month') {
+        query = query
+          .gte('date', startOfMonth(now).toISOString())
+          .lte('date', endOfMonth(now).toISOString());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        toast.error(
+          filter === 'today'
+            ? 'No approved invoices found for today.'
+            : filter === 'month'
+            ? 'No approved invoices found for this month.'
+            : 'No approved invoices found.'
+        );
+        return;
+      }
+
+      const label =
+        filter === 'today' ? `Today_${fnsFormat(now, 'ddMMMyyyy')}`
+        : filter === 'month' ? `${fnsFormat(now, 'MMMM_yyyy')}`
+        : 'All';
+
+      await exportBankPayment(data, `MEW_${label}`);
+      toast.success(`Downloaded ${data.length} approved invoice${data.length !== 1 ? 's' : ''} (${filter === 'today' ? 'today' : filter === 'month' ? 'this month' : 'all time'})`);
+    } catch (err: any) {
+      console.error('Export error:', err);
+      toast.error(err?.message || 'Failed to export invoices');
+    } finally {
+      setIsExportingInvoices(false);
+    }
+  }, []);
   if (!user) {
     return <div className="space-y-6 animate-fade-in">
         <div className="text-center py-12">
@@ -463,6 +519,50 @@ const AdminDashboard: React.FC = () => {
             </div>
           </>
         )}
+      </div>
+
+      {/* ── Invoice Export ────────────────────────────────────────────── */}
+      <div className="bg-white rounded-lg border border-border/60 shadow-sm p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bank Payment</p>
+            <p className="text-sm font-semibold text-foreground mt-0.5">Export Approved Invoices</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Download all approved invoices as a bank-upload Excel file</p>
+          </div>
+          <FileSpreadsheet className="h-8 w-8 text-emerald-600 opacity-60 hidden sm:block flex-shrink-0" />
+        </div>
+
+        {/* Filter pills */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          {(['today', 'month', 'all'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setInvoiceExportFilter(f)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                invoiceExportFilter === f
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white text-muted-foreground border-border/60 hover:border-emerald-400 hover:text-emerald-700'
+              }`}
+            >
+              {f === 'today' ? 'Today' : f === 'month' ? 'This Month' : 'All Time'}
+            </button>
+          ))}
+        </div>
+
+        <Button
+          onClick={() => handleExportAllInvoices(invoiceExportFilter)}
+          disabled={isExportingInvoices}
+          className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-sm gap-2"
+        >
+          {isExportingInvoices ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          {isExportingInvoices
+            ? 'Generating…'
+            : `Download ${invoiceExportFilter === 'today' ? "Today's" : invoiceExportFilter === 'month' ? "This Month's" : 'All'} Invoices`}
+        </Button>
       </div>
 
       {/* ── Quick actions ─────────────────────────────────────────────── */}

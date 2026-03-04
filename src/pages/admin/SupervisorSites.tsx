@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle, Building2, SendHorizontal, ArrowLeft, RefreshCcw } from 'lucide-react';
+import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle, Building2, SendHorizontal, ArrowLeft, RefreshCcw, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
@@ -24,6 +24,7 @@ import SiteDetailTransactions from '@/components/sites/SiteDetailTransactions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import VisibilityHandler from '@/components/common/VisibilityHandler';
 import { useLoadingState } from '@/hooks/use-loading-state';
+import { exportSiteExcel } from '@/utils/exportSiteExcel';
 
 const AdminSupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -42,6 +43,7 @@ const AdminSupervisorSites: React.FC = () => {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [financialSummary, setFinancialSummary] = useState<BalanceSummary | null>(null);
   const [loadingFinancials, setLoadingFinancials] = useLoadingState(false, 30000); // 30 second timeout for financials
+  const [isExporting, setIsExporting] = useState(false);
   
   const lastVisibleTimeRef = useRef(Date.now());
 
@@ -375,6 +377,49 @@ const AdminSupervisorSites: React.FC = () => {
     });
   };
 
+  const handleExportExcel = async () => {
+    if (!selectedSite || !selectedSiteId) return;
+    
+    setIsExporting(true);
+    try {
+      // Fetch all transactions for this site
+      const [
+        { data: expenses, error: expError },
+        { data: advances, error: advError },
+        { data: funds, error: fundsError },
+      ] = await Promise.all([
+        supabase.from('expenses').select('*').eq('site_id', selectedSiteId),
+        supabase.from('advances').select('*').eq('site_id', selectedSiteId),
+        supabase.from('funds_received').select('*').eq('site_id', selectedSiteId),
+      ]);
+
+      if (expError || advError || fundsError) {
+        throw new Error('Failed to fetch transaction data');
+      }
+
+      await exportSiteExcel(
+        selectedSite,
+        expenses || [],
+        advances || [],
+        funds || [],
+      );
+      
+      toast({
+        title: 'Export Successful',
+        description: 'Excel file downloaded successfully',
+      });
+    } catch (err) {
+      console.error('Export failed:', err);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to export Excel file',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const renderFinancialSummary = () => {
     if (loadingFinancials) {
       return (
@@ -524,6 +569,14 @@ const AdminSupervisorSites: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button 
+              onClick={handleExportExcel} 
+              className="bg-green-600 hover:bg-green-700"
+              disabled={isExporting}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting…' : 'Export Excel'}
+            </Button>
             <Button onClick={() => setShowSupervisorAdvanceForm(true)} className="bg-blue-600 hover:bg-blue-700">
               <SendHorizontal className="h-4 w-4 mr-2" />
               Advance to Supervisor

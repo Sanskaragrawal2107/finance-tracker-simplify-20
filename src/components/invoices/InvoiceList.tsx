@@ -5,7 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { UserRole } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Trash2, Eye, CheckCircle2, Clock } from 'lucide-react';
+import { Trash2, Eye, CheckCircle2, Clock, Download, Loader2 } from 'lucide-react';
+import { exportBankPayment } from '@/utils/exportBankPayment';
+import { toast as sonnerToast } from 'sonner';
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +34,7 @@ interface InvoiceListProps {
   userRole: UserRole;
   isAdminView?: boolean;
   initialInvoices?: any[];
+  siteName?: string;
   onTransactionsUpdate?: () => void;
 }
 
@@ -40,6 +43,7 @@ export function InvoiceList({
   userRole,
   isAdminView,
   initialInvoices,
+  siteName,
   onTransactionsUpdate
 }: InvoiceListProps) {
   const [invoices, setInvoices] = useState(initialInvoices || []);
@@ -48,6 +52,26 @@ export function InvoiceList({
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportBankPayment = async () => {
+    try {
+      setIsExporting(true);
+      const approvedCount = invoices.filter(
+        (inv) => inv.payment_status === 'approved'
+      ).length;
+      if (approvedCount === 0) {
+        sonnerToast.warning('No approved invoices to export. Approve at least one invoice first.');
+        return;
+      }
+      await exportBankPayment(invoices, siteName || siteId);
+      sonnerToast.success(`Bank payment file downloaded (${approvedCount} approved invoice${approvedCount !== 1 ? 's' : ''})`);
+    } catch (err: any) {
+      sonnerToast.error(err?.message || 'Failed to export bank payment file');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -162,6 +186,26 @@ export function InvoiceList({
 
   return (
     <>
+      {/* ── Export Bank Payment button (admin only) ─────────────────── */}
+      {(isAdminView || userRole === UserRole.ADMIN) && (
+        <div className="flex justify-end mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+            onClick={handleExportBankPayment}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Export Bank Payment
+          </Button>
+        </div>
+      )}
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>

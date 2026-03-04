@@ -133,6 +133,7 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
                 siteId={siteId}
                 userRole={userRole}
                 isAdminView={isAdminView}
+                siteName={site?.name}
                 onTransactionsUpdate={onTransactionsUpdate}
               />
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -75,6 +75,54 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
   const [aiScanApplied, setAiScanApplied] = useState(false);
 
   const { user } = useAuth();
+
+  // ── sessionStorage persistence (survives tab kills / camera app) ──
+  const STORAGE_KEY = `invoice-form-draft-${siteId || 'global'}`;
+  const didRestore = useRef(false);
+
+  // Restore saved draft on mount
+  useEffect(() => {
+    if (didRestore.current) return;
+    didRestore.current = true;
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.date) setDate(new Date(saved.date));
+      if (saved.partyId) setPartyId(saved.partyId);
+      if (saved.partyName) { setPartyName(saved.partyName); setPartyNameFixed(true); }
+      if (saved.materialItems?.length) setMaterialItems(saved.materialItems);
+      if (saved.accountNumber) setAccountNumber(saved.accountNumber);
+      if (saved.bankName) setBankName(saved.bankName);
+      if (saved.ifscCode) setIfscCode(saved.ifscCode);
+      if (saved.email) setEmail(saved.email);
+      if (saved.mobile) setMobile(saved.mobile);
+      if (saved.paymentStatus) setPaymentStatus(saved.paymentStatus);
+      if (saved.approverType) setApproverType(saved.approverType);
+    } catch { /* ignore bad data */ }
+  }, []);
+
+  // Debounced save to sessionStorage on field changes
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveDraft = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+          date: date.toISOString(),
+          partyId, partyName, materialItems,
+          accountNumber, bankName, ifscCode, email, mobile,
+          paymentStatus, approverType,
+        }));
+      } catch { /* storage full — ignore */ }
+    }, 400);
+  }, [date, partyId, partyName, materialItems, accountNumber, bankName, ifscCode, email, mobile, paymentStatus, approverType, STORAGE_KEY]);
+
+  useEffect(() => { saveDraft(); }, [saveDraft]);
+
+  const clearDraft = useCallback(() => {
+    sessionStorage.removeItem(STORAGE_KEY);
+  }, [STORAGE_KEY]);
 
   const handlePartyNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!partyNameFixed) {
@@ -553,6 +601,7 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
                 setEmail('');
                 setMobile('');
                 setApproverType("ho");
+                clearDraft();
                 
                 if (onClose) onClose();
                 return;
@@ -566,6 +615,36 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
               return;
             }
           }
+
+          // Primary insert succeeded — handle success
+          toast({
+            title: "Invoice Created",
+            description: "Invoice saved successfully",
+            variant: "default"
+          });
+          onSubmit(invoiceData as Invoice);
+
+          // Reset form after submission
+          setDate(new Date());
+          setPartyId('');
+          setPartyName('');
+          setPartyNameFixed(false);
+          setMaterialItems([]);
+          setGrandGrossAmount(0);
+          setGrandNetAmount(0);
+          setBillFile(null);
+          setBillUrl('');
+          setAiScanApplied(false);
+          setPaymentStatus(PaymentStatus.PENDING);
+          setAccountNumber('');
+          setBankName('');
+          setIfscCode('');
+          setEmail('');
+          setMobile('');
+          setApproverType("ho");
+          clearDraft();
+
+          if (onClose) onClose();
         } catch (schemaError) {
           console.error("Schema or query error:", schemaError);
           toast({
@@ -594,7 +673,7 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
   };
 
   return isOpen ? (
-    <Dialog open={isOpen} onOpenChange={onClose ? () => onClose() : undefined}>
+    <Dialog open={isOpen} onOpenChange={onClose ? () => { clearDraft(); onClose(); } : undefined}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-3 sm:p-4 md:p-6 w-[calc(100%-24px)] sm:w-auto">
         <DialogHeader>
           <DialogTitle>

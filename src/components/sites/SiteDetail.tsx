@@ -81,13 +81,27 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   };
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
   const isMobile = useIsMobile();
-  
-  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
-  const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(false);
-  const [isFundsFormOpen, setIsFundsFormOpen] = useState(false);
-  const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
-  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(false);
-  const [showSupervisorAdvanceForm, setShowSupervisorAdvanceForm] = useState(false);
+
+  // Persist open form dialog to sessionStorage so it survives tab kills / mobile camera
+  const FORM_KEY = `site-open-form-${site.id}`;
+  const savedForm = sessionStorage.getItem(FORM_KEY) || '';
+
+  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(savedForm === 'expense');
+  const [isAdvanceFormOpen, setIsAdvanceFormOpen] = useState(savedForm === 'advance');
+  const [isFundsFormOpen, setIsFundsFormOpen] = useState(savedForm === 'funds');
+  const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(savedForm === 'invoice');
+  const [showSupervisorTransactionForm, setShowSupervisorTransactionForm] = useState(savedForm === 'supTxn');
+  const [showSupervisorAdvanceForm, setShowSupervisorAdvanceForm] = useState(savedForm === 'supAdv');
+
+  // Helpers that persist which dialog is open
+  const openForm = (form: string, setter: React.Dispatch<React.SetStateAction<boolean>>) => {
+    sessionStorage.setItem(FORM_KEY, form);
+    setter(true);
+  };
+  const closeForm = (setter: React.Dispatch<React.SetStateAction<boolean>>) => {
+    sessionStorage.removeItem(FORM_KEY);
+    setter(false);
+  };
 
   // Self-fetched data (used when parent doesn't supply financial data)
   const [selfExpenses, setSelfExpenses] = useState<Expense[]>([]);
@@ -296,7 +310,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       };
       onAddExpense(expenseWithSiteId);
     }
-    setIsExpenseFormOpen(false);
+    closeForm(setIsExpenseFormOpen);
     if (onEntrySuccess) {
       onEntrySuccess('expense');
     }
@@ -311,7 +325,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       };
       onAddAdvance(advanceWithSiteId);
     }
-    setIsAdvanceFormOpen(false);
+    closeForm(setIsAdvanceFormOpen);
     if (onEntrySuccess) {
       onEntrySuccess('advance');
     }
@@ -326,7 +340,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       };
       onAddFunds(fundsWithSiteId);
     }
-    setIsFundsFormOpen(false);
+    closeForm(setIsFundsFormOpen);
     if (onEntrySuccess) {
       onEntrySuccess('funds');
     }
@@ -341,7 +355,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       };
       onAddInvoice(invoiceWithSiteId);
     }
-    setIsInvoiceFormOpen(false);
+    closeForm(setIsInvoiceFormOpen);
     if (onEntrySuccess) {
       onEntrySuccess('invoice');
     }
@@ -422,6 +436,27 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         )}
       </div>
 
+      {/* Action Buttons — placed before site info so mobile users see them without scrolling */}
+      {userRole !== UserRole.VIEWER && !site.isCompleted && (
+        <div className={`flex flex-wrap gap-2 ${isMobile ? 'sticky top-0 z-30 bg-background/95 backdrop-blur-sm py-2 -mx-2 px-2 border-b border-border' : ''}`}>
+          <Button onClick={() => openForm('expense', setIsExpenseFormOpen)} size="sm" className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" /> Add Expense
+          </Button>
+          <Button onClick={() => openForm('advance', setIsAdvanceFormOpen)} variant="outline" size="sm" className="gap-1.5">
+            <CreditCard className="h-3.5 w-3.5" /> Add Advance
+          </Button>
+          <Button onClick={() => openForm('supAdv', setShowSupervisorAdvanceForm)} variant="outline" size="sm" className="gap-1.5">
+            <SendHorizontal className="h-3.5 w-3.5" /> Supervisor Advance
+          </Button>
+          <Button onClick={() => openForm('funds', setIsFundsFormOpen)} variant="outline" size="sm" className="gap-1.5">
+            <Wallet className="h-3.5 w-3.5" /> Add HO Funds
+          </Button>
+          <Button onClick={() => openForm('invoice', setIsInvoiceFormOpen)} variant="outline" size="sm" className="gap-1.5">
+            <FileText className="h-3.5 w-3.5" /> Add Invoice
+          </Button>
+        </div>
+      )}
+
       {/* Site Info + Balance */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-2 bg-white border border-border rounded-lg p-5">
@@ -463,27 +498,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         </div>
         <BalanceCard balanceData={siteSummary} siteId={site.id} />
       </div>
-
-      {/* Action Buttons */}
-      {userRole !== UserRole.VIEWER && !site.isCompleted && (
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setIsExpenseFormOpen(true)} size="sm" className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" /> Add Expense
-          </Button>
-          <Button onClick={() => setIsAdvanceFormOpen(true)} variant="outline" size="sm" className="gap-1.5">
-            <CreditCard className="h-3.5 w-3.5" /> Add Advance
-          </Button>
-          <Button onClick={() => setShowSupervisorAdvanceForm(true)} variant="outline" size="sm" className="gap-1.5">
-            <SendHorizontal className="h-3.5 w-3.5" /> Supervisor Advance
-          </Button>
-          <Button onClick={() => setIsFundsFormOpen(true)} variant="outline" size="sm" className="gap-1.5">
-            <Wallet className="h-3.5 w-3.5" /> Add HO Funds
-          </Button>
-          <Button onClick={() => setIsInvoiceFormOpen(true)} variant="outline" size="sm" className="gap-1.5">
-            <FileText className="h-3.5 w-3.5" /> Add Invoice
-          </Button>
-        </div>
-      )}
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className={`grid grid-cols-2 ${isMobile ? 'w-full' : 'max-w-xs'} mb-4`}>
@@ -608,7 +622,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       {isExpenseFormOpen && (
         <ExpenseForm
           isOpen={isExpenseFormOpen}
-          onClose={() => setIsExpenseFormOpen(false)}
+          onClose={() => closeForm(setIsExpenseFormOpen)}
           onSubmit={handleExpenseSubmit}
           siteId={site.id}
         />
@@ -617,7 +631,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       {isAdvanceFormOpen && (
         <AdvanceForm
           isOpen={isAdvanceFormOpen}
-          onClose={() => setIsAdvanceFormOpen(false)}
+          onClose={() => closeForm(setIsAdvanceFormOpen)}
           onSubmit={handleAdvanceSubmit}
           siteId={site.id}
         />
@@ -626,7 +640,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       {isFundsFormOpen && (
         <FundsReceivedForm
           isOpen={isFundsFormOpen}
-          onClose={() => setIsFundsFormOpen(false)}
+          onClose={() => closeForm(setIsFundsFormOpen)}
           onSubmit={handleFundsSubmit}
           siteId={site.id}
         />
@@ -635,13 +649,13 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       {isInvoiceFormOpen && (
         <InvoiceForm
           isOpen={isInvoiceFormOpen}
-          onClose={() => setIsInvoiceFormOpen(false)}
+          onClose={() => closeForm(setIsInvoiceFormOpen)}
           onSubmit={handleInvoiceSubmit}
           siteId={site.id}
         />
       )}
 
-      <Dialog open={showSupervisorTransactionForm} onOpenChange={setShowSupervisorTransactionForm}>
+      <Dialog open={showSupervisorTransactionForm} onOpenChange={(open) => { if (!open) closeForm(setShowSupervisorTransactionForm); }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Add Supervisor Transaction</DialogTitle>
@@ -651,7 +665,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           </DialogHeader>
           <SupervisorTransactionForm 
             onSuccess={() => {
-              setShowSupervisorTransactionForm(false);
+              closeForm(setShowSupervisorTransactionForm);
               onEntrySuccess?.('transactions');
             }}
             payerSiteId={site?.id}
@@ -659,7 +673,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showSupervisorAdvanceForm} onOpenChange={setShowSupervisorAdvanceForm}>
+      <Dialog open={showSupervisorAdvanceForm} onOpenChange={(open) => { if (!open) closeForm(setShowSupervisorAdvanceForm); }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Advance Paid to Supervisor</DialogTitle>
@@ -669,7 +683,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           </DialogHeader>
           <SupervisorAdvanceForm 
             onSuccess={() => {
-              setShowSupervisorAdvanceForm(false);
+              closeForm(setShowSupervisorAdvanceForm);
               onEntrySuccess?.('transactions');
             }}
             payerSiteId={site?.id}

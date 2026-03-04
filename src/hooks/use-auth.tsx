@@ -150,6 +150,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
+      // TOKEN_REFRESHED is the most common event on tab-switch / screen lock return.
+      // Setting loading=true for it causes ProtectedRoute to briefly unmount children,
+      // destroying all React state (form data, open dialogs). Since we already have a
+      // valid user in state, silently update the profile without flashing loading.
+      if (event === 'TOKEN_REFRESHED' && session?.user) {
+        fetchUserProfile(session.user.id)
+          .then(profile => {
+            if (!isSignedOutRef.current && profile) {
+              setUser(profile);
+            }
+          })
+          .catch(() => { /* keep existing user state */ });
+        return;
+      }
+
       setLoading(true);
 
       // For all other events: fetch profile asynchronously

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { ArrowLeft, Building2, Calendar, Check, Edit, ExternalLink, User, Plus, SendHorizontal, TrendingDown, TrendingUp, FileText, CreditCard, Wallet } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, Check, Download, Edit, ExternalLink, User, Plus, SendHorizontal, TrendingDown, TrendingUp, FileText, CreditCard, Wallet } from 'lucide-react';
 import { Expense, Site, Advance, FundsReceived, Invoice, BalanceSummary, AdvancePurpose, ApprovalStatus, UserRole, RecipientType, PaymentStatus } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,7 @@ import { SupervisorTransactionForm } from '../transactions/SupervisorTransaction
 import { SupervisorTransactionHistory } from '../transactions/SupervisorTransactionHistory';
 import { SupervisorAdvanceForm } from '../transactions/SupervisorAdvanceForm';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { exportSiteExcel } from '@/utils/exportSiteExcel';
 
 interface SiteDetailProps {
   site: Site;
@@ -80,7 +81,20 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
     sessionStorage.setItem(TAB_KEY, val);
   };
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const isMobile = useIsMobile();
+
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      await exportSiteExcel(site, expenses, advances, fundsReceived);
+    } catch (err) {
+      console.error('Export failed:', err);
+      toast.error('Failed to export Excel file');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Persist open form dialog to sessionStorage so it survives tab kills / mobile camera
   const FORM_KEY = `site-open-form-${site.id}`;
@@ -409,17 +423,31 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           )}
         </div>
 
-        {!site.isCompleted && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 w-full sm:w-auto"
-            onClick={() => setIsMarkingComplete(true)}
-          >
-            <Check className="mr-2 h-4 w-4" />
-            Mark as Complete
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2 items-center">
+          {isAdminView && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-green-700 border-green-300 hover:bg-green-50 w-full sm:w-auto"
+              onClick={handleExportExcel}
+              disabled={isExporting}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {isExporting ? 'Exporting…' : 'Export Excel'}
+            </Button>
+          )}
+          {!site.isCompleted && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 w-full sm:w-auto"
+              onClick={() => setIsMarkingComplete(true)}
+            >
+              <Check className="mr-2 h-4 w-4" />
+              Mark as Complete
+            </Button>
+          )}
+        </div>
 
         {isMarkingComplete && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

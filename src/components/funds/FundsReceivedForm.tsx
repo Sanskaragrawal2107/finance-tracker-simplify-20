@@ -178,7 +178,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md w-[95vw] max-w-[95vw] sm:w-auto max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md w-[calc(100vw-1rem)] sm:w-auto max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>RECORD FUNDS FROM H.O.</DialogTitle>
           <DialogDescription>

@@ -206,8 +206,11 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       const debitsTotal = (advRes.data  || [])
         .filter((a: any) => debitPurposes.includes(a.purpose))
         .reduce((s: number, a: any) => s + (Number(a.amount) || 0), 0);
-      // Use ALL invoices (paid + pending) for the total; deduct all from balance
+      // Only count invoices that have been admin-approved (or paid) toward the balance.
+      // Pending invoices are NOT deducted until admin approves them.
+      const approvedStatuses = ['approved', 'paid'];
       const invTotal = (invRes.data || [])
+        .filter((inv: any) => approvedStatuses.includes(inv.payment_status))
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
       const invPaid = (invRes.data || [])
         .filter((inv: any) => inv.payment_status === 'paid')
@@ -518,7 +521,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             {[
               { label: 'Total Expenses', value: totalExpenses, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50', border: 'border-l-red-500' },
               { label: 'Total Advances', value: totalAdvances, icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-l-amber-500' },
-              { label: 'Total Invoices', value: totalInvoices, icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-50', border: 'border-l-cyan-500' },
+              { label: 'Approved Invoices', value: totalInvoices, icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-50', border: 'border-l-cyan-500' },
               { label: 'Funds Received', value: totalFundsReceived, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-l-emerald-500' },
             ].map(({ label, value, icon: Icon, color, bg, border }) => (
               <div key={label} className={`bg-white border border-border border-l-4 ${border} rounded-lg p-4`}>
@@ -570,7 +573,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
               {[
                 { label: 'Total Expenses', value: totalExpenses, sub: `${expenses.length} entries` },
                 { label: 'Total Advances', value: totalAdvances, sub: `${advances.length} entries` },
-                { label: 'Total Invoices', value: totalInvoices, sub: `${invoices.length} entries` },
+                { label: 'Approved Invoices', value: totalInvoices, sub: `${invoices.filter((inv: any) => ['approved','paid'].includes(inv.paymentStatus || '')).length} of ${invoices.length} approved` },
                 { label: 'Debit to Worker', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
                 { label: 'Funds Received', value: totalFundsReceived, sub: `${fundsReceived.length} entries`, credit: true },
               ].map(({ label, value, sub, credit }) => (
@@ -656,7 +659,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       )}
 
       <Dialog open={showSupervisorTransactionForm} onOpenChange={(open) => { if (!open) closeForm(setShowSupervisorTransactionForm); }}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-[425px] overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Add Supervisor Transaction</DialogTitle>
             <DialogDescription>
@@ -674,7 +677,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       </Dialog>
 
       <Dialog open={showSupervisorAdvanceForm} onOpenChange={(open) => { if (!open) closeForm(setShowSupervisorAdvanceForm); }}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-[425px] overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>Advance Paid to Supervisor</DialogTitle>
             <DialogDescription>

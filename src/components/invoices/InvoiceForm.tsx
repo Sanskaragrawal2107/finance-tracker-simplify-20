@@ -149,7 +149,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     setGrandGrossAmount(totalGross);
     setGrandNetAmount(totalNet);
 
-    if (totalNet > 5000) {
+    if (totalNet > 2000) {
       setApproverType("ho");
     }
   }, [materialItems]);
@@ -674,7 +674,7 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
 
   return isOpen ? (
     <Dialog open={isOpen} onOpenChange={onClose ? () => { clearDraft(); onClose(); } : undefined}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-3 sm:p-4 md:p-6 w-[calc(100%-24px)] sm:w-auto">
+      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-3 sm:p-6">
         <DialogHeader>
           <DialogTitle>
             {siteId ? "Add Site Invoice" : "Add Invoice"}
@@ -841,6 +841,28 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
             
             {materialItems.length > 0 && <div className="mb-4">
                 <h4 className="font-medium mb-2">Material Items List</h4>
+                {isMobile ? (
+                  <div className="space-y-2">
+                    {materialItems.map((item, index) => (
+                      <div key={item.id} className="border rounded-md p-3 bg-white">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm truncate">{index + 1}. {item.material}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Qty: {item.quantity} × ₹{item.rate?.toLocaleString()} | GST: {item.gstPercentage}%
+                            </p>
+                            <p className="text-sm font-semibold text-primary mt-0.5">
+                              ₹{item.amount?.toLocaleString()}
+                            </p>
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" className="flex-shrink-0" onClick={() => removeMaterialItem(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="overflow-x-auto -mx-3 sm:mx-0 rounded-md border">
                   <table className="w-full min-w-[600px]">
                     <thead className="bg-muted text-left">
@@ -871,16 +893,17 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>}
             
             <div className="bg-muted p-3 sm:p-4 rounded-md mt-4">
-              <div className="flex flex-col md:flex-row md:justify-end md:items-center gap-4 overflow-x-auto">
-                <div className="space-y-2 w-full md:w-1/4">
+              <div className="flex flex-col gap-3">
+                <div className="space-y-1">
                   <Label htmlFor="grandGross">Net Taxable Amount (₹)</Label>
                   <Input id="grandGross" value={grandGrossAmount.toLocaleString()} readOnly className="bg-muted font-medium" />
                 </div>
                 
-                <div className="space-y-2 w-full md:w-1/4">
+                <div className="space-y-1">
                   <Label htmlFor="grandNet" className="font-medium">Grand Net Total (₹)</Label>
                   <Input id="grandNet" value={grandNetAmount.toLocaleString()} readOnly className="bg-muted font-bold text-primary" />
                 </div>
@@ -899,16 +922,16 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
                   <Label htmlFor="ho">Head Office</Label>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="supervisor" id="supervisor" disabled={grandNetAmount > 5000} />
-                  <Label htmlFor="supervisor" className={grandNetAmount > 5000 ? "text-muted-foreground" : ""}>
+                  <RadioGroupItem value="supervisor" id="supervisor" disabled={grandNetAmount > 2000} />
+                  <Label htmlFor="supervisor" className={grandNetAmount > 2000 ? "text-muted-foreground" : ""}>
                     Supervisor
                   </Label>
                 </div>
               </RadioGroup>
               
-              {grandNetAmount > 5000 && <div className="mt-3 flex items-center text-amber-600 text-sm">
+              {grandNetAmount > 2000 && <div className="mt-3 flex items-center text-amber-600 text-sm">
                   <AlertTriangle className="h-4 w-4 mr-1" />
-                  <span>Amounts over ₹5,000 must be approved by Head Office</span>
+                  <span>Amounts over ₹2,000 must be approved by Head Office</span>
                 </div>}
             </div>
           </div>

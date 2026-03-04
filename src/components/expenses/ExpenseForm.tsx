@@ -333,7 +333,7 @@ Rules:
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-xl max-w-[95vw] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl w-[calc(100vw-1rem)] max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>New Expense</DialogTitle>
           <DialogDescription>
@@ -485,36 +485,24 @@ Rules:
         {expenses.length > 0 && (
           <div className="mt-6 space-y-4">
             <h3 className="text-sm font-medium">Expenses List ({expenses.length})</h3>
-            <div className="border rounded-md overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="p-2 text-left">Date</th>
-                    <th className="p-2 text-left">Purpose</th>
-                    <th className="p-2 text-right">Amount</th>
-                    <th className="p-2 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenses.map((expense) => (
-                    <tr key={expense.id} className="border-t">
-                      <td className="p-2">{format(expense.date, 'MMM dd')}</td>
-                      <td className="p-2">{expense.purpose}</td>
-                      <td className="p-2 text-right">₹{expense.amount}</td>
-                      <td className="p-2 text-center">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8" 
-                          onClick={() => removeExpense(expense.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {expenses.map((expense) => (
+                <div key={expense.id} className="flex items-start justify-between gap-2 border rounded-md p-3 bg-muted/30">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{expense.purpose}</p>
+                    <p className="text-xs text-muted-foreground">{format(expense.date, 'MMM dd')} · {expense.category}</p>
+                    <p className="text-sm font-semibold text-primary">₹{expense.amount.toLocaleString('en-IN')}</p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 flex-shrink-0" 
+                    onClick={() => removeExpense(expense.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
             </div>
           </div>
         )}

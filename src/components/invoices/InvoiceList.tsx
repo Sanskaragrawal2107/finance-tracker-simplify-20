@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { UserRole } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Trash2, Eye } from 'lucide-react';
+import { Trash2, Eye, CheckCircle2, Clock } from 'lucide-react';
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -74,8 +74,25 @@ export function InvoiceList({
     }
   }, [fetchInvoices, initialInvoices]);
 
-  const handleDeleteInvoice = async () => {
-    if (!selectedInvoiceId) return;
+  const handleApproveInvoice = async (invoiceId: string) => {
+    try {
+      const { error } = await supabase
+        .from('site_invoices')
+        .update({ payment_status: 'approved' })
+        .eq('id', invoiceId);
+
+      if (error) throw error;
+
+      toast.success('Invoice approved — amount will now reflect in site balance');
+      fetchInvoices();
+      if (onTransactionsUpdate) onTransactionsUpdate();
+    } catch (error) {
+      console.error('Error approving invoice:', error);
+      toast.error('Failed to approve invoice');
+    }
+  };
+
+  const handleDeleteInvoice = async () => {    if (!selectedInvoiceId) return;
     
     try {
       const { error } = await supabase
@@ -115,6 +132,8 @@ export function InvoiceList({
     switch (status) {
       case 'paid':
         return 'bg-green-100 text-green-800';
+      case 'approved':
+        return 'bg-blue-100 text-blue-800';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
       case 'rejected':
@@ -124,11 +143,22 @@ export function InvoiceList({
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'paid': return 'Paid';
+      case 'approved': return 'Approved';
+      case 'pending': return 'Pending Approval';
+      case 'rejected': return 'Rejected';
+      default: return status;
+    }
+  };
+
   if (loading) {
     return <div>Loading invoices...</div>;
   }
 
   const showDeleteButton = userRole === UserRole.ADMIN || isAdminView;
+  const showApproveButton = (userRole === UserRole.ADMIN || isAdminView);
 
   return (
     <>
@@ -153,7 +183,7 @@ export function InvoiceList({
                   <TableCell>{invoice.material}</TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(invoice.payment_status)}>
-                      {invoice.payment_status}
+                      {getStatusLabel(invoice.payment_status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
@@ -173,6 +203,18 @@ export function InvoiceList({
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
+                      
+                      {showApproveButton && invoice.payment_status === 'pending' && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="h-8 w-8 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100"
+                          onClick={() => handleApproveInvoice(invoice.id)}
+                          title="Approve Invoice (to deduct from site balance)"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       
                       {showDeleteButton && (
                         <Button 
@@ -285,7 +327,7 @@ export function InvoiceList({
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground">Payment Status</h3>
                 <Badge className={getStatusColor(selectedInvoice.payment_status)}>
-                  {selectedInvoice.payment_status}
+                  {getStatusLabel(selectedInvoice.payment_status)}
                 </Badge>
               </div>
 

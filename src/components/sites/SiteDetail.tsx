@@ -412,15 +412,43 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
               <Building2 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Site</p>
-              <h1 className="text-xl font-bold leading-tight">{site.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold leading-tight">{site.name}</h1>
+                {site.isCompleted ? (
+                  <span className="badge-success text-xs px-2 py-0.5 rounded-full font-medium">Completed</span>
+                ) : (
+                  <span className="badge-info text-xs px-2 py-0.5 rounded-full font-medium">Active</span>
+                )}
+              </div>
+              {/* Compact meta row */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                {site.jobName && (
+                  <span className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{site.jobName}</span>
+                  </span>
+                )}
+                {site.posNo && (
+                  <span className="text-xs text-muted-foreground">PO: <span className="font-medium text-foreground">{site.posNo}</span></span>
+                )}
+                <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                  <Calendar className="h-3 w-3" />
+                  {format(site.startDate, 'dd MMM yy')}
+                </span>
+                {siteSupervisor && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                    <User className="h-3 w-3" />
+                    {siteSupervisor.name}
+                  </span>
+                )}
+                {site.completionDate && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                    <Check className="h-3 w-3 text-emerald-500" />
+                    {format(site.completionDate, 'dd MMM yy')}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          {site.isCompleted ? (
-            <span className="badge-success text-xs px-2 py-1 rounded-full font-medium">Completed</span>
-          ) : (
-            <span className="badge-info text-xs px-2 py-1 rounded-full font-medium">Active</span>
-          )}
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
@@ -488,48 +516,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         </div>
       )}
 
-      {/* Site Info + Balance */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 bg-white border border-border rounded-lg p-5">
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Job Name</p>
-              <p className="font-semibold text-sm">{site.jobName}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">PO Number</p>
-              <p className="font-semibold text-sm">{site.posNo}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Start Date</p>
-              <p className="font-semibold text-sm flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                {format(site.startDate, 'dd MMM yyyy')}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                {site.isCompleted ? 'Completed On' : 'Est. Completion'}
-              </p>
-              <p className="font-semibold text-sm flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                {site.completionDate ? format(site.completionDate, 'dd MMM yyyy') : '—'}
-              </p>
-            </div>
-            {siteSupervisor && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Supervisor</p>
-                <p className="font-semibold text-sm flex items-center gap-1">
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                  {siteSupervisor.name}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-        <BalanceCard balanceData={siteSummary} siteId={site.id} />
-      </div>
-
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className={`grid grid-cols-2 ${isMobile ? 'w-full' : 'max-w-xs'} mb-4`}>
           <TabsTrigger value="summary">Summary</TabsTrigger>
@@ -544,7 +530,10 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           )}
           {!isFetchingData && (
           <>
-          {/* KPI row */}
+          {/* Balance + KPI row */}
+          <div className="mb-3">
+            <BalanceCard balanceData={siteSummary} siteId={site.id} />
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: 'Total Expenses', value: totalExpenses, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50', border: 'border-l-red-500' },

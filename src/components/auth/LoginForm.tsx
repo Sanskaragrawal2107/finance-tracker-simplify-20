@@ -36,7 +36,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ className }) => {
         <p className="text-sm text-muted-foreground mt-1">
           {isRegistering
             ? 'Fill in the details below to get started'
-            : 'Sign in to your FinTrack account'}
+            : 'Sign in to your MEW account'}
         </p>
       </div>
 

@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import SiteDetailTransactions from './SiteDetailTransactions';
 import { useIsMobile } from '@/hooks/use-mobile';
-import BalanceCard from '../dashboard/BalanceCard';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
@@ -128,11 +127,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const fetchSiteFinancials = async (siteId: string) => {
     setIsFetchingData(true);
     try {
-      const [expRes, advRes, fundsRes, invRes] = await Promise.all([
+      const [expRes, advRes, fundsRes, invRes, supTxnRes] = await Promise.all([
         supabase.from('expenses').select('*').eq('site_id', siteId).order('date', { ascending: false }),
         supabase.from('advances').select('*').eq('site_id', siteId).order('date', { ascending: false }),
         supabase.from('funds_received').select('*').eq('site_id', siteId).order('date', { ascending: false }),
-        supabase.from('site_invoices').select('*').eq('site_id', siteId).order('created_at', { ascending: false }),
+        supabase.from('site_invoices').select('*, approver_type').eq('site_id', siteId).order('created_at', { ascending: false }),
+        supabase.from('supervisor_transactions').select('amount, transaction_type, receiver_site_id, payer_site_id').or(`receiver_site_id.eq.${siteId},payer_site_id.eq.${siteId}`),
       ]);
 
       if (expRes.data) {
@@ -222,14 +222,30 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         .reduce((s: number, a: any) => s + (Number(a.amount) || 0), 0);
       // Only count invoices that have been admin-approved (or paid) toward the balance.
       // Pending invoices are NOT deducted until admin approves them.
+      // Invoices > ₹2000 with approver_type 'ho' are paid by HO/admin — don't deduct from supervisor balance.
       const approvedStatuses = ['approved', 'paid'];
       const invTotal = (invRes.data || [])
-        .filter((inv: any) => approvedStatuses.includes(inv.payment_status))
+        .filter((inv: any) => {
+          if (!approvedStatuses.includes(inv.payment_status)) return false;
+          const amount = Number(inv.net_amount || inv.gross_amount || inv.amount) || 0;
+          if (amount > 2000 && inv.approver_type === 'ho') return false;
+          return true;
+        })
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
       const invPaid = (invRes.data || [])
-        .filter((inv: any) => inv.payment_status === 'paid')
+        .filter((inv: any) => {
+          if (inv.payment_status !== 'paid') return false;
+          const amount = Number(inv.net_amount || inv.gross_amount || inv.amount) || 0;
+          if (amount > 2000 && inv.approver_type === 'ho') return false;
+          return true;
+        })
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
       const invPending = invTotal - invPaid;
+
+      // Supervisor-to-supervisor outgoing payments from this site
+      const advancePaidToSupervisor = (supTxnRes.data || [])
+        .filter((t: any) => t.transaction_type === 'advance_paid' && t.payer_site_id === siteId)
+        .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
 
       setSelfBalanceSummary({
         fundsReceived: fundsTotal,
@@ -238,7 +254,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         debitsToWorker: debitsTotal,
         invoicesPaid: invTotal,   // store total (paid+pending) so KPI card shows correct figure
         pendingInvoices: invPending,
-        totalBalance: fundsTotal - expTotal - advTotal - invTotal - debitsTotal,
+        advancePaidToSupervisor,
+        totalBalance: fundsTotal - expTotal - advTotal - invTotal - advancePaidToSupervisor,
       });
     } catch (err) {
       console.error('Error fetching site financials:', err);
@@ -286,6 +303,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const totalExpenses = siteSummary.totalExpenditure;
   const totalFundsReceived = siteSummary.fundsReceived;
   const totalInvoices = siteSummary.invoicesPaid || 0;
+  const totalSupervisorPayments = siteSummary.advancePaidToSupervisor || 0;
 
   const currentBalance = siteSummary.totalBalance;
 
@@ -530,10 +548,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           )}
           {!isFetchingData && (
           <>
-          {/* Balance + KPI row */}
-          <div className="mb-3">
-            <BalanceCard balanceData={siteSummary} siteId={site.id} />
-          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: 'Total Expenses', value: totalExpenses, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50', border: 'border-l-red-500' },
@@ -590,8 +604,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
               {[
                 { label: 'Total Expenses', value: totalExpenses, sub: `${expenses.length} entries` },
                 { label: 'Total Advances', value: totalAdvances, sub: `${advances.length} entries` },
-                { label: 'Approved Invoices', value: totalInvoices, sub: `${invoices.filter((inv: any) => ['approved','paid'].includes(inv.paymentStatus || '')).length} of ${invoices.length} approved` },
-                { label: 'Debit to Worker', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
+                { label: 'Approved Invoices', value: totalInvoices, sub: `${invoices.filter((inv: any) => ['approved','paid'].includes(inv.paymentStatus || '') && !(Number(inv.netAmount || inv.grossAmount || inv.amount || 0) > 2000 && inv.approverType === 'ho')).length} of ${invoices.length} approved` },
+                { label: 'Advance to worker', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
+                ...(totalSupervisorPayments > 0 ? [{ label: 'Supervisor Payments', value: totalSupervisorPayments, sub: 'Paid to other supervisors' }] : []),
                 { label: 'Funds Received', value: totalFundsReceived, sub: `${fundsReceived.length} entries`, credit: true },
               ].map(({ label, value, sub, credit }) => (
                 <div key={label} className="flex items-center justify-between py-2.5 border-b border-border last:border-0">

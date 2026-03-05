@@ -150,7 +150,7 @@ const AdminSupervisorSites: React.FC = () => {
         supabase.from('expenses').select('amount').eq('site_id', siteId),
         supabase.from('advances').select('amount, purpose').eq('site_id', siteId),
         supabase.from('funds_received').select('amount').eq('site_id', siteId),
-        supabase.from('site_invoices').select('net_amount, gross_amount, payment_status').eq('site_id', siteId),
+        supabase.from('site_invoices').select('net_amount, gross_amount, payment_status, approver_type').eq('site_id', siteId),
         supabase.from('supervisor_transactions').select('amount, transaction_type, receiver_site_id, payer_site_id').or(`receiver_site_id.eq.${siteId},payer_site_id.eq.${siteId}`),
       ]);
 
@@ -174,9 +174,15 @@ const AdminSupervisorSites: React.FC = () => {
         .filter(a => debitPurposes.includes(a.purpose))
         .reduce((s, a) => s + Number(a.amount), 0);
 
-      // Count approved + paid invoices (pending invoices are not yet deducted)
+      // Count approved + paid invoices (pending invoices are not yet deducted).
+      // Invoices > ₹2000 with approver_type 'ho' are paid by HO/admin — don't deduct from supervisor balance.
       const invoicesPaid = (invRes.data || [])
-        .filter(inv => inv.payment_status === 'approved' || inv.payment_status === 'paid')
+        .filter(inv => {
+          if (inv.payment_status !== 'approved' && inv.payment_status !== 'paid') return false;
+          const amount = Number(inv.net_amount || inv.gross_amount || 0);
+          if (amount > 2000 && inv.approver_type === 'ho') return false;
+          return true;
+        })
         .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
 
       const advancePaidToSupervisor = (supTxnRes.data || [])
@@ -185,7 +191,7 @@ const AdminSupervisorSites: React.FC = () => {
 
       const totalBalance =
         (fundsReceived + fundsReceivedFromSupervisor) -
-        (totalExpensesPaid + totalAdvances + invoicesPaid + debitsToWorker + advancePaidToSupervisor);
+        (totalExpensesPaid + totalAdvances + invoicesPaid + advancePaidToSupervisor);
 
       setFinancialSummary({
         fundsReceived,
@@ -490,7 +496,7 @@ const AdminSupervisorSites: React.FC = () => {
                   </p>
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground">Debit to Worker:</span>
+                  <span className="text-xs text-muted-foreground">Advance to worker:</span>
                   <p className="font-medium">
                     ₹{financialSummary.debitsToWorker.toLocaleString('en-IN')}
                   </p>

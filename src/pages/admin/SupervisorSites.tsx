@@ -97,47 +97,8 @@ const AdminSupervisorSites: React.FC = () => {
     
     if (wasHidden) {
       if (selectedSiteId) {
-        // Reset loading states and show toast
-        setLoadingFinancials(false);
-        toast({
-          title: 'Refreshing data',
-          description: 'Data is being refreshed after tab switch'
-        });
-        
-        // Manually trigger a fetch to update the UI
-        supabase
-          .from('site_financial_summary')
-          .select('*')
-          .eq('site_id', selectedSiteId)
-          .single()
-          .then(({ data, error }) => {
-            if (!error && data) {
-              // Get the correct values
-              const fundsReceived = data.funds_received || 0;
-              const fundsReceivedFromSupervisor = data.funds_received_from_supervisor || 0;
-              const totalExpensesPaid = data.total_expenses_paid || 0;
-              const totalAdvancesPaid = data.total_advances_paid || 0;
-              const debitsToWorker = data.debit_to_worker || 0;
-              const invoicesPaid = data.invoices_paid || 0;
-              const advancePaidToSupervisor = data.advance_paid_to_supervisor || 0;
-              
-              // Calculate total balance
-              const updatedTotalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
-                               (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor);
-              
-              setFinancialSummary({
-                fundsReceived,
-                fundsReceivedFromSupervisor,
-                totalExpenditure: totalExpensesPaid,
-                totalAdvances: totalAdvancesPaid,
-                debitsToWorker,
-                invoicesPaid,
-                advancePaidToSupervisor,
-                pendingInvoices: 0,
-                totalBalance: updatedTotalBalance
-              });
-            }
-          });
+        // Re-run the same direct-table calculation used by fetchFinancialSummary
+        fetchFinancialSummary(selectedSiteId);
       } else {
         // Reset loading state
         setLoading(false);
@@ -184,64 +145,59 @@ const AdminSupervisorSites: React.FC = () => {
   const fetchFinancialSummary = async (siteId: string) => {
     setLoadingFinancials(true);
     try {
-      const { data, error } = await supabase
-        .from('site_financial_summary')
-        .select('*')
-        .eq('site_id', siteId)
-        .single();
-        
-      if (error) {
-        console.error('Error fetching financial summary:', error);
-        toast({
-          title: 'Error loading financial summary',
-          description: error.message,
-          variant: 'destructive',
-        });
-        setFinancialSummary(null);
-        return;
-      }
-      
-      if (data) {
-        console.log('Financial summary data received:', data);
-        // Get the correct values
-        const fundsReceived = data.funds_received || 0;
-        const fundsReceivedFromSupervisor = data.funds_received_from_supervisor || 0;
-        const totalExpensesPaid = data.total_expenses_paid || 0;
-        const totalAdvancesPaid = data.total_advances_paid || 0;
-        const debitsToWorker = data.debit_to_worker || 0;
-        const invoicesPaid = data.invoices_paid || 0;
-        const advancePaidToSupervisor = data.advance_paid_to_supervisor || 0;
-        
-        // Calculate total balance
-        const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
-                             (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor);
-        
-        setFinancialSummary({
-          fundsReceived,
-          fundsReceivedFromSupervisor,
-          totalExpenditure: totalExpensesPaid,
-          totalAdvances: totalAdvancesPaid,
-          debitsToWorker,
-          invoicesPaid,
-          advancePaidToSupervisor,
-          pendingInvoices: 0,
-          totalBalance
-        });
-      } else {
-        console.log('No financial summary data found for site:', siteId);
-        // Create empty financial summary with zeros
-        setFinancialSummary({
-          fundsReceived: 0,
-          fundsReceivedFromSupervisor: 0,
-          totalExpenditure: 0,
-          totalAdvances: 0,
-          debitsToWorker: 0,
-          invoicesPaid: 0,
-          advancePaidToSupervisor: 0,
-          pendingInvoices: 0,
-          totalBalance: 0
-        });
-      }
+      // Query raw tables directly — the site_financial_summary view can be stale
+      const [expRes, advRes, fundsRes, invRes, supTxnRes] = await Promise.all([
+        supabase.from('expenses').select('amount').eq('site_id', siteId),
+        supabase.from('advances').select('amount, purpose').eq('site_id', siteId),
+        supabase.from('funds_received').select('amount').eq('site_id', siteId),
+        supabase.from('site_invoices').select('net_amount, gross_amount, payment_status').eq('site_id', siteId),
+        supabase.from('supervisor_transactions').select('amount, transaction_type, receiver_site_id, payer_site_id').or(`receiver_site_id.eq.${siteId},payer_site_id.eq.${siteId}`),
+      ]);
+
+      const debitPurposes = ['safety_shoes', 'tools', 'other'];
+
+      const fundsReceived = (fundsRes.data || [])
+        .reduce((s, f) => s + Number(f.amount), 0);
+
+      const fundsReceivedFromSupervisor = (supTxnRes.data || [])
+        .filter(t => t.transaction_type === 'funds_received' && t.receiver_site_id === siteId)
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      const totalExpensesPaid = (expRes.data || [])
+        .reduce((s, e) => s + Number(e.amount), 0);
+
+      const totalAdvances = (advRes.data || [])
+        .filter(a => !debitPurposes.includes(a.purpose))
+        .reduce((s, a) => s + Number(a.amount), 0);
+
+      const debitsToWorker = (advRes.data || [])
+        .filter(a => debitPurposes.includes(a.purpose))
+        .reduce((s, a) => s + Number(a.amount), 0);
+
+      // Count approved + paid invoices (pending invoices are not yet deducted)
+      const invoicesPaid = (invRes.data || [])
+        .filter(inv => inv.payment_status === 'approved' || inv.payment_status === 'paid')
+        .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
+
+      const advancePaidToSupervisor = (supTxnRes.data || [])
+        .filter(t => t.transaction_type === 'advance_paid' && t.payer_site_id === siteId)
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      const totalBalance =
+        (fundsReceived + fundsReceivedFromSupervisor) -
+        (totalExpensesPaid + totalAdvances + invoicesPaid + debitsToWorker + advancePaidToSupervisor);
+
+      setFinancialSummary({
+        fundsReceived,
+        fundsReceivedFromSupervisor,
+        totalExpenditure: totalExpensesPaid,
+        totalAdvances,
+        debitsToWorker,
+        invoicesPaid,
+        advancePaidToSupervisor,
+        pendingInvoices: 0,
+        totalBalance,
+      });
     } catch (error) {
       console.error('Error in fetchFinancialSummary:', error);
       toast({
@@ -706,173 +662,11 @@ const AdminSupervisorSites: React.FC = () => {
     ? "View and manage all sites assigned to this supervisor"
     : "Manage site transactions and advances";
 
-  // Add a more forceful refresh function that recalculates financial summary
+  // Refresh simply re-runs the same direct-table calculation
   const refreshFinancialData = async () => {
     if (selectedSiteId) {
-      // Clear the current data first 
-      setFinancialSummary(null);
-      setLoadingFinancials(true);
-      
-      try {
-        // First try to force an update in the database with a stored procedure
-        await supabase.rpc('update_site_financial_summary_for_id', { site_id_param: selectedSiteId });
-        
-        // Now fetch the updated data
-        const { data, error } = await supabase
-          .from('site_financial_summary')
-          .select('*')
-          .eq('site_id', selectedSiteId)
-          .single();
-          
-        if (error) throw error;
-        
-        if (data) {
-          console.log('Fresh financial data received after forced update:', data);
-          // Get the correct values
-          const fundsReceived = data.funds_received || 0;
-          const fundsReceivedFromSupervisor = data.funds_received_from_supervisor || 0;
-          const totalExpensesPaid = data.total_expenses_paid || 0;
-          const totalAdvancesPaid = data.total_advances_paid || 0;
-          const debitsToWorker = data.debit_to_worker || 0;
-          const invoicesPaid = data.invoices_paid || 0;
-          const advancePaidToSupervisor = data.advance_paid_to_supervisor || 0;
-          
-          // Calculate total balance
-          const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
-                               (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor);
-          
-          setFinancialSummary({
-            fundsReceived,
-            fundsReceivedFromSupervisor,
-            totalExpenditure: totalExpensesPaid,
-            totalAdvances: totalAdvancesPaid,
-            debitsToWorker,
-            invoicesPaid,
-            advancePaidToSupervisor,
-            pendingInvoices: 0,
-            totalBalance
-          });
-          
-          // Show success toast
-          toast({
-            title: 'Financial data recalculated',
-            description: 'The latest financial information has been loaded',
-          });
-        }
-      } catch (error) {
-        console.error('Error refreshing financial summary:', error);
-        
-        // Fallback to direct table fetching if stored procedure fails
-        try {
-          // Let's query all the transaction tables directly
-          const [
-            { data: fundsData, error: fundsError },
-            { data: fundsFromSupData, error: fundsFromSupError },
-            { data: expensesData, error: expensesError },
-            { data: advancesData, error: advancesError },
-            { data: invoicesData, error: invoicesError },
-            { data: advancePaidData, error: advancePaidError },
-          ] = await Promise.all([
-            // Funds received from HO
-            supabase
-              .from('funds_received')
-              .select('amount')
-              .eq('site_id', selectedSiteId),
-            
-            // Funds received from supervisor
-            supabase
-              .from('supervisor_transactions')
-              .select('amount')
-              .eq('receiver_site_id', selectedSiteId)
-              .eq('transaction_type', 'funds_received'),
-            
-            // Expenses
-            supabase
-              .from('expenses')
-              .select('amount')
-              .eq('site_id', selectedSiteId),
-            
-            // Advances
-            supabase
-              .from('advances')
-              .select('amount, purpose')
-              .eq('site_id', selectedSiteId),
-            
-            // Invoices
-            supabase
-              .from('site_invoices')
-              .select('net_amount')
-              .eq('site_id', selectedSiteId)
-              .eq('payment_status', 'paid'),
-            
-            // Advance paid to supervisor
-            supabase
-              .from('supervisor_transactions')
-              .select('amount')
-              .eq('payer_site_id', selectedSiteId)
-              .eq('transaction_type', 'advance_paid'),
-          ]);
-          
-          if (fundsError || fundsFromSupError || expensesError || advancesError || invoicesError || advancePaidError) {
-            throw new Error("Error fetching transaction data");
-          }
-          
-          // Calculate values
-          const fundsReceived = fundsData ? 
-            fundsData.reduce((sum, item) => sum + Number(item.amount), 0) : 0;
-            
-          const fundsReceivedFromSupervisor = fundsFromSupData ? 
-            fundsFromSupData.reduce((sum, item) => sum + Number(item.amount), 0) : 0;
-            
-          const totalExpensesPaid = expensesData ? 
-            expensesData.reduce((sum, item) => sum + Number(item.amount), 0) : 0;
-            
-          const totalAdvances = advancesData ? 
-            advancesData.filter(a => a.purpose === 'advance')
-              .reduce((sum, item) => sum + Number(item.amount), 0) : 0;
-            
-          const debitsToWorker = advancesData ? 
-            advancesData.filter(a => a.purpose !== 'advance')
-              .reduce((sum, item) => sum + Number(item.amount), 0) : 0;
-            
-          const invoicesPaid = invoicesData ? 
-            invoicesData.reduce((sum, item) => sum + Number(item.net_amount), 0) : 0;
-            
-          const advancePaidToSupervisor = advancePaidData ? 
-            advancePaidData.reduce((sum, item) => sum + Number(item.amount), 0) : 0;
-          
-          // Calculate total balance
-          const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
-                               (totalExpensesPaid + totalAdvances + invoicesPaid + advancePaidToSupervisor);
-          
-          setFinancialSummary({
-            fundsReceived,
-            fundsReceivedFromSupervisor,
-            totalExpenditure: totalExpensesPaid,
-            totalAdvances,
-            debitsToWorker,
-            invoicesPaid,
-            advancePaidToSupervisor,
-            pendingInvoices: 0,
-            totalBalance
-          });
-          
-          // Show success toast
-          toast({
-            title: 'Financial data recalculated',
-            description: 'The latest financial information has been loaded directly from transactions',
-          });
-        } catch (fallbackError) {
-          console.error('Error with fallback financial calculation:', fallbackError);
-          toast({
-            title: 'Error refreshing data',
-            description: 'Could not fetch the latest financial information',
-            variant: 'destructive',
-          });
-        }
-      } finally {
-        setLoadingFinancials(false);
-      }
+      await fetchFinancialSummary(selectedSiteId);
+      toast({ title: 'Financial data refreshed', description: 'Balance updated from latest transactions.' });
     }
   };
 

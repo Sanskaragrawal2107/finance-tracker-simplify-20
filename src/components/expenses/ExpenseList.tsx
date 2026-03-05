@@ -163,7 +163,13 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               <TableBody>
                 {expenses.map((expense) => (
                   <TableRow key={expense.id}>
-                    <TableCell>{new Date(expense.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {expense.date
+                        ? format(new Date(expense.date), 'dd/MM/yyyy')
+                        : expense.created_at
+                          ? format(new Date(expense.created_at), 'dd/MM/yyyy')
+                          : '—'}
+                    </TableCell>
                     <TableCell>{expense.category || 'General'}</TableCell>
                     <TableCell>{expense.description}</TableCell>
                     <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>

@@ -37,7 +37,7 @@ BEGIN
   FROM expenses
   WHERE site_id = site_id_param;
   
-  -- Calculate total advances (excluding Advance to worker items)
+  -- Calculate total advances (excluding debit to worker(directly deduct by ho) items)
   SELECT COALESCE(SUM(amount), 0) INTO advances_total
   FROM advances
   WHERE site_id = site_id_param AND purpose = 'advance';
@@ -47,7 +47,7 @@ BEGIN
   FROM supervisor_transactions
   WHERE payer_site_id = site_id_param AND transaction_type = 'advance_paid';
   
-  -- Calculate Advance to worker (tools, others, safety_shoes)
+  -- Calculate debit to worker(directly deduct by ho) (tools, others, safety_shoes)
   SELECT COALESCE(SUM(amount), 0) INTO debit_to_worker_total
   FROM advances
   WHERE site_id = site_id_param AND purpose IN ('tools', 'safety_shoes', 'other');

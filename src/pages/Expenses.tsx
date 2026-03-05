@@ -753,7 +753,7 @@ const Expenses: React.FC = () => {
           .filter(fund => fund.source === 'SUPERVISOR' || fund.source === 'supervisor')
           .reduce((sum, fund) => sum + fund.amount, 0);
         
-        // Calculate total advances (excluding Advance to worker)
+        // Calculate total advances (excluding debit to worker(directly deduct by ho))
         const totalAdvances = advances.reduce((sum, advance) => {
           if (!DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;
@@ -761,7 +761,7 @@ const Expenses: React.FC = () => {
           return sum;
         }, 0);
         
-        // Calculate total Advance to worker advances
+        // Calculate total debit to worker(directly deduct by ho) advances
         const totalDebitToWorker = advances.reduce((sum, advance) => {
           if (DEBIT_ADVANCE_PURPOSES.includes(advance.purpose)) {
             return sum + advance.amount;

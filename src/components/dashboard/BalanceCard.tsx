@@ -166,7 +166,7 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
             { label: 'Advances paid',                value: safeBalanceData.totalAdvances,             type: 'debit' },
             { label: 'Invoices paid',                value: safeBalanceData.invoicesPaid,              type: 'debit' },
             { label: 'Advance to Supervisor',        value: safeBalanceData.advancePaidToSupervisor,   type: 'debit' },
-            { label: 'Advance to worker',              value: safeBalanceData.debitsToWorker,            type: 'debit' },
+            { label: 'debit to worker(directly deduct by ho)',              value: safeBalanceData.debitsToWorker,            type: 'debit' },
           ].map(({ label, value, type }) => (
             <div key={label} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
               <div className="flex items-center gap-2">

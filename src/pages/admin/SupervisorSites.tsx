@@ -503,7 +503,7 @@ const AdminSupervisorSites: React.FC = () => {
                   </p>
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground">Advance to worker:</span>
+                  <span className="text-xs text-muted-foreground">debit to worker(directly deduct by ho):</span>
                   <p className="font-medium">
                     ₹{financialSummary.debitsToWorker.toLocaleString('en-IN')}
                   </p>

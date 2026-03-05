@@ -178,14 +178,14 @@ export function AdvanceList({
                     <TableCell>{format(new Date(advance.date), 'PPP')}</TableCell>
                     {!isAdminView && (
                       <TableCell>
-                        {advance.recipient_name}
+                        {advance.recipient_name || advance.recipientName || '—'}
                         <Badge className="ml-2" variant="outline">
-                          {advance.recipient_type}
+                          {advance.recipient_type || advance.recipientType}
                         </Badge>
                       </TableCell>
                     )}
                     <TableCell>{advance.purpose}</TableCell>
-                    <TableCell>{advance.remarks || '-'}</TableCell>
+                    <TableCell>{advance.remarks || '—'}</TableCell>
                     <TableCell className="text-right">
                       {formatCurrency(advance.amount)}
                     </TableCell>

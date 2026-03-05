@@ -531,7 +531,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             <Plus className="h-3.5 w-3.5" /> Add Expense
           </Button>
           <Button onClick={() => openForm('advance', setIsAdvanceFormOpen)} variant="outline" size="sm" className="gap-1.5">
-            <CreditCard className="h-3.5 w-3.5" /> Add Advance
+            <CreditCard className="h-3.5 w-3.5" /> Advance to Worker/Subcontractor
           </Button>
           <Button onClick={() => openForm('supAdv', setShowSupervisorAdvanceForm)} variant="outline" size="sm" className="gap-1.5">
             <SendHorizontal className="h-3.5 w-3.5" /> Supervisor Advance
@@ -616,7 +616,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                 { label: 'Total Expenses', value: totalExpenses, sub: `${expenses.length} entries` },
                 { label: 'Total Advances', value: totalAdvances, sub: `${advances.length} entries` },
                 { label: 'Approved Invoices', value: totalInvoices, sub: `${invoices.filter((inv: any) => ['approved','paid'].includes(inv.paymentStatus || '') && !(Number(inv.netAmount || inv.grossAmount || inv.amount || 0) > 2000 && inv.approverType === 'ho')).length} of ${invoices.length} approved` },
-                { label: 'debit to worker(directly deduct by ho)', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
+                { label: 'Debit to worker(directly deduct by ho)', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
                 ...(totalSupervisorPayments > 0 ? [{ label: 'Supervisor Payments', value: totalSupervisorPayments, sub: 'Paid to other supervisors' }] : []),
                 { label: 'Funds Received', value: totalFundsReceived, sub: `${fundsReceived.length} entries`, credit: true },
                 { label: 'Funds from Supervisor', value: totalFundsFromSupervisor, sub: 'Received from other supervisors', credit: true },

@@ -373,10 +373,10 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value={AdvancePurpose.ADVANCE}>Advance</SelectItem>
-                      <SelectItem value={AdvancePurpose.SAFETY_SHOES}>Safety Shoes</SelectItem>
-                      <SelectItem value={AdvancePurpose.TOOLS}>Tools</SelectItem>
-                      <SelectItem value={AdvancePurpose.OTHER}>Other</SelectItem>
+                      <SelectItem value={AdvancePurpose.ADVANCE}>Advance to Worker/Subcontractor</SelectItem>
+                      <SelectItem value={AdvancePurpose.SAFETY_SHOES}>Safety Shoes (debit)</SelectItem>
+                      <SelectItem value={AdvancePurpose.TOOLS}>Tools (debit)</SelectItem>
+                      <SelectItem value={AdvancePurpose.OTHER}>Others (debit)</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -447,7 +447,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
                 ) : (
                   <>
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Advance
+                    Add Advance to Worker/Subcontractor
                   </>
                 )}
               </Button>

@@ -5,12 +5,13 @@ import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { User, Users, Building2, UserPlus, Loader2, CheckCircle2, Clock, TrendingUp, Plus, Eye, Download, FileSpreadsheet } from 'lucide-react';
+import { User, Users, Building2, UserPlus, Loader2, CheckCircle2, Clock, TrendingUp, Plus, Eye, Download, FileSpreadsheet, Briefcase, Trash2 } from 'lucide-react';
 import { exportBankPayment } from '@/utils/exportBankPayment';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, format as fnsFormat } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { UserRole } from '@/lib/types';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -40,6 +41,14 @@ const AdminDashboard: React.FC = () => {
   const [isExportingInvoices, setIsExportingInvoices] = useState(false);
   type InvoiceFilter = 'today' | 'month' | 'all';
   const [invoiceExportFilter, setInvoiceExportFilter] = useState<InvoiceFilter>('all');
+
+  // Subcontractor management
+  interface SubcontractorRow { id: string; name: string; contact_info: string; }
+  const [subcontractors, setSubcontractors] = useState<SubcontractorRow[]>([]);
+  const [isSubFormOpen, setIsSubFormOpen] = useState(false);
+  const [subName, setSubName] = useState('');
+  const [subContact, setSubContact] = useState('');
+  const [isSavingSub, setIsSavingSub] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const {
@@ -49,6 +58,32 @@ const AdminDashboard: React.FC = () => {
   // Stable refs to prevent re-binding event handlers
   const buttonsEnabledRef = useRef(true);
   const lastFetchTimeRef = useRef(0);
+
+  const fetchSubcontractors = useCallback(async () => {
+    const { data, error } = await supabase.from('contractors').select('id, name, contact_info').order('name');
+    if (error) { console.error('Error fetching subcontractors:', error); return; }
+    setSubcontractors(data || []);
+  }, []);
+
+  useEffect(() => { fetchSubcontractors(); }, [fetchSubcontractors]);
+
+  const handleAddSubcontractor = async () => {
+    if (!subName.trim()) { toast.error('Name is required'); return; }
+    setIsSavingSub(true);
+    const { error } = await supabase.from('contractors').insert({ name: subName.trim(), contact_info: subContact.trim() || '-' });
+    setIsSavingSub(false);
+    if (error) { toast.error('Failed to add subcontractor: ' + error.message); return; }
+    toast.success('Subcontractor added');
+    setSubName(''); setSubContact(''); setIsSubFormOpen(false);
+    fetchSubcontractors();
+  };
+
+  const handleDeleteSubcontractor = async (id: string) => {
+    const { error } = await supabase.from('contractors').delete().eq('id', id);
+    if (error) { toast.error('Failed to delete: ' + error.message); return; }
+    toast.success('Subcontractor removed');
+    setSubcontractors(prev => prev.filter(s => s.id !== id));
+  };
   const fetchSupervisorsAndSites = useCallback(async () => {
     const now = Date.now();
     // Prevent rapid successive calls
@@ -596,6 +631,93 @@ const AdminDashboard: React.FC = () => {
             </div>
           </button>
         </div>
+      </div>
+
+      {/* ── Subcontractor Management ──────────────────────────────────────── */}
+      <div className="bg-white rounded-lg border border-border/60 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Subcontractors</p>
+            <p className="text-sm font-semibold text-foreground mt-0.5">Manage Subcontractors</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Subcontractors added here appear in advance forms</p>
+          </div>
+          <Button size="sm" onClick={() => setIsSubFormOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Subcontractor
+          </Button>
+        </div>
+
+        {isSubFormOpen && (
+          <div className="mb-4 p-4 border border-border/60 rounded-lg bg-muted/20 space-y-3">
+            <p className="text-sm font-semibold">New Subcontractor</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Name *</label>
+                <Input
+                  placeholder="Subcontractor name"
+                  value={subName}
+                  onChange={(e) => setSubName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Contact / Info</label>
+                <Input
+                  placeholder="Phone or other info (optional)"
+                  value={subContact}
+                  onChange={(e) => setSubContact(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleAddSubcontractor} disabled={isSavingSub}>
+                {isSavingSub ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Save
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => { setIsSubFormOpen(false); setSubName(''); setSubContact(''); }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {subcontractors.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <Briefcase className="h-8 w-8 mb-2 opacity-30" />
+            <p className="text-sm">No subcontractors yet</p>
+            <p className="text-xs mt-1">Click <strong>Add Subcontractor</strong> to get started.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/50 bg-muted/30">
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact / Info</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subcontractors.map((sub) => (
+                  <tr key={sub.id} className="border-b border-border/30 last:border-0 hover:bg-muted/10 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-full bg-violet-50 flex items-center justify-center flex-shrink-0">
+                          <Briefcase className="h-3.5 w-3.5 text-violet-600" />
+                        </div>
+                        <span className="font-medium">{sub.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{sub.contact_info === '-' ? '—' : sub.contact_info}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteSubcontractor(sub.id)}>
+                        <Trash2 className="h-3 w-3 mr-1" /> Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ── Forms ─────────────────────────────────────────────────────── */}

@@ -79,9 +79,11 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           <TabsTrigger value="invoices" className="flex-shrink-0">
             Invoices {invoicesCount > 0 && `(${invoicesCount})`}
           </TabsTrigger>
-          <TabsTrigger value="supervisorTransactions" className="flex-shrink-0">
-            Supervisor Transactions
-          </TabsTrigger>
+          {!isAdminView && (
+            <TabsTrigger value="supervisorTransactions" className="flex-shrink-0">
+              Supervisor Transactions
+            </TabsTrigger>
+          )}
         </TabsList>
         
         <TabsContent value="expenses">
@@ -140,17 +142,19 @@ const SiteDetailTransactions: React.FC<SiteDetailTransactionsProps> = ({
           )}
         </TabsContent>
         
-        <TabsContent value="supervisorTransactions">
-          {activeTab === "supervisorTransactions" && (
-            <div key={getTabKey('supervisorTransactions')}>
-              <SupervisorTransactionHistory 
-                siteId={siteId} 
-                isAdminView={isAdminView} 
-                onTransactionsUpdate={onTransactionsUpdate}
-              />
-            </div>
-          )}
-        </TabsContent>
+        {!isAdminView && (
+          <TabsContent value="supervisorTransactions">
+            {activeTab === "supervisorTransactions" && (
+              <div key={getTabKey('supervisorTransactions')}>
+                <SupervisorTransactionHistory 
+                  siteId={siteId} 
+                  isAdminView={isAdminView} 
+                  onTransactionsUpdate={onTransactionsUpdate}
+                />
+              </div>
+            )}
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

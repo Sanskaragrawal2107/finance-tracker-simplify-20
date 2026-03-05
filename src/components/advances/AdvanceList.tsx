@@ -165,7 +165,7 @@ export function AdvanceList({
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Recipient</TableHead>
+                  {!isAdminView && <TableHead>Recipient</TableHead>}
                   <TableHead>Purpose</TableHead>
                   <TableHead>Remarks</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
@@ -176,12 +176,14 @@ export function AdvanceList({
                 {advances.map((advance) => (
                   <TableRow key={advance.id}>
                     <TableCell>{format(new Date(advance.date), 'PPP')}</TableCell>
-                    <TableCell>
-                      {advance.recipient_name}
-                      <Badge className="ml-2" variant="outline">
-                        {advance.recipient_type}
-                      </Badge>
-                    </TableCell>
+                    {!isAdminView && (
+                      <TableCell>
+                        {advance.recipient_name}
+                        <Badge className="ml-2" variant="outline">
+                          {advance.recipient_type}
+                        </Badge>
+                      </TableCell>
+                    )}
                     <TableCell>{advance.purpose}</TableCell>
                     <TableCell>{advance.remarks || '-'}</TableCell>
                     <TableCell className="text-right">

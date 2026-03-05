@@ -86,7 +86,11 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const handleExportExcel = async () => {
     setIsExporting(true);
     try {
-      await exportSiteExcel(site, expenses, advances, fundsReceived);
+      const { data: supTxns } = await supabase
+        .from('supervisor_transactions')
+        .select('*, payer_site:sites!supervisor_transactions_payer_site_id_fkey(name), receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)')
+        .or(`receiver_site_id.eq.${site.id},payer_site_id.eq.${site.id}`);
+      await exportSiteExcel(site, expenses, advances, fundsReceived, invoices as any[], supTxns || [], site.id);
     } catch (err) {
       console.error('Export failed:', err);
       toast.error('Failed to export Excel file');
@@ -244,18 +248,24 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 
       // Supervisor-to-supervisor outgoing payments from this site
       const advancePaidToSupervisor = (supTxnRes.data || [])
-        .filter((t: any) => t.transaction_type === 'advance_paid' && t.payer_site_id === siteId)
+        .filter((t: any) => t.payer_site_id === siteId)
+        .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+
+      // Supervisor-to-supervisor incoming payments to this site
+      const fundsReceivedFromSupervisor = (supTxnRes.data || [])
+        .filter((t: any) => t.receiver_site_id === siteId)
         .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
 
       setSelfBalanceSummary({
         fundsReceived: fundsTotal,
+        fundsReceivedFromSupervisor,
         totalExpenditure: expTotal,
         totalAdvances: advTotal,
         debitsToWorker: debitsTotal,
-        invoicesPaid: invTotal,   // store total (paid+pending) so KPI card shows correct figure
+        invoicesPaid: invTotal,
         pendingInvoices: invPending,
         advancePaidToSupervisor,
-        totalBalance: fundsTotal - expTotal - advTotal - invTotal - advancePaidToSupervisor,
+        totalBalance: (fundsTotal + fundsReceivedFromSupervisor) - expTotal - advTotal - invTotal - advancePaidToSupervisor,
       });
     } catch (err) {
       console.error('Error fetching site financials:', err);
@@ -302,6 +312,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 
   const totalExpenses = siteSummary.totalExpenditure;
   const totalFundsReceived = siteSummary.fundsReceived;
+  const totalFundsFromSupervisor = siteSummary.fundsReceivedFromSupervisor || 0;
   const totalInvoices = siteSummary.invoicesPaid || 0;
   const totalSupervisorPayments = siteSummary.advancePaidToSupervisor || 0;
 
@@ -608,6 +619,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                 { label: 'Advance to worker', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
                 ...(totalSupervisorPayments > 0 ? [{ label: 'Supervisor Payments', value: totalSupervisorPayments, sub: 'Paid to other supervisors' }] : []),
                 { label: 'Funds Received', value: totalFundsReceived, sub: `${fundsReceived.length} entries`, credit: true },
+                { label: 'Funds from Supervisor', value: totalFundsFromSupervisor, sub: 'Received from other supervisors', credit: true },
               ].map(({ label, value, sub, credit }) => (
                 <div key={label} className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
                   <div>

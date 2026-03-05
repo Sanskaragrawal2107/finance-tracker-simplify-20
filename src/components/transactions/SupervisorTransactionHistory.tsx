@@ -236,23 +236,25 @@ export function SupervisorTransactionHistory({
     setShowDeleteDialog(true);
   };
 
-  const formatTransactionType = (type: string) => {
-    switch (type) {
+  const formatTransactionType = (transaction: any) => {
+    const isReceiver = transaction.receiver_site_id === siteId;
+    switch (transaction.transaction_type) {
       case 'advance_paid':
-        return 'Advance Paid';
+        return isReceiver ? 'Advance Received' : 'Advance Paid';
       case 'funds_received':
-        return 'Funds Received';
+        return isReceiver ? 'Funds Received' : 'Funds Sent';
       default:
-        return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return transaction.transaction_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
     }
   };
 
-  const getTransactionTypeColor = (type: string) => {
-    switch (type) {
+  const getTransactionTypeColor = (transaction: any) => {
+    const isReceiver = transaction.receiver_site_id === siteId;
+    switch (transaction.transaction_type) {
       case 'advance_paid':
-        return 'bg-red-100 text-red-800';
+        return isReceiver ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
       case 'funds_received':
-        return 'bg-green-100 text-green-800';
+        return isReceiver ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -297,8 +299,8 @@ export function SupervisorTransactionHistory({
                       {transaction.receiver_site?.name || '-'} ({transaction.receiver_supervisor?.name || 'Unknown'})
                 </TableCell>
                 <TableCell>
-                      <Badge className={getTransactionTypeColor(transaction.transaction_type)} variant="outline">
-                        {formatTransactionType(transaction.transaction_type)}
+                      <Badge className={getTransactionTypeColor(transaction)} variant="outline">
+                        {formatTransactionType(transaction)}
                   </Badge>
                 </TableCell>
                     <TableCell className="text-right">

@@ -73,6 +73,9 @@ export async function exportSiteExcel(
   expenses: Expense[],
   advances: Advance[],
   fundsReceived: FundsReceived[],
+  invoices: any[] = [],
+  supervisorTransactions: any[] = [],
+  siteId?: string,
 ) {
   const workbook  = new ExcelJS.Workbook();
   const ws        = workbook.addWorksheet('Site Report');
@@ -134,7 +137,7 @@ export async function exportSiteExcel(
     [COL.HO_DESC1, 'ADVANCE RECEIVED BY\nSITE SUPERVISOR'],
     [COL.HO_AMT1,  'AMOUNT'],
     [COL.HO_DATE2, 'DATE'],
-    [COL.HO_DESC2, 'ADVANCE PAID TO PARTY\nDIRECT BY H.O.'],
+    [COL.HO_DESC2, 'FUNDS RECEIVED FROM\nSUPERVISOR SITE'],
     [COL.HO_AMT2,  'AMOUNT'],
     [COL.EX_DATE,  'DATE'],
     [COL.EX_DESC,  'FOR WHAT EXPENSES'],
@@ -162,13 +165,43 @@ export async function exportSiteExcel(
 
   // Split advances into subcontractor vs direct labour / worker
   const subContrAdv = advances.filter(a => a.recipientType === 'subcontractor');
-  const workerAdv   = advances.filter(a => a.recipientType === 'worker');
+  const workerAdv   = advances.filter(a => a.recipientType === 'worker' || !a.recipientType);
+
+  // Combine expenses + approved invoices for the Expenditure section
+  const approvedInvoices = invoices.filter(inv =>
+    inv.payment_status === 'approved' || inv.payment_status === 'paid'
+  );
+  const expenditureItems = [
+    ...expenses.map(e => ({
+      date: e.date,
+      description: e.description,
+      category: String(e.category).toUpperCase(),
+      amount: Number(e.amount),
+    })),
+    ...approvedInvoices.map(inv => ({
+      date: inv.date || inv.created_at,
+      description: inv.party_name || inv.vendor_name || 'Invoice',
+      category: 'INVOICE',
+      amount: Number(inv.net_amount || inv.gross_amount || inv.amount) || 0,
+    })),
+  ].sort((a, b) => new Date(a.date as any).getTime() - new Date(b.date as any).getTime());
+
+  // Supervisor outgoing payments (this site paid another site)
+  const supervisorPaymentsOut = supervisorTransactions.filter(
+    t => siteId && t.payer_site_id === siteId
+  );
+  // Supervisor incoming payments (this site received from another site)
+  const supervisorPaymentsIn = supervisorTransactions.filter(
+    t => siteId && t.receiver_site_id === siteId
+  );
 
   const maxRows = Math.max(
     fundsReceived.length,
-    expenses.length,
+    supervisorPaymentsIn.length,
+    expenditureItems.length,
     subContrAdv.length,
     workerAdv.length,
+    supervisorPaymentsOut.length,
     1,
   );
 
@@ -194,35 +227,41 @@ export async function exportSiteExcel(
     applyDataStyle(c3, true);
     if (fund) hoTotal1 += Number(fund.amount);
 
-    // Right side of HO section (HO direct payments to party) – left blank for now
+    // Right side of HO section: Funds received from another supervisor
+    const supIn = supervisorPaymentsIn[i];
     const c4 = ws.getCell(rowNum, COL.HO_DATE2);
-    c4.value = ''; applyDataStyle(c4);
+    c4.value = supIn ? fmtDate(supIn.date) : '';
+    applyDataStyle(c4);
     const c5 = ws.getCell(rowNum, COL.HO_DESC2);
-    c5.value = ''; applyDataStyle(c5);
+    c5.value = supIn ? `From: ${supIn.payer_site?.name || supIn.payer_site_id}` : '';
+    applyDataStyle(c5);
     const c6 = ws.getCell(rowNum, COL.HO_AMT2);
-    c6.value = ''; applyDataStyle(c6, true);
+    c6.value = supIn ? Number(supIn.amount) : '';
+    c6.numFmt = '₹#,##0.00';
+    applyDataStyle(c6, true);
+    if (supIn) hoTotal2 += Number(supIn.amount);
 
-    // --- Section 2: Expenditure -------------------------------------------
-    const exp = expenses[i];
+    // --- Section 2: Expenditure (expenses + approved invoices) ------------
+    const expItem = expenditureItems[i];
     const c7 = ws.getCell(rowNum, COL.EX_DATE);
-    c7.value = exp ? fmtDate(exp.date) : '';
+    c7.value = expItem ? fmtDate(expItem.date) : '';
     applyDataStyle(c7);
 
     const c8 = ws.getCell(rowNum, COL.EX_DESC);
-    c8.value = exp ? exp.description : '';
+    c8.value = expItem ? expItem.description : '';
     applyDataStyle(c8);
 
     const c9 = ws.getCell(rowNum, COL.EX_HEAD);
-    c9.value = exp ? String(exp.category).toUpperCase() : '';
+    c9.value = expItem ? expItem.category : '';
     applyDataStyle(c9);
 
     const c10 = ws.getCell(rowNum, COL.EX_AMT);
-    c10.value = exp ? Number(exp.amount) : '';
+    c10.value = expItem ? expItem.amount : '';
     c10.numFmt = '₹#,##0.00';
     applyDataStyle(c10, true);
-    if (exp) exTotal += Number(exp.amount);
+    if (expItem) exTotal += expItem.amount;
 
-    // --- Section 3: Advance on site ---------------------------------------
+    // --- Section 3: Advance on site (sub-contractor + worker) -------------
     const subAdv = subContrAdv[i];
     const wrkAdv = workerAdv[i];
 
@@ -286,6 +325,41 @@ export async function exportSiteExcel(
   totalCell(totalRow, COL.AD_DATE2, 'TOTAL', false);
   ws.mergeCells(totalRow, COL.AD_DATE2, totalRow, COL.AD_DESC2);
   totalCell(totalRow, COL.AD_AMT2, adTotal2, true);
+
+  // ── Supervisor Payments Out summary ────────────────────────────────────────
+  if (supervisorPaymentsOut.length > 0) {
+    const supOutHeaderRow = totalRow + 2;
+    ws.getRow(supOutHeaderRow).height = 18;
+    const supHeader = ws.getCell(supOutHeaderRow, COL.AD_DATE1);
+    supHeader.value = 'ADVANCE PAID TO SUPERVISOR SITES';
+    supHeader.fill = fill('FFFFE0CC');
+    supHeader.font = { bold: true, size: 10 };
+    supHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+    border(supHeader);
+    ws.mergeCells(supOutHeaderRow, COL.AD_DATE1, supOutHeaderRow, COL.AD_AMT2);
+
+    let supOutTotal = 0;
+    supervisorPaymentsOut.forEach((t, idx) => {
+      const rn = supOutHeaderRow + 1 + idx;
+      ws.getRow(rn).height = 16;
+      const d = ws.getCell(rn, COL.AD_DATE1); d.value = fmtDate(t.date); applyDataStyle(d);
+      const desc = ws.getCell(rn, COL.AD_DESC1);
+      desc.value = `To: ${t.receiver_site?.name || t.receiver_site_id}`;
+      applyDataStyle(desc);
+      ws.mergeCells(rn, COL.AD_DESC1, rn, COL.AD_DATE2);
+      const amt = ws.getCell(rn, COL.AD_AMT2);
+      amt.value = Number(t.amount);
+      amt.numFmt = '₹#,##0.00';
+      applyDataStyle(amt, true);
+      supOutTotal += Number(t.amount);
+    });
+
+    const supTotalRow = supOutHeaderRow + supervisorPaymentsOut.length + 1;
+    ws.getRow(supTotalRow).height = 18;
+    totalCell(supTotalRow, COL.AD_DATE1, 'TOTAL SUPERVISOR PAYMENTS', false);
+    ws.mergeCells(supTotalRow, COL.AD_DATE1, supTotalRow, COL.AD_DATE2);
+    totalCell(supTotalRow, COL.AD_AMT2, supOutTotal, true);
+  }
 
   // ── Download ───────────────────────────────────────────────────────────────
   const buffer   = await workbook.xlsx.writeBuffer();

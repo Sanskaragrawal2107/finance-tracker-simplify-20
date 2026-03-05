@@ -160,7 +160,7 @@ const AdminSupervisorSites: React.FC = () => {
         .reduce((s, f) => s + Number(f.amount), 0);
 
       const fundsReceivedFromSupervisor = (supTxnRes.data || [])
-        .filter(t => t.transaction_type === 'funds_received' && t.receiver_site_id === siteId)
+        .filter(t => t.receiver_site_id === siteId)
         .reduce((s, t) => s + Number(t.amount), 0);
 
       const totalExpensesPaid = (expRes.data || [])
@@ -186,7 +186,7 @@ const AdminSupervisorSites: React.FC = () => {
         .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
 
       const advancePaidToSupervisor = (supTxnRes.data || [])
-        .filter(t => t.transaction_type === 'advance_paid' && t.payer_site_id === siteId)
+        .filter(t => t.payer_site_id === siteId)
         .reduce((s, t) => s + Number(t.amount), 0);
 
       const totalBalance =
@@ -349,13 +349,17 @@ const AdminSupervisorSites: React.FC = () => {
         { data: expenses, error: expError },
         { data: advances, error: advError },
         { data: funds, error: fundsError },
+        { data: invoices, error: invError },
+        { data: supTxns, error: supTxnError },
       ] = await Promise.all([
         supabase.from('expenses').select('*').eq('site_id', selectedSiteId),
         supabase.from('advances').select('*').eq('site_id', selectedSiteId),
         supabase.from('funds_received').select('*').eq('site_id', selectedSiteId),
+        supabase.from('site_invoices').select('*').eq('site_id', selectedSiteId),
+        supabase.from('supervisor_transactions').select('*, payer_site:sites!supervisor_transactions_payer_site_id_fkey(name), receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)').or(`receiver_site_id.eq.${selectedSiteId},payer_site_id.eq.${selectedSiteId}`),
       ]);
 
-      if (expError || advError || fundsError) {
+      if (expError || advError || fundsError || invError || supTxnError) {
         throw new Error('Failed to fetch transaction data');
       }
 
@@ -364,6 +368,9 @@ const AdminSupervisorSites: React.FC = () => {
         expenses || [],
         advances || [],
         funds || [],
+        invoices || [],
+        supTxns || [],
+        selectedSiteId,
       );
       
       toast({

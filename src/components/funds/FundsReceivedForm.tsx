@@ -205,7 +205,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
                           )}
                         >
                           {field.value ? (
-                            format(field.value, "PPP").toUpperCase()
+                            format(field.value, "dd/MM/yyyy")
                           ) : (
                             <span>SELECT A DATE</span>
                           )}

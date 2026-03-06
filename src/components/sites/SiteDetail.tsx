@@ -209,6 +209,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           vendorName: inv.vendor_name,
           invoiceNumber: inv.invoice_number,
           amount: Number(inv.net_amount) || 0,
+          approverType: inv.approver_type || '',
         })));
       }
 

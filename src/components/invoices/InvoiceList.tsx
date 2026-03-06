@@ -222,7 +222,7 @@ export function InvoiceList({
             {invoices.length > 0 ? (
               invoices.map((invoice) => (
                 <TableRow key={invoice.id}>
-                  <TableCell>{format(new Date(invoice.date), 'PPP')}</TableCell>
+                  <TableCell>{format(new Date(invoice.date), 'dd/MM/yyyy')}</TableCell>
                   <TableCell>{invoice.party_name}</TableCell>
                   <TableCell>{invoice.material}</TableCell>
                   <TableCell>
@@ -321,7 +321,7 @@ export function InvoiceList({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground">Date</h3>
-                  <p>{format(new Date(selectedInvoice.date), 'PPP')}</p>
+                  <p>{format(new Date(selectedInvoice.date), 'dd/MM/yyyy')}</p>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground">Party Name</h3>

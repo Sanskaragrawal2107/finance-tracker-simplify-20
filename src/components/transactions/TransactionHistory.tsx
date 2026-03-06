@@ -107,7 +107,7 @@ export function TransactionHistory({ siteId }: TransactionHistoryProps) {
           {transactions.map((transaction) => (
             <TableRow key={transaction.id}>
               <TableCell>
-                {format(new Date(transaction.date), 'PPP')}
+                {format(new Date(transaction.date), 'dd/MM/yyyy')}
               </TableCell>
               <TableCell>
                 <Badge variant="outline" className={getTypeColor(transaction.type)}>

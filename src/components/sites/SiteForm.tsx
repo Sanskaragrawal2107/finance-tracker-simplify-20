@@ -245,7 +245,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button variant="outline" className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                        {field.value ? format(field.value, "PPP") : <span>Select a date</span>}
+                        {field.value ? format(field.value, "dd/MM/yyyy") : <span>Select a date</span>}
                         <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                       </Button>
                     </FormControl>
@@ -264,7 +264,7 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button variant="outline" className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                        {field.value ? format(field.value, "PPP") : <span>Select a date</span>}
+                        {field.value ? format(field.value, "dd/MM/yyyy") : <span>Select a date</span>}
                         <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                       </Button>
                     </FormControl>

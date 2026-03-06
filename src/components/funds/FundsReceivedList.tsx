@@ -162,7 +162,7 @@ export function FundsReceivedList({
               <TableBody>
                 {fundsReceived.map((fund) => (
                   <TableRow key={fund.id}>
-                    <TableCell>{format(new Date(fund.date), 'PPP')}</TableCell>
+                    <TableCell>{format(new Date(fund.date), 'dd/MM/yyyy')}</TableCell>
                     <TableCell>{fund.method || 'N/A'}</TableCell>
                     <TableCell>{fund.reference || 'N/A'}</TableCell>
                     <TableCell>

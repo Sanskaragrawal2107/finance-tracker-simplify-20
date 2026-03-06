@@ -196,7 +196,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice, isOpen, onClos
               </h3>
               <p className="text-muted-foreground flex items-center mt-1">
                 <Calendar className="mr-1 h-4 w-4" />
-                {format(new Date(invoice.date), 'MMMM dd, yyyy')}
+                {format(new Date(invoice.date), 'dd/MM/yyyy')}
               </p>
             </div>
             <div className="mt-4 md:mt-0">
@@ -353,7 +353,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice, isOpen, onClos
           
           <div className="text-xs text-muted-foreground mt-6 pt-4 border-t">
             <p className="mb-1">Created by: {invoice.createdBy}</p>
-            <p>Created on: {format(new Date(invoice.createdAt), 'MMMM dd, yyyy, h:mm a')}</p>
+            <p>Created on: {format(new Date(invoice.createdAt), 'dd/MM/yyyy, h:mm a')}</p>
           </div>
         </div>
       </DialogContent>

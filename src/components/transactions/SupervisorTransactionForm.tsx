@@ -233,7 +233,7 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
                       )}
                     >
                       {field.value ? (
-                        format(field.value, "PPP")
+                        format(field.value, "dd/MM/yyyy")
                       ) : (
                         <span>Pick a date</span>
                       )}

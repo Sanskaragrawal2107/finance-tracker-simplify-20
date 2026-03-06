@@ -159,18 +159,27 @@ export async function exportSiteExcel(
   // ── Data rows ──────────────────────────────────────────────────────────────
   const fmtDate = (d: Date | string | undefined) => {
     if (!d) return '';
-    try { return format(new Date(d as any), 'dd-MM-yy'); }
+    try { return format(new Date(d as any), 'dd/MM/yyyy'); }
     catch { return String(d); }
   };
 
+  // Helper: read field from either camelCase or snake_case row
+  const getField = (obj: any, camel: string, snake: string) => obj[camel] ?? obj[snake];
+
   // Split advances into subcontractor vs direct labour / worker
-  const subContrAdv = advances.filter(a => a.recipientType === 'subcontractor');
-  const workerAdv   = advances.filter(a => a.recipientType === 'worker' || !a.recipientType);
+  const subContrAdv = advances.filter(a => getField(a, 'recipientType', 'recipient_type') === 'subcontractor');
+  const workerAdv   = advances.filter(a => {
+    const t = getField(a, 'recipientType', 'recipient_type');
+    return t === 'worker' || !t;
+  });
 
   // Combine expenses + approved invoices for the Expenditure section
-  const approvedInvoices = invoices.filter(inv =>
-    inv.payment_status === 'approved' || inv.payment_status === 'paid'
-  );
+  // EXCLUDE invoices paid by HO (approver_type === 'ho') — those belong only in the bank payment export
+  const approvedInvoices = invoices.filter(inv => {
+    const status = inv.payment_status || inv.paymentStatus || '';
+    const approver = inv.approver_type || inv.approverType || '';
+    return (status === 'approved' || status === 'paid') && approver !== 'ho';
+  });
   const expenditureItems = [
     ...expenses.map(e => ({
       date: e.date,
@@ -270,7 +279,7 @@ export async function exportSiteExcel(
     applyDataStyle(c11);
 
     const c12 = ws.getCell(rowNum, COL.AD_DESC1);
-    c12.value = subAdv ? subAdv.recipientName : '';
+    c12.value = subAdv ? (getField(subAdv, 'recipientName', 'recipient_name') || '') : '';
     applyDataStyle(c12);
 
     const c13 = ws.getCell(rowNum, COL.AD_AMT1);
@@ -284,7 +293,7 @@ export async function exportSiteExcel(
     applyDataStyle(c14);
 
     const c15 = ws.getCell(rowNum, COL.AD_DESC2);
-    c15.value = wrkAdv ? wrkAdv.recipientName : '';
+    c15.value = wrkAdv ? (getField(wrkAdv, 'recipientName', 'recipient_name') || '') : '';
     applyDataStyle(c15);
 
     const c16 = ws.getCell(rowNum, COL.AD_AMT2);

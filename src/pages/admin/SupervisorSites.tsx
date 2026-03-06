@@ -355,7 +355,7 @@ const AdminSupervisorSites: React.FC = () => {
         supabase.from('expenses').select('*').eq('site_id', selectedSiteId),
         supabase.from('advances').select('*').eq('site_id', selectedSiteId),
         supabase.from('funds_received').select('*').eq('site_id', selectedSiteId),
-        supabase.from('site_invoices').select('*').eq('site_id', selectedSiteId),
+        supabase.from('site_invoices').select('*, approver_type').eq('site_id', selectedSiteId),
         supabase.from('supervisor_transactions').select('*, payer_site:sites!supervisor_transactions_payer_site_id_fkey(name), receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)').or(`receiver_site_id.eq.${selectedSiteId},payer_site_id.eq.${selectedSiteId}`),
       ]);
 

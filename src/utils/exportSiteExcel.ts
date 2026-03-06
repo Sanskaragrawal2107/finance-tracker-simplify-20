@@ -173,12 +173,13 @@ export async function exportSiteExcel(
     return t === 'worker' || !t;
   });
 
-  // Combine expenses + approved invoices for the Expenditure section
-  // EXCLUDE invoices paid by HO (approver_type === 'ho') — those belong only in the bank payment export
+  // Combine expenses + supervisor-paid invoices for the Expenditure section.
+  // EXCLUDE invoices with payment_status='approved' — those are HO-bank-paid and belong
+  // only in the bank payment export (exportBankPayment.ts uses payment_status='approved' as its sole criterion).
+  // Only 'paid' invoices (paid directly by supervisor) should appear in the site Excel.
   const approvedInvoices = invoices.filter(inv => {
     const status = inv.payment_status || inv.paymentStatus || '';
-    const approver = inv.approver_type || inv.approverType || '';
-    return (status === 'approved' || status === 'paid') && approver !== 'ho';
+    return status === 'paid';
   });
   const expenditureItems = [
     ...expenses.map(e => ({

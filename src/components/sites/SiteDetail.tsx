@@ -86,11 +86,27 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const handleExportExcel = async () => {
     setIsExporting(true);
     try {
-      const { data: supTxns } = await supabase
-        .from('supervisor_transactions')
-        .select('*, payer_site:sites!supervisor_transactions_payer_site_id_fkey(name), receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)')
-        .or(`receiver_site_id.eq.${site.id},payer_site_id.eq.${site.id}`);
-      await exportSiteExcel(site, expenses, advances, fundsReceived, invoices as any[], supTxns || [], site.id);
+      // Always fetch fresh raw rows for the export so we have approver_type on invoices
+      // and consistent snake_case field names regardless of what the parent passed in.
+      const [expRes, advRes, fundsRes, invRes, supTxnsRes] = await Promise.all([
+        supabase.from('expenses').select('*').eq('site_id', site.id),
+        supabase.from('advances').select('*').eq('site_id', site.id),
+        supabase.from('funds_received').select('*').eq('site_id', site.id),
+        supabase.from('site_invoices').select('*, approver_type').eq('site_id', site.id),
+        supabase
+          .from('supervisor_transactions')
+          .select('*, payer_site:sites!supervisor_transactions_payer_site_id_fkey(name), receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)')
+          .or(`receiver_site_id.eq.${site.id},payer_site_id.eq.${site.id}`),
+      ]);
+      await exportSiteExcel(
+        site,
+        expRes.data || [],
+        advRes.data || [],
+        fundsRes.data || [],
+        invRes.data || [],
+        supTxnsRes.data || [],
+        site.id,
+      );
     } catch (err) {
       console.error('Export failed:', err);
       toast.error('Failed to export Excel file');

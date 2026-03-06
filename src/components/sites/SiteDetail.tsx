@@ -243,24 +243,12 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         .reduce((s: number, a: any) => s + (Number(a.amount) || 0), 0);
       // Only count invoices that have been admin-approved (or paid) toward the balance.
       // Pending invoices are NOT deducted until admin approves them.
-      // invTotal: for balance deduction only — approved+paid minus HO-paid invoices >₹2000
-      // (HO pays those from their budget, so they don't reduce supervisor balance)
-      const approvedStatuses = ['approved', 'paid'];
-      const invTotal = (invRes.data || [])
-        .filter((inv: any) => {
-          if (!approvedStatuses.includes(inv.payment_status)) return false;
-          const amount = Number(inv.net_amount || inv.gross_amount || inv.amount) || 0;
-          if (amount > 2000 && inv.approver_type === 'ho') return false;
-          return true;
-        })
-        .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
-
-      // invPaid: display value — ALL invoices with payment_status='paid' regardless of approver
+      // invPaid: invoices with payment_status='paid' — deducted from balance and shown as Invoices Paid
       const invPaid = (invRes.data || [])
         .filter((inv: any) => inv.payment_status === 'paid')
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
 
-      // invPending: display value — ALL invoices with payment_status='approved' (approved but not yet paid)
+      // invPending: invoices with payment_status='approved' — shown separately, NOT deducted from balance
       const invPending = (invRes.data || [])
         .filter((inv: any) => inv.payment_status === 'approved')
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
@@ -284,7 +272,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         invoicesPaid: invPaid,
         pendingInvoices: invPending,
         advancePaidToSupervisor,
-        totalBalance: (fundsTotal + fundsReceivedFromSupervisor) - expTotal - advTotal - invTotal - advancePaidToSupervisor,
+        totalBalance: (fundsTotal + fundsReceivedFromSupervisor) - expTotal - advTotal - invPaid - advancePaidToSupervisor,
       });
     } catch (err) {
       console.error('Error fetching site financials:', err);

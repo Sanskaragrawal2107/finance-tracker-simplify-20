@@ -174,24 +174,14 @@ const AdminSupervisorSites: React.FC = () => {
         .filter(a => debitPurposes.includes(a.purpose))
         .reduce((s, a) => s + Number(a.amount), 0);
 
-      // invoicesPaid: ALL invoices with payment_status='paid' (no approver filter for display)
+      // invoicesPaid: ALL invoices with payment_status='paid' — deducted from balance and shown as Invoices Paid
       const invoicesPaid = (invRes.data || [])
         .filter(inv => inv.payment_status === 'paid')
         .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
 
-      // pendingInvoices: ALL invoices with payment_status='approved' (approved but not yet paid)
+      // pendingInvoices: ALL invoices with payment_status='approved' — shown separately, NOT deducted from balance
       const pendingInvoices = (invRes.data || [])
         .filter(inv => inv.payment_status === 'approved')
-        .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
-
-      // invTotalForBalance: approved+paid minus HO-paid >₹2000 (for balance calculation only)
-      const invTotalForBalance = (invRes.data || [])
-        .filter(inv => {
-          if (inv.payment_status !== 'approved' && inv.payment_status !== 'paid') return false;
-          const amount = Number(inv.net_amount || inv.gross_amount || 0);
-          if (amount > 2000 && inv.approver_type === 'ho') return false;
-          return true;
-        })
         .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
 
       const advancePaidToSupervisor = (supTxnRes.data || [])
@@ -200,7 +190,7 @@ const AdminSupervisorSites: React.FC = () => {
 
       const totalBalance =
         (fundsReceived + fundsReceivedFromSupervisor) -
-        (totalExpensesPaid + totalAdvances + invTotalForBalance + advancePaidToSupervisor);
+        (totalExpensesPaid + totalAdvances + invoicesPaid + advancePaidToSupervisor);
 
       setFinancialSummary({
         fundsReceived,

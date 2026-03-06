@@ -364,11 +364,11 @@ const AdminSupervisorSites: React.FC = () => {
 
       await exportSiteExcel(
         selectedSite,
-        expenses || [],
-        advances || [],
-        funds || [],
-        invoices || [],
-        supTxns || [],
+        (expenses || []) as any,
+        (advances || []) as any,
+        (funds || []) as any,
+        (invoices || []) as any,
+        (supTxns || []) as any,
         selectedSiteId,
       );
       

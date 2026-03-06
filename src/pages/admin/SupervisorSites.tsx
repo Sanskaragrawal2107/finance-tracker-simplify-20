@@ -174,9 +174,18 @@ const AdminSupervisorSites: React.FC = () => {
         .filter(a => debitPurposes.includes(a.purpose))
         .reduce((s, a) => s + Number(a.amount), 0);
 
-      // Count approved + paid invoices (pending invoices are not yet deducted).
-      // Invoices > ₹2000 with approver_type 'ho' are paid by HO/admin — don't deduct from supervisor balance.
+      // invoicesPaid: ALL invoices with payment_status='paid' (no approver filter for display)
       const invoicesPaid = (invRes.data || [])
+        .filter(inv => inv.payment_status === 'paid')
+        .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
+
+      // pendingInvoices: ALL invoices with payment_status='approved' (approved but not yet paid)
+      const pendingInvoices = (invRes.data || [])
+        .filter(inv => inv.payment_status === 'approved')
+        .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
+
+      // invTotalForBalance: approved+paid minus HO-paid >₹2000 (for balance calculation only)
+      const invTotalForBalance = (invRes.data || [])
         .filter(inv => {
           if (inv.payment_status !== 'approved' && inv.payment_status !== 'paid') return false;
           const amount = Number(inv.net_amount || inv.gross_amount || 0);
@@ -191,7 +200,7 @@ const AdminSupervisorSites: React.FC = () => {
 
       const totalBalance =
         (fundsReceived + fundsReceivedFromSupervisor) -
-        (totalExpensesPaid + totalAdvances + invoicesPaid + advancePaidToSupervisor);
+        (totalExpensesPaid + totalAdvances + invTotalForBalance + advancePaidToSupervisor);
 
       setFinancialSummary({
         fundsReceived,
@@ -201,7 +210,7 @@ const AdminSupervisorSites: React.FC = () => {
         debitsToWorker,
         invoicesPaid,
         advancePaidToSupervisor,
-        pendingInvoices: 0,
+        pendingInvoices,
         totalBalance,
       });
     } catch (error) {

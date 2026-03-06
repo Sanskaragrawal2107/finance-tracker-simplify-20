@@ -243,7 +243,8 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         .reduce((s: number, a: any) => s + (Number(a.amount) || 0), 0);
       // Only count invoices that have been admin-approved (or paid) toward the balance.
       // Pending invoices are NOT deducted until admin approves them.
-      // Invoices > ₹2000 with approver_type 'ho' are paid by HO/admin — don't deduct from supervisor balance.
+      // invTotal: for balance deduction only — approved+paid minus HO-paid invoices >₹2000
+      // (HO pays those from their budget, so they don't reduce supervisor balance)
       const approvedStatuses = ['approved', 'paid'];
       const invTotal = (invRes.data || [])
         .filter((inv: any) => {
@@ -253,15 +254,16 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           return true;
         })
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
+
+      // invPaid: display value — ALL invoices with payment_status='paid' regardless of approver
       const invPaid = (invRes.data || [])
-        .filter((inv: any) => {
-          if (inv.payment_status !== 'paid') return false;
-          const amount = Number(inv.net_amount || inv.gross_amount || inv.amount) || 0;
-          if (amount > 2000 && inv.approver_type === 'ho') return false;
-          return true;
-        })
+        .filter((inv: any) => inv.payment_status === 'paid')
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
-      const invPending = invTotal - invPaid;
+
+      // invPending: display value — ALL invoices with payment_status='approved' (approved but not yet paid)
+      const invPending = (invRes.data || [])
+        .filter((inv: any) => inv.payment_status === 'approved')
+        .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
 
       // Supervisor-to-supervisor outgoing payments from this site
       const advancePaidToSupervisor = (supTxnRes.data || [])
@@ -279,7 +281,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         totalExpenditure: expTotal,
         totalAdvances: advTotal,
         debitsToWorker: debitsTotal,
-        invoicesPaid: invTotal,
+        invoicesPaid: invPaid,
         pendingInvoices: invPending,
         advancePaidToSupervisor,
         totalBalance: (fundsTotal + fundsReceivedFromSupervisor) - expTotal - advTotal - invTotal - advancePaidToSupervisor,

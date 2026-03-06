@@ -337,8 +337,11 @@ export async function exportSiteExcel(
   totalCell(totalRow, COL.AD_AMT2, adTotal2, true);
 
   // ── Supervisor Payments Out summary ────────────────────────────────────────
+  let supOutTotal = 0;
+  let nextFreeRow = totalRow + 2;
+
   if (supervisorPaymentsOut.length > 0) {
-    const supOutHeaderRow = totalRow + 2;
+    const supOutHeaderRow = nextFreeRow;
     ws.getRow(supOutHeaderRow).height = 18;
     const supHeader = ws.getCell(supOutHeaderRow, COL.AD_DATE1);
     supHeader.value = 'ADVANCE PAID TO SUPERVISOR SITES';
@@ -348,7 +351,6 @@ export async function exportSiteExcel(
     border(supHeader);
     ws.mergeCells(supOutHeaderRow, COL.AD_DATE1, supOutHeaderRow, COL.AD_AMT2);
 
-    let supOutTotal = 0;
     supervisorPaymentsOut.forEach((t, idx) => {
       const rn = supOutHeaderRow + 1 + idx;
       ws.getRow(rn).height = 16;
@@ -369,7 +371,73 @@ export async function exportSiteExcel(
     totalCell(supTotalRow, COL.AD_DATE1, 'TOTAL SUPERVISOR PAYMENTS', false);
     ws.mergeCells(supTotalRow, COL.AD_DATE1, supTotalRow, COL.AD_DATE2);
     totalCell(supTotalRow, COL.AD_AMT2, supOutTotal, true);
+    nextFreeRow = supTotalRow + 2;
   }
+
+  // ── FINANCIAL SUMMARY BLOCK ────────────────────────────────────────────────
+  // Mirrors the UI "Financial Details" panel exactly.
+  const summaryStartRow = nextFreeRow;
+  const BLUE_DARK  = 'FF1F3864';
+  const BLUE_LIGHT = 'FFD6E4F0';
+  const RED_BG     = 'FFFFD7D7';
+  const GREEN_BG   = 'FFD7F0DA';
+
+  // Title banner
+  ws.getRow(summaryStartRow).height = 22;
+  const sumTitle = ws.getCell(summaryStartRow, COL.EX_DATE);
+  sumTitle.value = 'FINANCIAL SUMMARY';
+  sumTitle.fill  = fill(BLUE_DARK);
+  sumTitle.font  = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+  sumTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+  border(sumTitle);
+  ws.mergeCells(summaryStartRow, COL.EX_DATE, summaryStartRow, COL.EX_AMT);
+
+  // Helper to write a label+value summary row
+  function summaryRow(rowNum: number, label: string, value: number, bgArgb: string, isTotal = false) {
+    ws.getRow(rowNum).height = 17;
+    const lbl = ws.getCell(rowNum, COL.EX_DATE);
+    lbl.value = label;
+    lbl.fill  = fill(bgArgb);
+    lbl.font  = { bold: isTotal, size: isTotal ? 11 : 10 };
+    lbl.alignment = { horizontal: 'left', vertical: 'middle' };
+    border(lbl);
+    ws.mergeCells(rowNum, COL.EX_DATE, rowNum, COL.EX_HEAD);
+
+    const val = ws.getCell(rowNum, COL.EX_AMT);
+    val.value  = value;
+    val.numFmt = '₹#,##0.00';
+    val.fill   = fill(bgArgb);
+    val.font   = { bold: isTotal, size: isTotal ? 11 : 10 };
+    val.alignment = { horizontal: 'right', vertical: 'middle' };
+    border(val);
+  }
+
+  const totalFundsFromSupervisor = hoTotal2;
+  const totalFundsReceived       = hoTotal1 + hoTotal2;
+  const totalAdvances            = adTotal1 + adTotal2;
+  const totalOutgoing            = exTotal + totalAdvances + supOutTotal;
+  const currentBalance           = totalFundsReceived - totalOutgoing;
+
+  let sr = summaryStartRow + 1;
+  summaryRow(sr++, '(+)  Funds Received from H.O.',         hoTotal1,              BLUE_LIGHT);
+  summaryRow(sr++, '(+)  Funds Received from Supervisor',   totalFundsFromSupervisor, BLUE_LIGHT);
+  summaryRow(sr++, '     TOTAL FUNDS RECEIVED',             totalFundsReceived,     BLUE_LIGHT, true);
+
+  // blank spacer
+  ws.getRow(sr).height = 6; sr++;
+
+  summaryRow(sr++, '(-)  Total Expenditure (Expenses + Invoices)', exTotal,    'FFFFF2CC');
+  summaryRow(sr++, '(-)  Total Advances (Sub-contractor)',   adTotal1,          'FFFFF2CC');
+  summaryRow(sr++, '(-)  Total Advances (Direct Labour)',    adTotal2,          'FFFFF2CC');
+  summaryRow(sr++, '(-)  Advance Paid to Supervisor Sites',  supOutTotal,       'FFFFF2CC');
+  summaryRow(sr++, '     TOTAL OUTGOING',                   totalOutgoing,      'FFFFF2CC', true);
+
+  // blank spacer
+  ws.getRow(sr).height = 6; sr++;
+
+  // Current Balance — red if negative, green if positive
+  const balBg = currentBalance >= 0 ? GREEN_BG : RED_BG;
+  summaryRow(sr, 'CURRENT BALANCE', currentBalance, balBg, true);
 
   // ── Download ───────────────────────────────────────────────────────────────
   const buffer   = await workbook.xlsx.writeBuffer();

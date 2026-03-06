@@ -414,23 +414,27 @@ export async function exportSiteExcel(
 
   const totalFundsFromSupervisor = hoTotal2;
   const totalFundsReceived       = hoTotal1 + hoTotal2;
-  const totalAdvances            = adTotal1 + adTotal2;
-  const totalOutgoing            = exTotal + totalAdvances + supOutTotal;
+  const totalOutgoing            = exTotal + adTotal1 + supOutTotal;
   const currentBalance           = totalFundsReceived - totalOutgoing;
 
   let sr = summaryStartRow + 1;
-  summaryRow(sr++, '(+)  Funds Received from H.O.',         hoTotal1,              BLUE_LIGHT);
-  summaryRow(sr++, '(+)  Funds Received from Supervisor',   totalFundsFromSupervisor, BLUE_LIGHT);
-  summaryRow(sr++, '     TOTAL FUNDS RECEIVED',             totalFundsReceived,     BLUE_LIGHT, true);
+  summaryRow(sr++, '(+)  Funds Received from H.O.',               hoTotal1,              BLUE_LIGHT);
+  summaryRow(sr++, '(+)  Funds Received from Supervisor',         totalFundsFromSupervisor, BLUE_LIGHT);
+  summaryRow(sr++, '     TOTAL FUNDS RECEIVED',                   totalFundsReceived,     BLUE_LIGHT, true);
 
   // blank spacer
   ws.getRow(sr).height = 6; sr++;
 
   summaryRow(sr++, '(-)  Total Expenditure (Expenses + Invoices)', exTotal,    'FFFFF2CC');
-  summaryRow(sr++, '(-)  Total Advances (Sub-contractor)',   adTotal1,          'FFFFF2CC');
-  summaryRow(sr++, '(-)  Total Advances (Direct Labour)',    adTotal2,          'FFFFF2CC');
-  summaryRow(sr++, '(-)  Advance Paid to Supervisor Sites',  supOutTotal,       'FFFFF2CC');
-  summaryRow(sr++, '     TOTAL OUTGOING',                   totalOutgoing,      'FFFFF2CC', true);
+  summaryRow(sr++, '(-)  Total Advances (Sub-contractor)',          adTotal1,   'FFFFF2CC');
+  summaryRow(sr++, '(-)  Advance Paid to Supervisor Sites',         supOutTotal,'FFFFF2CC');
+  summaryRow(sr++, '     TOTAL OUTGOING',                          totalOutgoing, 'FFFFF2CC', true);
+
+  // blank spacer
+  ws.getRow(sr).height = 6; sr++;
+
+  // Direct Labour advances are informational — tracked but not deducted from supervisor balance
+  summaryRow(sr++, '( )  Total Advances (Direct Labour) [info]',   adTotal2,   HEADER_BG);
 
   // blank spacer
   ws.getRow(sr).height = 6; sr++;

@@ -165,6 +165,7 @@ export async function exportSiteExcel(
 
   // Helper: read field from either camelCase or snake_case row
   const getField = (obj: any, camel: string, snake: string) => obj[camel] ?? obj[snake];
+  const DEBIT_ADVANCE_PURPOSES = ['safety_shoes', 'tools', 'other'];
 
   // Split advances into subcontractor vs direct labour / worker
   const subContrAdv = advances.filter(a => getField(a, 'recipientType', 'recipient_type') === 'subcontractor');
@@ -412,10 +413,21 @@ export async function exportSiteExcel(
     border(val);
   }
 
+  // Match the admin/supervisor UI summary exactly.
+  const summaryExpensesTotal = expenses.reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+  const summaryAdvancesTotal = advances
+    .filter(advance => !DEBIT_ADVANCE_PURPOSES.includes(String(getField(advance, 'purpose', 'purpose') || '')))
+    .reduce((sum, advance) => sum + (Number(advance.amount) || 0), 0);
+  const summaryDebitsToWorker = advances
+    .filter(advance => DEBIT_ADVANCE_PURPOSES.includes(String(getField(advance, 'purpose', 'purpose') || '')))
+    .reduce((sum, advance) => sum + (Number(advance.amount) || 0), 0);
+  const summaryInvoicesPaid = invoices
+    .filter(inv => (inv.payment_status || inv.paymentStatus || '') === 'paid')
+    .reduce((sum, inv) => sum + (Number(inv.net_amount || inv.netAmount || inv.gross_amount || inv.grossAmount || inv.amount) || 0), 0);
   const totalFundsFromSupervisor = hoTotal2;
-  const totalFundsReceived       = hoTotal1 + hoTotal2;
-  const totalOutgoing            = exTotal + adTotal1 + supOutTotal;
-  const currentBalance           = totalFundsReceived - totalOutgoing;
+  const totalFundsReceived = hoTotal1 + hoTotal2;
+  const totalOutgoing = summaryExpensesTotal + summaryAdvancesTotal + summaryInvoicesPaid + supOutTotal;
+  const currentBalance = totalFundsReceived - totalOutgoing;
 
   let sr = summaryStartRow + 1;
   summaryRow(sr++, '(+)  Funds Received from H.O.',               hoTotal1,              BLUE_LIGHT);
@@ -425,16 +437,12 @@ export async function exportSiteExcel(
   // blank spacer
   ws.getRow(sr).height = 6; sr++;
 
-  summaryRow(sr++, '(-)  Total Expenditure (Expenses + Invoices)', exTotal,    'FFFFF2CC');
-  summaryRow(sr++, '(-)  Total Advances (Sub-contractor)',          adTotal1,   'FFFFF2CC');
-  summaryRow(sr++, '(-)  Advance Paid to Supervisor Sites',         supOutTotal,'FFFFF2CC');
-  summaryRow(sr++, '     TOTAL OUTGOING',                          totalOutgoing, 'FFFFF2CC', true);
-
-  // blank spacer
-  ws.getRow(sr).height = 6; sr++;
-
-  // Direct Labour advances are informational — tracked but not deducted from supervisor balance
-  summaryRow(sr++, '( )  Total Advances (Direct Labour) [info]',   adTotal2,   HEADER_BG);
+  summaryRow(sr++, '(-)  Total Expenses',                           summaryExpensesTotal,  'FFFFF2CC');
+  summaryRow(sr++, '(-)  Total Advances',                           summaryAdvancesTotal,  'FFFFF2CC');
+  summaryRow(sr++, '(-)  Debit to worker (directly deduct by ho)',  summaryDebitsToWorker, HEADER_BG);
+  summaryRow(sr++, '(-)  Invoices Paid',                            summaryInvoicesPaid,   'FFFFF2CC');
+  summaryRow(sr++, '(-)  Advance Paid to Supervisor Sites',         supOutTotal,           'FFFFF2CC');
+  summaryRow(sr++, '     TOTAL OUTGOING',                           totalOutgoing,         'FFFFF2CC', true);
 
   // blank spacer
   ws.getRow(sr).height = 6; sr++;

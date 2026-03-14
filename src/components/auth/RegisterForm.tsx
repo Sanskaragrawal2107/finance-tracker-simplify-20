@@ -59,9 +59,13 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ isOpen, onClose }) => {
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    await signUp(values.email, values.password, values.name, values.role);
-    form.reset();
-    onClose();
+    try {
+      await signUp(values.email, values.password, values.name, values.role);
+      form.reset();
+      onClose();
+    } catch {
+      // Error toast is handled in useAuth; keep dialog open for correction/retry.
+    }
   };
 
   return (

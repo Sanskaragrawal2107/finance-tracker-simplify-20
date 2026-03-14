@@ -19,11 +19,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ className }) => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (isRegistering) {
-      await signUp(email, password, name);
-    } else {
-      await login(email, password);
+
+    try {
+      if (isRegistering) {
+        await signUp(email, password, name);
+      } else {
+        await login(email, password);
+      }
+    } catch {
+      // Error state/toast is handled by useAuth.
     }
   };
   

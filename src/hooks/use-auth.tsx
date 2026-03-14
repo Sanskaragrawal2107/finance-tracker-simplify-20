@@ -92,6 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Sign up error:', err);
       setError(err.message);
       toast.error(err.message);
+      throw err;
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { Advance, Expense, FundsReceived, Invoice, ApprovalStatus } from '@/lib/types';
+import { parseDbDate } from '@/lib/utils';
 
 const SUPABASE_URL = "https://bpyzpnioddmzniuikbsn.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweXpwbmlvZGRtem5pdWlrYnNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE3ODE0MzksImV4cCI6MjA1NzM1NzQzOX0.UEdE77tebNbCdJkmX0RyNpKVp3mWhTL-hekMVNcPuIg";
@@ -88,7 +89,7 @@ export const fetchSiteInvoices = async (siteId: string): Promise<Invoice[]> => {
 
     return data.map((item: any) => ({
       id: item.id,
-      date: new Date(item.date),
+      date: parseDbDate(item.date),
       partyId: item.party_id,
       partyName: item.party_name,
       material: item.material,
@@ -130,7 +131,7 @@ export const fetchSiteExpenses = async (siteId: string): Promise<Expense[]> => {
 
     return data.map((item: any) => ({
       id: item.id,
-      date: new Date(item.date),
+      date: parseDbDate(item.date),
       description: item.description || '',
       category: item.category,
       amount: item.amount,
@@ -159,7 +160,7 @@ export const fetchSiteAdvances = async (siteId: string): Promise<Advance[]> => {
 
     return data.map((item: any) => ({
       id: item.id,
-      date: new Date(item.date),
+      date: parseDbDate(item.date),
       recipientId: item.recipient_id || undefined,
       recipientName: item.recipient_name,
       recipientType: item.recipient_type,
@@ -190,7 +191,7 @@ export const fetchSiteFundsReceived = async (siteId: string): Promise<FundsRecei
 
     return data.map((item: any) => ({
       id: item.id,
-      date: new Date(item.date),
+      date: parseDbDate(item.date),
       amount: item.amount,
       siteId: item.site_id,
       createdAt: new Date(item.created_at),

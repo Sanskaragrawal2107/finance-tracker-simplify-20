@@ -4,6 +4,7 @@ import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
 import { Search, Filter, Plus, Eye, Download, ChevronLeft, ChevronRight, CreditCard, Building, AlertTriangle, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { parseDbDate, toDbDate } from '@/lib/utils';
 import { Invoice, PaymentStatus, MaterialItem, BankDetails } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -181,7 +182,7 @@ const Invoices: React.FC = () => {
             
             return {
               id: invoice.id,
-              date: new Date(invoice.date),
+              date: parseDbDate(invoice.date),
               partyId: invoice.party_id,
               partyName: invoice.party_name,
               material: invoice.material,
@@ -225,7 +226,7 @@ const Invoices: React.FC = () => {
       const { data, error } = await supabase
         .from('site_invoices')
         .insert({
-          date: invoice.date.toISOString(),
+          date: toDbDate(invoice.date),
           party_id: invoice.partyId,
           party_name: invoice.partyName,
           material: invoice.material,
@@ -317,7 +318,7 @@ const Invoices: React.FC = () => {
         
         const newInvoice: Invoice = {
           id: data[0].id,
-          date: new Date(data[0].date),
+          date: parseDbDate(data[0].date),
           partyId: data[0].party_id,
           partyName: data[0].party_name,
           material: data[0].material,

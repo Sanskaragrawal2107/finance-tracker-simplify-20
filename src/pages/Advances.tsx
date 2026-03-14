@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Advance, AdvancePurpose, ApprovalStatus, RecipientType } from '@/lib/types';
+import { parseDbDate } from '@/lib/utils';
 
 const getPurposeColor = (purpose: AdvancePurpose) => {
   switch (purpose) {
@@ -76,7 +77,7 @@ const Advances: React.FC = () => {
         // Transform the data to match our Advance interface
         const transformedAdvances: Advance[] = data.map((item) => ({
           id: item.id,
-          date: new Date(item.date),
+          date: parseDbDate(item.date),
           recipientName: item.recipient_name,
           recipientType: item.recipient_type as RecipientType,
           purpose: item.purpose as AdvancePurpose,

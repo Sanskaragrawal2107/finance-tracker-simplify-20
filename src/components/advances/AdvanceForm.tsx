@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { cn } from "@/lib/utils";
+import { cn, toDbDate } from "@/lib/utils";
 import { Advance, AdvancePurpose, RecipientType, ApprovalStatus } from "@/lib/types";
 import SearchableDropdown from '../expenses/SearchableDropdown';
 import { supabase } from '@/integrations/supabase/client';
@@ -172,7 +172,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ isOpen, onClose, onSubmit, si
       
       const advanceData = {
         site_id: siteId,
-        date: values.date instanceof Date ? values.date.toISOString() : new Date().toISOString(),
+        date: toDbDate(values.date),
         recipient_name: values.recipientName,
         recipient_type: values.recipientType,
         purpose: values.purpose,

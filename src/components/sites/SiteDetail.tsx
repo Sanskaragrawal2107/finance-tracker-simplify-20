@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import SiteDetailTransactions from './SiteDetailTransactions';
 import { useIsMobile } from '@/hooks/use-mobile';
+import BalanceCard from '../dashboard/BalanceCard';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import ExpenseForm from '@/components/expenses/ExpenseForm';
@@ -21,6 +22,7 @@ import { SupervisorTransactionHistory } from '../transactions/SupervisorTransact
 import { SupervisorAdvanceForm } from '../transactions/SupervisorAdvanceForm';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { exportSiteExcel } from '@/utils/exportSiteExcel';
+import { toDbDate } from '@/lib/utils';
 
 interface SiteDetailProps {
   site: Site;
@@ -86,27 +88,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const handleExportExcel = async () => {
     setIsExporting(true);
     try {
-      // Always fetch fresh raw rows for the export so we have approver_type on invoices
-      // and consistent snake_case field names regardless of what the parent passed in.
-      const [expRes, advRes, fundsRes, invRes, supTxnsRes] = await Promise.all([
-        supabase.from('expenses').select('*').eq('site_id', site.id),
-        supabase.from('advances').select('*').eq('site_id', site.id),
-        supabase.from('funds_received').select('*').eq('site_id', site.id),
-        supabase.from('site_invoices').select('*, approver_type').eq('site_id', site.id),
-        supabase
-          .from('supervisor_transactions')
-          .select('*, payer_site:sites!supervisor_transactions_payer_site_id_fkey(name), receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)')
-          .or(`receiver_site_id.eq.${site.id},payer_site_id.eq.${site.id}`),
-      ]);
-      await exportSiteExcel(
-        site,
-        expRes.data || [],
-        advRes.data || [],
-        fundsRes.data || [],
-        invRes.data || [],
-        supTxnsRes.data || [],
-        site.id,
-      );
+      await exportSiteExcel(site, expenses, advances, fundsReceived);
     } catch (err) {
       console.error('Export failed:', err);
       toast.error('Failed to export Excel file');
@@ -225,7 +207,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           vendorName: inv.vendor_name,
           invoiceNumber: inv.invoice_number,
           amount: Number(inv.net_amount) || 0,
-          approverType: inv.approver_type || '',
         })));
       }
 
@@ -243,36 +224,40 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         .reduce((s: number, a: any) => s + (Number(a.amount) || 0), 0);
       // Only count invoices that have been admin-approved (or paid) toward the balance.
       // Pending invoices are NOT deducted until admin approves them.
-      // invPaid: invoices with payment_status='paid' — deducted from balance and shown as Invoices Paid
+      // Invoices > ₹2000 with approver_type 'ho' are paid by HO/admin — don't deduct from supervisor balance.
+      const approvedStatuses = ['approved', 'paid'];
+      const invTotal = (invRes.data || [])
+        .filter((inv: any) => {
+          if (!approvedStatuses.includes(inv.payment_status)) return false;
+          const amount = Number(inv.net_amount || inv.gross_amount || inv.amount) || 0;
+          if (amount > 2000 && inv.approver_type === 'ho') return false;
+          return true;
+        })
+        .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
       const invPaid = (invRes.data || [])
-        .filter((inv: any) => inv.payment_status === 'paid')
+        .filter((inv: any) => {
+          if (inv.payment_status !== 'paid') return false;
+          const amount = Number(inv.net_amount || inv.gross_amount || inv.amount) || 0;
+          if (amount > 2000 && inv.approver_type === 'ho') return false;
+          return true;
+        })
         .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
-
-      // invPending: invoices with payment_status='approved' — shown separately, NOT deducted from balance
-      const invPending = (invRes.data || [])
-        .filter((inv: any) => inv.payment_status === 'approved')
-        .reduce((s: number, inv: any) => s + (Number(inv.net_amount || inv.gross_amount || inv.amount) || 0), 0);
+      const invPending = invTotal - invPaid;
 
       // Supervisor-to-supervisor outgoing payments from this site
       const advancePaidToSupervisor = (supTxnRes.data || [])
-        .filter((t: any) => t.payer_site_id === siteId)
-        .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
-
-      // Supervisor-to-supervisor incoming payments to this site
-      const fundsReceivedFromSupervisor = (supTxnRes.data || [])
-        .filter((t: any) => t.receiver_site_id === siteId)
+        .filter((t: any) => t.transaction_type === 'advance_paid' && t.payer_site_id === siteId)
         .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
 
       setSelfBalanceSummary({
         fundsReceived: fundsTotal,
-        fundsReceivedFromSupervisor,
         totalExpenditure: expTotal,
         totalAdvances: advTotal,
         debitsToWorker: debitsTotal,
-        invoicesPaid: invPaid,
+        invoicesPaid: invTotal,   // store total (paid+pending) so KPI card shows correct figure
         pendingInvoices: invPending,
         advancePaidToSupervisor,
-        totalBalance: (fundsTotal + fundsReceivedFromSupervisor) - expTotal - advTotal - invPaid - advancePaidToSupervisor,
+        totalBalance: fundsTotal - expTotal - advTotal - invTotal - debitsTotal - advancePaidToSupervisor,
       });
     } catch (err) {
       console.error('Error fetching site financials:', err);
@@ -319,7 +304,6 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
 
   const totalExpenses = siteSummary.totalExpenditure;
   const totalFundsReceived = siteSummary.fundsReceived;
-  const totalFundsFromSupervisor = siteSummary.fundsReceivedFromSupervisor || 0;
   const totalInvoices = siteSummary.invoicesPaid || 0;
   const totalSupervisorPayments = siteSummary.advancePaidToSupervisor || 0;
 
@@ -333,7 +317,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
         .from('sites')
         .update({
           is_completed: true,
-          completion_date: completionDate.toISOString()
+          completion_date: toDbDate(completionDate)
         })
         .eq('id', site.id);
         
@@ -538,7 +522,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             <Plus className="h-3.5 w-3.5" /> Add Expense
           </Button>
           <Button onClick={() => openForm('advance', setIsAdvanceFormOpen)} variant="outline" size="sm" className="gap-1.5">
-            <CreditCard className="h-3.5 w-3.5" /> Advance to Worker/Subcontractor
+            <CreditCard className="h-3.5 w-3.5" /> Add Advance
           </Button>
           <Button onClick={() => openForm('supAdv', setShowSupervisorAdvanceForm)} variant="outline" size="sm" className="gap-1.5">
             <SendHorizontal className="h-3.5 w-3.5" /> Supervisor Advance
@@ -566,6 +550,10 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
           )}
           {!isFetchingData && (
           <>
+          {/* Balance + KPI row */}
+          <div className="mb-3">
+            <BalanceCard balanceData={siteSummary} siteId={site.id} />
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: 'Total Expenses', value: totalExpenses, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50', border: 'border-l-red-500' },
@@ -623,10 +611,9 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                 { label: 'Total Expenses', value: totalExpenses, sub: `${expenses.length} entries` },
                 { label: 'Total Advances', value: totalAdvances, sub: `${advances.length} entries` },
                 { label: 'Approved Invoices', value: totalInvoices, sub: `${invoices.filter((inv: any) => ['approved','paid'].includes(inv.paymentStatus || '') && !(Number(inv.netAmount || inv.grossAmount || inv.amount || 0) > 2000 && inv.approverType === 'ho')).length} of ${invoices.length} approved` },
-                { label: 'Debit to worker(directly deduct by ho)', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
+                { label: 'Debit to Worker', value: totalDebitToWorker, sub: 'Tools / Safety / Other' },
                 ...(totalSupervisorPayments > 0 ? [{ label: 'Supervisor Payments', value: totalSupervisorPayments, sub: 'Paid to other supervisors' }] : []),
                 { label: 'Funds Received', value: totalFundsReceived, sub: `${fundsReceived.length} entries`, credit: true },
-                { label: 'Funds from Supervisor', value: totalFundsFromSupervisor, sub: 'Received from other supervisors', credit: true },
               ].map(({ label, value, sub, credit }) => (
                 <div key={label} className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
                   <div>

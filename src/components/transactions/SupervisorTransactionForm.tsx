@@ -18,7 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, toDbDate } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -123,7 +123,7 @@ export function SupervisorTransactionForm({ onSuccess, payerSiteId }: Supervisor
           payer_site_id: payerSiteId,
           receiver_site_id: data.receiverSiteId,
           amount: data.amount,
-          date: data.date.toISOString(),
+          date: toDbDate(data.date),
           transaction_type: 'advance_paid'
         })
         .select();

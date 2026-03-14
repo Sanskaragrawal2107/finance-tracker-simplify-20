@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import VisibilityHandler from '@/components/common/VisibilityHandler';
 import { useLoadingState } from '@/hooks/use-loading-state';
 import { exportSiteExcel } from '@/utils/exportSiteExcel';
+import { parseDbDate } from '@/lib/utils';
 
 const AdminSupervisorSites: React.FC = () => {
   const navigate = useNavigate();
@@ -116,8 +117,8 @@ const AdminSupervisorSites: React.FC = () => {
                 jobName: site.job_name || '',
                 posNo: site.pos_no || '',
                 location: site.location || '',
-                startDate: site.start_date ? new Date(site.start_date) : new Date(),
-                completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
+                startDate: site.start_date ? parseDbDate(site.start_date) : new Date(),
+                completionDate: site.completion_date ? parseDbDate(site.completion_date) : undefined,
                 supervisorId: site.supervisor_id || '',
                 supervisor: site.users?.name || 'Unassigned',
                 createdAt: new Date(site.created_at || new Date()),
@@ -160,7 +161,7 @@ const AdminSupervisorSites: React.FC = () => {
         .reduce((s, f) => s + Number(f.amount), 0);
 
       const fundsReceivedFromSupervisor = (supTxnRes.data || [])
-        .filter(t => t.receiver_site_id === siteId)
+        .filter(t => t.transaction_type === 'funds_received' && t.receiver_site_id === siteId)
         .reduce((s, t) => s + Number(t.amount), 0);
 
       const totalExpensesPaid = (expRes.data || [])
@@ -174,23 +175,24 @@ const AdminSupervisorSites: React.FC = () => {
         .filter(a => debitPurposes.includes(a.purpose))
         .reduce((s, a) => s + Number(a.amount), 0);
 
-      // invoicesPaid: ALL invoices with payment_status='paid' — deducted from balance and shown as Invoices Paid
+      // Count approved + paid invoices (pending invoices are not yet deducted).
+      // Invoices > ₹2000 with approver_type 'ho' are paid by HO/admin — don't deduct from supervisor balance.
       const invoicesPaid = (invRes.data || [])
-        .filter(inv => inv.payment_status === 'paid')
-        .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
-
-      // pendingInvoices: ALL invoices with payment_status='approved' — shown separately, NOT deducted from balance
-      const pendingInvoices = (invRes.data || [])
-        .filter(inv => inv.payment_status === 'approved')
+        .filter(inv => {
+          if (inv.payment_status !== 'approved' && inv.payment_status !== 'paid') return false;
+          const amount = Number(inv.net_amount || inv.gross_amount || 0);
+          if (amount > 2000 && inv.approver_type === 'ho') return false;
+          return true;
+        })
         .reduce((s, inv) => s + Number(inv.net_amount || inv.gross_amount || 0), 0);
 
       const advancePaidToSupervisor = (supTxnRes.data || [])
-        .filter(t => t.payer_site_id === siteId)
+        .filter(t => t.transaction_type === 'advance_paid' && t.payer_site_id === siteId)
         .reduce((s, t) => s + Number(t.amount), 0);
 
       const totalBalance =
         (fundsReceived + fundsReceivedFromSupervisor) -
-        (totalExpensesPaid + totalAdvances + invoicesPaid + advancePaidToSupervisor);
+        (totalExpensesPaid + totalAdvances + invoicesPaid + debitsToWorker + advancePaidToSupervisor);
 
       setFinancialSummary({
         fundsReceived,
@@ -200,7 +202,7 @@ const AdminSupervisorSites: React.FC = () => {
         debitsToWorker,
         invoicesPaid,
         advancePaidToSupervisor,
-        pendingInvoices,
+        pendingInvoices: 0,
         totalBalance,
       });
     } catch (error) {
@@ -274,8 +276,8 @@ const AdminSupervisorSites: React.FC = () => {
         jobName: site.job_name || '',
         posNo: site.pos_no || '',
         location: site.location || '',
-        startDate: site.start_date ? new Date(site.start_date) : new Date(),
-        completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
+        startDate: site.start_date ? parseDbDate(site.start_date) : new Date(),
+        completionDate: site.completion_date ? parseDbDate(site.completion_date) : undefined,
         supervisorId: site.supervisor_id || '',
         supervisor: site.users?.name || 'Unassigned',
         createdAt: new Date(site.created_at || new Date()),
@@ -348,28 +350,21 @@ const AdminSupervisorSites: React.FC = () => {
         { data: expenses, error: expError },
         { data: advances, error: advError },
         { data: funds, error: fundsError },
-        { data: invoices, error: invError },
-        { data: supTxns, error: supTxnError },
       ] = await Promise.all([
         supabase.from('expenses').select('*').eq('site_id', selectedSiteId),
         supabase.from('advances').select('*').eq('site_id', selectedSiteId),
         supabase.from('funds_received').select('*').eq('site_id', selectedSiteId),
-        supabase.from('site_invoices').select('*, approver_type').eq('site_id', selectedSiteId),
-        supabase.from('supervisor_transactions').select('*, payer_site:sites!supervisor_transactions_payer_site_id_fkey(name), receiver_site:sites!supervisor_transactions_receiver_site_id_fkey(name)').or(`receiver_site_id.eq.${selectedSiteId},payer_site_id.eq.${selectedSiteId}`),
       ]);
 
-      if (expError || advError || fundsError || invError || supTxnError) {
+      if (expError || advError || fundsError) {
         throw new Error('Failed to fetch transaction data');
       }
 
       await exportSiteExcel(
         selectedSite,
-        (expenses || []) as any,
-        (advances || []) as any,
-        (funds || []) as any,
-        (invoices || []) as any,
-        (supTxns || []) as any,
-        selectedSiteId,
+        expenses || [],
+        advances || [],
+        funds || [],
       );
       
       toast({
@@ -502,7 +497,7 @@ const AdminSupervisorSites: React.FC = () => {
                   </p>
                 </div>
                 <div>
-                  <span className="text-xs text-muted-foreground">Debit to worker(directly deduct by ho):</span>
+                  <span className="text-xs text-muted-foreground">Advance to worker:</span>
                   <p className="font-medium">
                     ₹{financialSummary.debitsToWorker.toLocaleString('en-IN')}
                   </p>

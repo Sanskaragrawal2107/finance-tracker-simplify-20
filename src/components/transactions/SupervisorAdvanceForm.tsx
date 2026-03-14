@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { cn, toDbDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -150,7 +150,7 @@ export function SupervisorAdvanceForm({ onSuccess, payerSiteId }: SupervisorAdva
           payer_site_id: payerSiteId,
           receiver_site_id: data.receiverSiteId,
           amount: data.amount,
-          date: data.date.toISOString(),
+          date: toDbDate(data.date),
           transaction_type: 'advance_paid'
         })
         .select();

@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { Calendar as CalendarIcon, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toDbDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -67,7 +67,7 @@ export function TransactionForm({ siteId, onSuccess }: TransactionFormProps) {
     try {
       const { error } = await supabase.from('expenses').insert({
         site_id: siteId,
-        date: data.date.toISOString(),
+        date: toDbDate(data.date),
         amount: Number(data.amount),
         category: data.type, // Map type to category since expenses table uses category
         description: data.description || '',

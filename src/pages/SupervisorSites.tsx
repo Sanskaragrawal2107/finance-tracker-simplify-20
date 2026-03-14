@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock, AlertCircle, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { parseDbDate, toDbDate } from '@/lib/utils';
 import PageTitle from '@/components/common/PageTitle';
 import CustomCard from '@/components/ui/CustomCard';
 import { Button } from '@/components/ui/button';
@@ -144,8 +145,8 @@ const SupervisorSites: React.FC = () => {
         jobName: site.job_name || '',
         posNo: site.pos_no || '',
         location: site.location || '',
-        startDate: site.start_date ? new Date(site.start_date) : new Date(),
-        completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
+        startDate: site.start_date ? parseDbDate(site.start_date) : new Date(),
+        completionDate: site.completion_date ? parseDbDate(site.completion_date) : undefined,
         supervisorId: site.supervisor_id || '',
         supervisor: site.users?.name || 'Unassigned',
         createdAt: new Date(site.created_at || new Date()),
@@ -245,7 +246,7 @@ const SupervisorSites: React.FC = () => {
                 name: newSite.name,
                 job_name: newSite.jobName,
                 pos_no: newSite.posNo,
-                start_date: newSite.startDate?.toISOString().split('T')[0],
+                start_date: newSite.startDate ? toDbDate(newSite.startDate) : null,
                 location: newSite.location,
                 supervisor_id: user.id,
                 supervisor_name: user.name || 'Unknown',

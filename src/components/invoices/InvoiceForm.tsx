@@ -12,7 +12,7 @@ const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
 const GEMINI_MODEL  = 'gemini-2.5-flash-lite';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { cn, toDbDate } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -528,7 +528,7 @@ Be precise — extract pure numbers, no currency symbols. If the document has mu
           
           const invoiceSubmitData = {
             site_id: siteId,
-            date: date.toISOString(),
+            date: toDbDate(date),
             party_id: partyId,
             party_name: partyName,
             material: materialItems.map(item => item.material).join(', '),

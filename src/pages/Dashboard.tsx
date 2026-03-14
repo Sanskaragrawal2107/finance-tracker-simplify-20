@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { parseDbDate } from '@/lib/utils';
 
 const EMPTY_BALANCE: BalanceSummary = {
   totalBalance: 0,
@@ -152,7 +153,7 @@ const Dashboard: React.FC = () => {
           type: ActivityType.EXPENSE,
           description: e.description || e.category || 'Expense',
           amount: e.amount,
-          date: new Date(e.date),
+          date: parseDbDate(e.date),
           user: 'Supervisor',
         })),
         ...(advRes.data ?? []).map((a) => ({
@@ -160,7 +161,7 @@ const Dashboard: React.FC = () => {
           type: ActivityType.ADVANCE,
           description: `Advance to ${a.recipient_name}`,
           amount: a.amount,
-          date: new Date(a.date),
+          date: parseDbDate(a.date),
           user: 'Supervisor',
         })),
         ...(fundsRes.data ?? []).map((f) => ({
@@ -168,7 +169,7 @@ const Dashboard: React.FC = () => {
           type: ActivityType.FUNDS,
           description: f.reference ? `Funds received (${f.reference})` : 'Funds received',
           amount: f.amount,
-          date: new Date(f.date),
+          date: parseDbDate(f.date),
           user: 'Admin',
         })),
       ]

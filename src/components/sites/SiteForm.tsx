@@ -14,7 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { CalendarIcon, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toDbDate } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -145,8 +145,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
         job_name: values.jobName.toUpperCase(),
         pos_no: values.posNo.toUpperCase(),
         location: values.location.toUpperCase(),
-        start_date: values.startDate.toISOString().split('T')[0],
-        completion_date: values.completionDate ? values.completionDate.toISOString().split('T')[0] : null,
+        start_date: toDbDate(values.startDate),
+        completion_date: values.completionDate ? toDbDate(values.completionDate) : null,
         supervisor_id: currentSupervisorId,
         is_completed: false,
       };
@@ -168,8 +168,8 @@ export default function SiteForm({ isOpen, onClose, onSubmit, supervisorId }: Si
             job_name: values.jobName.toUpperCase(),
             pos_no: values.posNo.toUpperCase(),
             location: values.location.toUpperCase(),
-            start_date: values.startDate.toISOString().split('T')[0],
-            completion_date: values.completionDate ? values.completionDate.toISOString().split('T')[0] : null,
+            start_date: toDbDate(values.startDate),
+            completion_date: values.completionDate ? toDbDate(values.completionDate) : null,
             supervisor_id: currentSupervisorId,
             is_completed: false,
           }]).select(),

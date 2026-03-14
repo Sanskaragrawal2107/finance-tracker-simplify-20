@@ -33,6 +33,7 @@ import { SupervisorAdvanceForm } from '@/components/transactions/SupervisorAdvan
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 import { supervisors } from '@/data/supervisors';
+import { parseDbDate, toDbDate } from '@/lib/utils';
 
 const initialExpenses: Expense[] = [];
 const initialAdvances: Advance[] = [];
@@ -113,8 +114,8 @@ const Expenses: React.FC = () => {
           jobName: site.job_name,
           posNo: site.pos_no,
           location: site.location,
-          startDate: new Date(site.start_date),
-          completionDate: site.completion_date ? new Date(site.completion_date) : undefined,
+          startDate: parseDbDate(site.start_date),
+          completionDate: site.completion_date ? parseDbDate(site.completion_date) : undefined,
           supervisorId: site.supervisor_id,
           supervisor: site.supervisor_id ? 
             (supervisors.find(s => s.id === site.supervisor_id)?.name || 'Unknown') : 'Unassigned',
@@ -197,7 +198,7 @@ const Expenses: React.FC = () => {
         const transformedExpenses: Expense[] = data.map(expense => ({
           id: expense.id,
           siteId: expense.site_id,
-          date: new Date(expense.date),
+          date: parseDbDate(expense.date),
           description: expense.description || '',
           category: expense.category as ExpenseCategory,
           amount: Number(expense.amount),
@@ -244,7 +245,7 @@ const Expenses: React.FC = () => {
         const transformedAdvances: Advance[] = data.map(advance => ({
           id: advance.id,
           siteId: advance.site_id,
-          date: new Date(advance.date),
+          date: parseDbDate(advance.date),
           recipientName: advance.recipient_name,
           recipientType: advance.recipient_type as RecipientType,
           purpose: advance.purpose as AdvancePurpose,
@@ -292,7 +293,7 @@ const Expenses: React.FC = () => {
         const transformedFunds: FundsReceived[] = data.map(fund => ({
           id: fund.id,
           siteId: fund.site_id,
-          date: new Date(fund.date),
+          date: parseDbDate(fund.date),
           amount: Number(fund.amount),
           reference: fund.reference || null,
           method: fund.method || null,
@@ -369,7 +370,7 @@ const Expenses: React.FC = () => {
 
           return {
             id: invoice.id,
-            date: new Date(invoice.date),
+            date: parseDbDate(invoice.date),
             partyId: invoice.party_id || '',
             partyName: invoice.party_name || '',
             vendorName: invoice.party_name || '',
@@ -408,9 +409,9 @@ const Expenses: React.FC = () => {
   const ensureDateObjects = (site: Site): Site => {
     return {
       ...site,
-      startDate: site.startDate instanceof Date ? site.startDate : new Date(site.startDate),
+      startDate: site.startDate instanceof Date ? site.startDate : parseDbDate(site.startDate as unknown as string),
       completionDate: site.completionDate ? 
-        (site.completionDate instanceof Date ? site.completionDate : new Date(site.completionDate)) 
+        (site.completionDate instanceof Date ? site.completionDate : parseDbDate(site.completionDate as unknown as string)) 
         : undefined
     };
   };
@@ -431,8 +432,8 @@ const Expenses: React.FC = () => {
         job_name: newSite.jobName,
         pos_no: newSite.posNo,
         location: newSite.location || "",
-        start_date: newSite.startDate?.toISOString(),
-        completion_date: newSite.completionDate?.toISOString(),
+        start_date: newSite.startDate ? toDbDate(newSite.startDate as Date) : null,
+        completion_date: newSite.completionDate ? toDbDate(newSite.completionDate as Date) : null,
         supervisor_id: currentSupervisorId,
         is_completed: false,
         funds: 0
@@ -471,8 +472,8 @@ const Expenses: React.FC = () => {
           jobName: data.job_name,
           posNo: data.pos_no,
           location: data.location,
-          startDate: new Date(data.start_date),
-          completionDate: data.completion_date ? new Date(data.completion_date) : undefined,
+          startDate: parseDbDate(data.start_date),
+          completionDate: data.completion_date ? parseDbDate(data.completion_date) : undefined,
           supervisorId: data.supervisor_id,
           supervisor: data.supervisor_id ? 
             (supervisors.find(s => s.id === data.supervisor_id)?.name || 'Unknown') : 'Unassigned',
@@ -499,7 +500,7 @@ const Expenses: React.FC = () => {
 
       const expenseData = {
         site_id: selectedSiteId,
-        date: newExpense.date instanceof Date ? newExpense.date.toISOString() : new Date().toISOString(),
+        date: toDbDate(newExpense.date as Date),
         description: newExpense.description || '',
         category: newExpense.category,
         amount: newExpense.amount,
@@ -518,7 +519,7 @@ const Expenses: React.FC = () => {
         const expenseWithId: Expense = {
           id: data.id,
           siteId: data.site_id,
-          date: new Date(data.date),
+          date: parseDbDate(data.date),
           description: data.description || '',
           category: data.category as ExpenseCategory,
           amount: Number(data.amount),
@@ -548,7 +549,7 @@ const Expenses: React.FC = () => {
 
       const advanceData = {
         site_id: selectedSiteId,
-        date: newAdvance.date instanceof Date ? newAdvance.date.toISOString() : new Date().toISOString(),
+        date: toDbDate(newAdvance.date as Date),
         recipient_name: newAdvance.recipientName,
         recipient_type: newAdvance.recipientType,
         purpose: newAdvance.purpose,
@@ -570,7 +571,7 @@ const Expenses: React.FC = () => {
         const advanceWithId: Advance = {
           id: data.id,
           siteId: data.site_id,
-          date: new Date(data.date),
+          date: parseDbDate(data.date),
           recipientName: data.recipient_name,
           recipientType: data.recipient_type as RecipientType,
           purpose: data.purpose as AdvancePurpose,
@@ -601,7 +602,7 @@ const Expenses: React.FC = () => {
 
       const fundsData = {
         site_id: selectedSiteId,
-        date: newFund.date instanceof Date ? newFund.date.toISOString() : new Date().toISOString(),
+        date: toDbDate(newFund.date as Date),
         amount: newFund.amount,
         reference: newFund.reference || null,
         method: newFund.method || null,
@@ -620,7 +621,7 @@ const Expenses: React.FC = () => {
         const fundWithId: FundsReceived = {
           id: data.id,
           siteId: data.site_id,
-          date: new Date(data.date),
+          date: parseDbDate(data.date),
           amount: Number(data.amount),
           reference: data.reference || undefined,
           method: data.method || undefined,
@@ -683,7 +684,7 @@ const Expenses: React.FC = () => {
         .from('sites')
         .update({ 
           is_completed: true, 
-          completion_date: completionDate.toISOString() 
+          completion_date: toDbDate(completionDate) 
         })
         .eq('id', siteId);
         

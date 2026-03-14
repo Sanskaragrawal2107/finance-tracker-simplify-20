@@ -34,7 +34,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
+import { cn, toDbDate } from "@/lib/utils";
 import { FundsReceived, PaymentMethod } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -97,7 +97,7 @@ const FundsReceivedForm: React.FC<FundsReceivedFormProps> = ({ isOpen, onClose, 
 
       // Prepare data for supabase
       const fundsData = {
-        date: values.date.toISOString(),
+        date: toDbDate(values.date),
         amount: values.amount,
         reference: values.reference || null,
         method: values.method || null,

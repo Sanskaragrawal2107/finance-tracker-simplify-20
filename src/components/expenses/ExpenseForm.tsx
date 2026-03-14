@@ -39,7 +39,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
+import { cn, toDbDate } from "@/lib/utils";
 import { Expense, ExpenseCategory } from "@/lib/types";
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 import { supabase } from "@/integrations/supabase/client";
@@ -217,7 +217,7 @@ Rules:
         return supabase
           .from('expenses')
           .insert({
-            date: newExpense.date instanceof Date ? newExpense.date.toISOString() : new Date().toISOString(),
+            date: toDbDate(newExpense.date as Date),
             description: newExpense.description || '',
             category: newExpense.category,
             amount: newExpense.amount || 0,
@@ -288,7 +288,7 @@ Rules:
       const { error } = await supabase
         .from('expenses')
         .insert({
-          date: newExpense.date instanceof Date ? newExpense.date.toISOString() : new Date().toISOString(),
+          date: toDbDate(newExpense.date as Date),
           description: newExpense.description || '',
           category: newExpense.category,
           amount: newExpense.amount || 0,

@@ -49,11 +49,10 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
         const invoicesPaid = data.invoices_paid || 0;
         const advancePaidToSupervisor = data.advance_paid_to_supervisor || 0;
         
-        // Calculate total balance using the correct formula:
-        // (Funds Received from HO + Funds Received from Supervisor) - 
-        // (Total Expenses Paid by Supervisor + Total Advances Paid by Supervisor + Invoices Paid by Supervisor + Advance Paid to Supervisor)
+        // Keep this balance formula aligned with SiteDetail financial details.
+        // Debits to worker are HO-side deductions and must reduce available balance.
         const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
-                             (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor);
+                 (totalExpensesPaid + totalAdvancesPaid + invoicesPaid + advancePaidToSupervisor + debitsToWorker);
         
         setLocalBalanceData({
           fundsReceived,
@@ -95,9 +94,9 @@ const BalanceCard: React.FC<BalanceCardProps> = ({
     const advancePaidToSupervisor = balanceData.advancePaidToSupervisor || 0;
     const debitsToWorker = balanceData.debitsToWorker || 0;
     
-    // Calculate total balance using the correct formula
+    // Keep this formula consistent with the DB refresh path above.
     const totalBalance = (fundsReceived + fundsReceivedFromSupervisor) - 
-                         (totalExpenditure + totalAdvances + invoicesPaid + advancePaidToSupervisor);
+               (totalExpenditure + totalAdvances + invoicesPaid + advancePaidToSupervisor + debitsToWorker);
     
     setLocalBalanceData({
       ...balanceData,
